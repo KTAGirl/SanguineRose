@@ -19,11 +19,19 @@ class BinaryReader:
     def ReadString(self):
         len = int(self.contents[self.offset])
         self.offset += 1
+        traceReader("len="+str(len))
+        if len & 0x80:
+            len = len & 0x7F
+            len2 = int(self.contents[self.offset])
+            self.offset += 1
+            traceReader("len2="+str(len2))
+            assert(len2&0x80==0)
+            len += len2 << 7
         # print(len)
         bytes = self.contents[self.offset:self.offset+len]
         self.offset += len
-        s = bytes.decode('cp1252')
-        traceReader(s)
+        s = bytes.decode('cp1252','replace')
+        traceReader(str(len)+":"+s)
         return s
 
     def ReadInt16(self):
@@ -139,8 +147,9 @@ class HashedFile:
         s += ' }'
         return s
 
-def parseContents(hash,contents):
-    contents = gzip.decompress(contents)
+def parseContents(hash,contents,gzipped=True):
+    if gzipped:
+        contents = gzip.decompress(contents)
     # print(contents)
     # print(rowi)
     # print(contents)
@@ -153,8 +162,10 @@ def parseContents(hash,contents):
         # print(str(hash)+':'+hf.dbg())
         return hf
     except Exception as e:
-        print(e)
+        print("Parse Exception with hash="+str(hash)+": "+str(e))
         print(traceback.format_exc())
+        print(contents)
+        dbgWait()
         return None
 
 def normalizeHash(hash):
@@ -200,7 +211,13 @@ def loadVFS():
         # print(contents)
         # with open('gzipped', 'wb') as wfile:
         #    wfile.write(contents)
+        #if row[0]==6883218886720266700:
+        #    print("6883218886720266700")
+            #dbgWait()
         hf = parseContents(row[0],contents)
+        #if hf != None and hf.hash == 6883218886720266700:
+        #    hf.dbg()
+            #dbgWait()
         nn += 1
         if hf == None:
             nx += 1
@@ -240,6 +257,7 @@ def loadHC():
     archives = {}
     nn = 0
     for row in cur.execute('SELECT Path,LastModified,Hash FROM HashCache'):
+        nn += 1
         hash = normalizeHash(row[2])
         
         olda = archives.get(hash)
@@ -266,6 +284,7 @@ def findFile(chc,archives,archiveEntries,fpath):
     hash=normalizeHash(row[2])
     archiveEntry = archiveEntries.get(hash)
     if archiveEntry == None:
+        print("WARNING: archiveEntry for path="+fpath+" with hash="+str(hash)+" NOT FOUND")
         return None,None
     #print(archiveEntry.__dict__)
 
@@ -279,6 +298,11 @@ def findFile(chc,archives,archiveEntries,fpath):
 
 
 #############
+
+#contents=b''
+#print(contents)
+#parseContents(0,contents,False)
+#dbgWait()
 
 archives = loadHC()
 archiveEntries = loadVFS() 
