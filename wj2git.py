@@ -4,6 +4,12 @@ import gzip
 import traceback
 import json
 
+MO2='..\\MO2\\'
+PROFILE='KTA-FULL'
+TARGETGITHUB='..\\GitHub\\'
+
+###
+
 DBG = True
 
 def traceReader(x):
@@ -13,6 +19,7 @@ def traceReader(x):
 def dbgWait():
     wait = input("Press Enter to continue.")
 
+###
 
 class BinaryReader:
     def __init__(self,contents):
@@ -321,7 +328,7 @@ hc = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite'
 chc = hc.cursor()
 #cvfsc = vfsc.cursor()
 
-with open('..\\MO2\\profiles\\KTA-FULL\\modlist.txt','r') as rfile:
+with open(MO2+'profiles\\'+PROFILE+'\\modlist.txt','r') as rfile:
     modlist = [line.rstrip() for line in rfile]
     
 files = []
@@ -331,7 +338,7 @@ for mod in modlist:
     if(mod.startswith('+')):
         modname = mod[1:]
         print("mod="+modname)
-        for root, dirs, filenames in os.walk("..\\MO2\\mods\\"+modname):
+        for root, dirs, filenames in os.walk(MO2+'\\mods\\'+modname):
             for filename in filenames:
                 # print("file="+filename)
                 nn += 1
@@ -341,14 +348,18 @@ for mod in modlist:
 files.sort()
 
 nwarn = 0
-with open('..\\GitHub\\master.json','wt',encoding="utf-8") as wfile:
+MO2ABS = os.path.abspath(MO2)+'\\'
+with open(TARGETGITHUB+'master.json','wt',encoding="utf-8") as wfile:
     wfile.write('[\n')
     nf = 0
     for fpath in files:
         archiveEntry, archive = findFile(chc,archives,archiveEntries,fpath)
-        idx = fpath.find('\\MO2\\')
-        assert(idx>=0)
-        fpath='..'+fpath[idx:]
+        
+        assert(fpath.lower().startswith(MO2ABS.lower()))
+        fpath = fpath[len(MO2ABS):]
+        #idx = fpath.find('\\MO2\\')
+        #assert(idx>=0)
+        #fpath='..'+fpath[idx:]
         if nf:
             wfile.write(",\n")
         nf += 1
@@ -372,5 +383,5 @@ print("nn="+str(nn)+" nwarn="+str(nwarn))
 
 #validating json
 if DBG:
-    with open('..\\GitHub\\master.json', 'rt',encoding="utf-8") as rfile:
+    with open(TARGETGITHUB+'master.json', 'rt',encoding="utf-8") as rfile:
         dummy = json.load(rfile)
