@@ -238,7 +238,9 @@ def findFile(chc,archives,archiveEntries,fpath):
     print(row)
 
     hash=normalizeHash(row[2])
-    archiveEntry = archiveEntries[hash]
+    archiveEntry = archiveEntries.get(hash)
+    if archiveEntry == None:
+        return None,None
     #print(archiveEntry.__dict__)
 
     ahash = archiveEntry.archive_hash
@@ -250,10 +252,10 @@ def findFile(chc,archives,archiveEntries,fpath):
 #############
 
 archives = loadHC()
-archiveEntries = loadVFS()
+archiveEntries = loadVFS() 
 
-fpath = "C:\\Modding\\MO2\\mods\\Hvergelmir's Aesthetics - Brows\\Brows.esp"
-fpath = fpath.replace("'","''")
+#fpath = "C:\\Modding\\MO2\\mods\\Hvergelmir's Aesthetics - Brows\\Brows.esp"
+#fpath = fpath.replace("'","''")
 
 home_dir = os.path.expanduser("~")
 hc = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite')
@@ -261,24 +263,17 @@ hc = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite'
 chc = hc.cursor()
 #cvfsc = vfsc.cursor()
 
-archiveEntry, archive = findFile(chc,archives,archiveEntries,fpath)
-print(archiveEntry.__dict__)
-print(archive.__dict__)
-
-#chc.execute("SELECT Path,LastModified,Hash FROM HashCache WHERE Path='"+fpath.lower()+"'")
-#row = chc.fetchone()
-#print(row)
-
-#hash=normalizeHash(row[2])
-#archiveEntry = archiveEntries[hash]
-#print(archiveEntry.__dict__)
-
-#ahash = archiveEntry.archive_hash
-#archive = archives[ahash]
-#print(archive.__dict__)
-
-#cvfsc.execute("SELECT Hash,Contents FROM VFSCache WHERE Hash="+str(hash))
-#row2 = cvfsc.fetchone()
-#print(row2)
-#hf = parseContents(row2[1])
-#hf.dbg()
+nwarn = 0
+nn = 0
+for root, dirs, files in os.walk("C:\\Modding\\MO2\\mods\\Hvergelmir's Aesthetics - Brows"):
+    for filename in files:
+        nn += 1
+        fpath = os.path.join(root,filename).replace("'","''")
+        archiveEntry, archive = findFile(chc,archives,archiveEntries,fpath)
+        if archiveEntry == None:
+            print("WARNING: file "+fpath+" NOT FOUND IN ARCHIVES")
+            nwarn += 1
+        else:
+            print(archiveEntry.__dict__)
+            print(archive.__dict__)
+print("nn="+str(nn)+" nwarn="+str(nwarn))
