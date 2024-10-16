@@ -2,6 +2,7 @@ import sqlite3
 import os
 import gzip
 import traceback
+import json
 
 def traceReader(x):
     # print("'"+str(x)+"'")
@@ -275,7 +276,7 @@ def findFile(chc,archives,archiveEntries,fpath):
     fpath=fpath.replace("'","''")
     chc.execute("SELECT Path,LastModified,Hash FROM HashCache WHERE Path='"+fpath.lower()+"'")
     row = chc.fetchone()
-    print(row)
+    # print(row)
     
     if row == None:
         print("WARNING: path="+fpath+" NOT FOUND")
@@ -296,6 +297,8 @@ def findFile(chc,archives,archiveEntries,fpath):
     #print(archive.__dict__)
     return archiveEntry, archive
 
+def escapeJSON(s):
+    return json.dumps(s)
 
 #############
 
@@ -307,7 +310,7 @@ def findFile(chc,archives,archiveEntries,fpath):
 archives = loadHC()
 archiveEntries = loadVFS() 
 
-#fpath = "C:\\Modding\\MO2\\mods\\Hvergelmir's Aesthetics - Brows\\Brows.esp"
+#fpath = "..\\MO2\\mods\\Hvergelmir's Aesthetics - Brows\\Brows.esp"
 #fpath = fpath.replace("'","''")
 
 home_dir = os.path.expanduser("~")
@@ -316,25 +319,44 @@ hc = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite'
 chc = hc.cursor()
 #cvfsc = vfsc.cursor()
 
-nwarn = 0
-nn = 0
-
 with open('..\\MO2\\profiles\\KTA-FULL\\modlist.txt','r') as rfile:
     modlist = [line.rstrip() for line in rfile]
+    
+files = []
 
+nn = 0
 for mod in modlist:
     if(mod.startswith('+')):
         modname = mod[1:]
         print("mod="+modname)
-        for root, dirs, files in os.walk("../MO2/mods/"+modname):
-            for filename in files:
+        for root, dirs, filenames in os.walk("..\\MO2\\mods\\"+modname):
+            for filename in filenames:
+                # print("file="+filename)
                 nn += 1
                 fpath = os.path.abspath(os.path.join(root,filename))
-                archiveEntry, archive = findFile(chc,archives,archiveEntries,fpath)
-                if archiveEntry == None:
-                    print("WARNING: file "+fpath+" NOT FOUND IN ARCHIVES")
-                    nwarn += 1
-                else:
-                    print(archiveEntry.__dict__)
-                    print(archive.__dict__)
+                files.append(fpath)
+
+files.sort()
+
+nwarn = 0
+with open('..\\GitHub\\master.json','wt',encoding="utf-8") as wfile:
+    wfile.write('[\n')
+    for fpath in files:
+        archiveEntry, archive = findFile(chc,archives,archiveEntries,fpath)
+        if archiveEntry == None:
+            wfile.write( '{ "path":'+escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" }\n');
+            nwarn += 1
+        else:
+            wfile.write( '{ "path":'+escapeJSON(fpath)+', "hash":"'+str(archiveEntry.file_hash)+'", "size":"'+str(archiveEntry.file_hash)+'", "archive_hash":"'+str(archiveEntry.archive_hash)+'", "in_archive_path":[')
+            np = 0
+            for path in archiveEntry.intra_path:
+                if np:
+                    wfile.write(',')
+                wfile.write(escapeJSON(path))
+                np += 1
+            wfile.write(']\n')
+            # print(archiveEntry.__dict__)
+            # print(archive.__dict__)
+    wfile.write(']\n')
+            
 print("nn="+str(nn)+" nwarn="+str(nwarn))
