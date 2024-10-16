@@ -236,6 +236,10 @@ def findFile(chc,archives,archiveEntries,fpath):
     chc.execute("SELECT Path,LastModified,Hash FROM HashCache WHERE Path='"+fpath.lower()+"'")
     row = chc.fetchone()
     print(row)
+    
+    if row == None:
+        print("WARNING: path="+fpath+" NOT FOUND")
+        return None,None
 
     hash=normalizeHash(row[2])
     archiveEntry = archiveEntries.get(hash)
@@ -244,7 +248,10 @@ def findFile(chc,archives,archiveEntries,fpath):
     #print(archiveEntry.__dict__)
 
     ahash = archiveEntry.archive_hash
-    archive = archives[ahash]
+    archive = archives.get(ahash)
+    if archive == None:
+        print("WARNING: archive with hash="+str(ahash)+" NOT FOUND")
+        return None,None
     #print(archive.__dict__)
     return archiveEntry, archive
 
@@ -265,7 +272,7 @@ chc = hc.cursor()
 
 nwarn = 0
 nn = 0
-for root, dirs, files in os.walk("C:\\Modding\\MO2\\mods\\Hvergelmir's Aesthetics - Brows"):
+for root, dirs, files in os.walk("C:\\Modding\\MO2\\mods"):
     for filename in files:
         nn += 1
         fpath = os.path.join(root,filename).replace("'","''")
