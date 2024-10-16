@@ -366,6 +366,13 @@ files.sort()
 nwarn = 0
 MO2ABS = os.path.abspath(MO2)+'\\'
 ignore=compiler_settings['Ignore']
+
+# pre-cleanup
+modsdir = TARGETGITHUB+'mods'
+if os.path.isdir(modsdir):
+    shutil.rmtree(modsdir)
+# dbgWait()
+
 with open(TARGETGITHUB+'master.json','wt',encoding="utf-8") as wfile:
     wfile.write('[\n')
     nf = 0
