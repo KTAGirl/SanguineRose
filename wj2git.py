@@ -5,7 +5,8 @@ import traceback
 import json
 
 MO2='..\\MO2\\'
-PROFILE='KTA-FULL'
+COMPILER_SETTINGS='..\\MO2\\Kick Their Ass.compiler_settings'
+# PROFILE='KTA-FULL'
 TARGETGITHUB='..\\GitHub\\'
 
 ###
@@ -316,6 +317,15 @@ def escapeJSON(s):
 #parseContents(0,contents,False)
 #dbgWait()
 
+with open(COMPILER_SETTINGS, 'rt') as rfile:
+    compiler_settings = json.load(rfile)
+    
+profilename=compiler_settings['Profile']
+additionalprofilenames=compiler_settings['AdditionalProfiles']
+allprofilenames=additionalprofilenames
+allprofilenames.append(profilename)
+print("Processing profiles:"+str(allprofilenames))
+
 archives = loadHC()
 archiveEntries = loadVFS() 
 
@@ -328,15 +338,19 @@ hc = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite'
 chc = hc.cursor()
 #cvfsc = vfsc.cursor()
 
-with open(MO2+'profiles\\'+PROFILE+'\\modlist.txt','r') as rfile:
-    modlist = [line.rstrip() for line in rfile]
-    
+allmods = {}
+for profile in allprofilenames:
+    with open(MO2+'profiles\\'+profile+'\\modlist.txt','r') as rfile:
+        modlist = [line.rstrip() for line in rfile]
+        for mod in modlist:
+            if(mod.startswith('+')):
+                modname = mod[1:]
+                allmods[modname]=1
+
 files = []
 
 nn = 0
-for mod in modlist:
-    if(mod.startswith('+')):
-        modname = mod[1:]
+for modname in allmods:
         print("mod="+modname)
         for root, dirs, filenames in os.walk(MO2+'\\mods\\'+modname):
             for filename in filenames:
@@ -349,6 +363,7 @@ files.sort()
 
 nwarn = 0
 MO2ABS = os.path.abspath(MO2)+'\\'
+ignore=compiler_settings['Ignore']
 with open(TARGETGITHUB+'master.json','wt',encoding="utf-8") as wfile:
     wfile.write('[\n')
     nf = 0
@@ -357,6 +372,13 @@ with open(TARGETGITHUB+'master.json','wt',encoding="utf-8") as wfile:
         
         assert(fpath.lower().startswith(MO2ABS.lower()))
         fpath = fpath[len(MO2ABS):]
+        toignore=False
+        for ign in ignore:
+            if fpath.startswith(ign):
+                toignore = True
+                break
+        if toignore:
+            continue
         #idx = fpath.find('\\MO2\\')
         #assert(idx>=0)
         #fpath='..'+fpath[idx:]
