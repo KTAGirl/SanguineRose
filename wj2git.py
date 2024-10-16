@@ -254,6 +254,7 @@ def loadHC():
     return archives
     
 def findFile(chc,archives,archiveEntries,fpath):
+    fpath=fpath.replace("'","''")
     chc.execute("SELECT Path,LastModified,Hash FROM HashCache WHERE Path='"+fpath.lower()+"'")
     row = chc.fetchone()
     print(row)
@@ -293,15 +294,23 @@ chc = hc.cursor()
 
 nwarn = 0
 nn = 0
-for root, dirs, files in os.walk("C:\\Modding\\MO2\\mods"):
-    for filename in files:
-        nn += 1
-        fpath = os.path.join(root,filename).replace("'","''")
-        archiveEntry, archive = findFile(chc,archives,archiveEntries,fpath)
-        if archiveEntry == None:
-            print("WARNING: file "+fpath+" NOT FOUND IN ARCHIVES")
-            nwarn += 1
-        else:
-            print(archiveEntry.__dict__)
-            print(archive.__dict__)
+
+with open('..\\MO2\\profiles\\KTA-FULL\\modlist.txt','r') as rfile:
+    modlist = [line.rstrip() for line in rfile]
+
+for mod in modlist:
+    if(mod.startswith('+')):
+        modname = mod[1:]
+        print("mod="+modname)
+        for root, dirs, files in os.walk("../MO2/mods/"+modname):
+            for filename in files:
+                nn += 1
+                fpath = os.path.abspath(os.path.join(root,filename))
+                archiveEntry, archive = findFile(chc,archives,archiveEntries,fpath)
+                if archiveEntry == None:
+                    print("WARNING: file "+fpath+" NOT FOUND IN ARCHIVES")
+                    nwarn += 1
+                else:
+                    print(archiveEntry.__dict__)
+                    print(archive.__dict__)
 print("nn="+str(nn)+" nwarn="+str(nwarn))
