@@ -6,6 +6,10 @@ import traceback
 def traceReader(x):
     # print("'"+str(x)+"'")
     pass
+    
+def dbgWait():
+    wait = input("Press Enter to continue.")
+
 
 class BinaryReader:
     def __init__(self,contents):
@@ -166,6 +170,20 @@ class ArchiveEntry:
         self.file_size = file_size
         self.file_hash = file_hash
 
+def aEntries(paths,hf,root_archive_hash):
+    aes = []
+    for child in hf.children:
+        cp = paths + [child.path]
+        aes.append(ArchiveEntry(root_archive_hash,cp,child.size,child.hash))
+        if len(child.children)>0:
+            aes2 = aes + aEntries(cp,child,root_archive_hash)
+            aes = aes2
+            #print('NESTED:')
+            #for ae in aes:
+            #    print(ae.__dict__)
+            #dbgWait();
+    return aes
+
 def loadVFS():
     home_dir = os.path.expanduser("~")
     con = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalVFSCache5.sqlite')
@@ -186,14 +204,17 @@ def loadVFS():
         nn += 1
         if hf == None:
             nx += 1
-        else:    
-            for child in hf.children:
-                if len(child.children)>0:
-                    print("TODO: nested children: path="+child.path)
-                    print(child.dbg())
-                if archiveEntries.get(child.hash)!=None:
-                    print("TODO: multiple entries for a file")
-                archiveEntries[child.hash] = ArchiveEntry(hf.hash,child.path,child.size,child.hash)
+        else:
+            aes = aEntries([],hf,hf.hash)
+            for ae in aes:
+                archiveEntries[ae.file_hash]=ae
+            #for child in hf.children:
+            #    if len(child.children)>0:
+            #        print("TODO: nested children: path="+child.path)
+            #        print(child.dbg())
+            #    if archiveEntries.get(child.hash)!=None:
+            #        print("TODO: multiple entries for a file")
+            #    archiveEntries[child.hash] = ArchiveEntry(hf.hash,child.path,child.size,child.hash)
     print('loadVFS: nn='+str(nn)+' nx='+str(nx))
     return archiveEntries
 
