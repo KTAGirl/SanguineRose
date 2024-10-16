@@ -343,8 +343,11 @@ with open('..\\GitHub\\master.json','wt',encoding="utf-8") as wfile:
     wfile.write('[\n')
     for fpath in files:
         archiveEntry, archive = findFile(chc,archives,archiveEntries,fpath)
+        idx = fpath.find('\\MO2\\')
+        assert(idx>=0)
+        fpath='..'+fpath[idx:]
         if archiveEntry == None:
-            wfile.write( '{ "path":'+escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" }\n');
+            wfile.write( '{ "path":'+escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" },\n');
             nwarn += 1
         else:
             wfile.write( '{ "path":'+escapeJSON(fpath)+', "hash":"'+str(archiveEntry.file_hash)+'", "size":"'+str(archiveEntry.file_hash)+'", "archive_hash":"'+str(archiveEntry.archive_hash)+'", "in_archive_path":[')
@@ -354,9 +357,14 @@ with open('..\\GitHub\\master.json','wt',encoding="utf-8") as wfile:
                     wfile.write(',')
                 wfile.write(escapeJSON(path))
                 np += 1
-            wfile.write(']\n')
+            wfile.write('] },\n')
             # print(archiveEntry.__dict__)
             # print(archive.__dict__)
-    wfile.write(']\n')
+    wfile.write('{ "path":""}\n]\n')
             
 print("nn="+str(nn)+" nwarn="+str(nwarn))
+
+#validating json
+if True:
+    with open('..\\GitHub\\master.json', 'rt',encoding="utf-8") as rfile:
+        dummy = json.load(rfile)
