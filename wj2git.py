@@ -5,6 +5,7 @@ import traceback
 import json
 import re
 import shutil
+import glob
 from enum import Enum
 
 import dbg
@@ -345,7 +346,12 @@ def howToDownload(installfile,mo2):
                 return HowToDownloadReturn.NonNexusNonManual,None,None
             return HowToDownloadReturn.NexusOk,None,None
         
-
+def allEsxs(mod,mo2):
+    esxs = glob.glob(mo2+'mods/' + mod + '/*.esl')
+    esxs = esxs + glob.glob(mo2+'mods/' + mod + '/*.esp')
+    esxs = esxs + glob.glob(mo2+'mods/' + mod + '/*.esm')
+    return esxs
+    
 #############
 
 def wj2git():
