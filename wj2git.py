@@ -5,6 +5,7 @@ import traceback
 import json
 import re
 import shutil
+from enum import Enum
 
 import dbg
 import binaryreader
@@ -219,6 +220,132 @@ def findFile(chc,archives,archiveEntries,fpath):
 def escapeJSON(s):
     return json.dumps(s)
 
+def openModTxtFile(fname):
+    return open(fname,'rt',encoding='cp1252',errors='replace')
+
+def openModTxtFileW(fname):
+    return open(fname,'wt',encoding='cp1252')
+
+class ModList:
+    def __init__(self,path):
+        fname = path + 'modlist.txt'
+        self.modlist = None
+        with openModTxtFile(fname) as rfile:
+            self.modlist = [line.rstrip() for line in rfile]
+        self.modlist = list(filter(lambda s: s.endswith('_separator') or not s.startswith('-'),self.modlist))
+        self.modlist.reverse() # 'natural' order
+
+    def write(self,path):
+        fname = path + 'modlist.txt'
+        with openModTxtFileW(fname) as wfile:
+            for line in reversed(self.modlist):
+                wfile.write(line+'\n')
+            
+    def writeDisablingIf(self,path,f):
+        fname = path + 'modlist.txt'
+        with openModTxtFileW(fname) as wfile:
+            for mod0 in reversed(self.modlist):
+                if mod0[0]=='+':
+                    mod = mod0[1:]
+                    if f(mod):
+                        wfile.write('-'+mod+'\n')
+                    else:
+                        wfile.write(mod0+'\n')
+                else:
+                    wfile.write(mod0+'\n')
+    
+    def allEnabled(self):
+        for mod in self.modlist:
+            if mod[0]=='+':
+                yield mod[1:]
+            
+    def isSeparator(modname):
+        if modname.endswith('_separator'):
+            return modname[:len(modname)-len('_separator')]
+        return None
+        
+def installFileAndModid(mod,mo2):
+    modmetaname = mo2+'mods/' + mod + '/meta.ini'
+    # print(modmetaname)
+    try:
+        with openModTxtFile(modmetaname) as modmeta:
+            modmetalines = [line.rstrip() for line in modmeta]
+    except Exception as e:
+        print('WARNING: cannot read'+modmetaname+': '+str(e))
+        return None,None
+    installfiles = list(filter(lambda s: re.search('^installationFile *= *',s),modmetalines))
+    assert(len(installfiles)<=1)
+    if len(installfiles) == 0:
+        # print('#2:'+mod)
+        return None,None
+    installfile = installfiles[0]
+    m = re.search('^installationFile *= *(.*)',installfile)
+    installfile = m.group(1)
+    #if(installfile.startswith('C:/Modding/MO2/downloads/')):
+        # print('##: '+installfile)
+        # dbg.dbgWait()
+        # installfile = installfile[len('C:/Modding/MO2/downloads/'):]
+    absdlpath = os.path.abspath(mo2+'downloads/').lower()
+    absdlpath2 = absdlpath.replace('\\','/')
+    assert(len(absdlpath)==len(absdlpath2))
+    # print(absdlpath)
+    if(installfile.lower().startswith(absdlpath) or installfile.lower().startswith(absdlpath2)):
+        # print('##: '+installfile)
+        # dbg.dbgWait()
+        installfile = installfile[len(absdlpath):]
+    if(installfile==''):
+        # print('#3:'+mod)
+        installfile=None
+
+    modids = list(filter(lambda s: re.search('^modid *= *',s),modmetalines))
+    assert(len(modids)<=1)
+    modid = 0
+    if(len(modids)==1):
+        m = re.search('^modid *= *(.*)',modids[0])
+        if m:
+            modid = m.group(1)
+    # print(installfile)
+    return installfile,modid
+
+class HowToDownloadReturn(Enum):
+    NoMeta = 1
+    ManualOk = 2
+    NexusOk = 3
+    NonNexusNonManual = 4
+        
+def howToDownload(installfile,mo2):
+    filemetaname = mo2 + 'downloads/' + installfile + '.meta'
+    try:
+        with openModTxtFile(filemetaname) as filemeta:
+            filemetalines = [line.rstrip() for line in filemeta]
+    except:
+        return HowToDownloadReturn.NoMeta,None,None
+    manualurls = list(filter(lambda s: re.search('^manualURL *=',s),filemetalines))
+    assert(len(manualurls)<=1)
+    if(len(manualurls)==1):
+        manualurl=manualurls[0]
+        m = re.search('^manualURL *= *(.*)',manualurl)
+        manualurl = m.group(1)
+        # print(manualurl)
+        prompts = list(filter(lambda s: re.search('^prompt *=',s),filemetalines))
+        assert(len(prompts)==1)
+        prompt=prompts[0]
+        m = re.search('^prompt *= *(.*)',prompt)
+        prompt = m.group(1)
+        return HowToDownloadReturn.ManualOk,manualurl,prompt
+    else:
+        assert(len(manualurls)==0)
+        urls = list(filter(lambda s: re.search('^url *=',s),filemetalines))
+        if len(urls) == 0:
+            return HowToDownloadReturn.NonNexusNonManual,None,None
+        else:
+            assert(len(urls)==1)
+            url = urls[0]
+            if not re.search('^url *= *"https://.*.nexusmods.com/',url):
+                return HowToDownloadReturn.NonNexusNonManual,None,None
+            return HowToDownloadReturn.NexusOk,None,None
+        
+
 #############
 
 def wj2git():
@@ -227,7 +354,7 @@ def wj2git():
     #parseContents(0,contents,False)
     #dbg.dbgWait()
 
-    with open(COMPILER_SETTINGS, 'rt') as rfile:
+    with openModTxtFile(COMPILER_SETTINGS) as rfile:
         compiler_settings = json.load(rfile)
         
     profilename=compiler_settings['Profile']
@@ -250,7 +377,7 @@ def wj2git():
 
     allmods = {}
     for profile in allprofilenames:
-        with open(MO2+'profiles\\'+profile+'\\modlist.txt','r') as rfile:
+        with openModTxtFile(MO2+'profiles\\'+profile+'\\modlist.txt') as rfile:
             modlist = [line.rstrip() for line in rfile]
             for mod in modlist:
                 if(mod.startswith('+')):
