@@ -14,6 +14,11 @@ COMPILER_SETTINGS='..\\..\\MO2\\Kick Their Ass.compiler_settings'
 # PROFILE='KTA-FULL'
 TARGETGITHUB='..\\KTA\\'
 
+def isEslFlagged(filename):
+    with open(filename, 'rb') as f:
+        buf = f.read(10)
+        return (buf[0x9] & 0x02) == 0x02
+        
 class Img:
     def __init__(self,br):
         dbg.traceReader('Img:')
