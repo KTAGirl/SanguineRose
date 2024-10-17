@@ -6,116 +6,17 @@ import json
 import re
 import shutil
 
+import dbg
+import binaryreader
+
 MO2='..\\..\\MO2\\'
 COMPILER_SETTINGS='..\\..\\MO2\\Kick Their Ass.compiler_settings'
 # PROFILE='KTA-FULL'
 TARGETGITHUB='..\\KTA\\'
 
-###
-
-DBG = True
-
-def traceReader(x):
-    # print("'"+str(x)+"'")
-    pass
-    
-def dbgWait():
-    wait = input("Press Enter to continue.")
-
-###
-
-class BinaryReader:
-    def __init__(self,contents):
-        self.contents = contents
-        self.offset = 0
-
-    def ReadString(self):
-        len = int(self.contents[self.offset])
-        self.offset += 1
-        traceReader("len="+str(len))
-        if len & 0x80:
-            len = len & 0x7F
-            len2 = int(self.contents[self.offset])
-            self.offset += 1
-            traceReader("len2="+str(len2))
-            assert(len2&0x80==0)
-            len += len2 << 7
-        # print(len)
-        bytes = self.contents[self.offset:self.offset+len]
-        self.offset += len
-        s = bytes.decode('cp1252','replace')
-        traceReader(str(len)+":"+s)
-        return s
-
-    def ReadInt16(self):
-        bytes = self.contents[self.offset:self.offset+2]
-        self.offset += 2
-        i = int.from_bytes(bytes,byteorder='little',signed=True)
-        traceReader(i)
-        return i
-        
-    def ReadUint16(self):
-        bytes = self.contents[self.offset:self.offset+2]
-        self.offset += 2
-        i = int.from_bytes(bytes,byteorder='little',signed=False)
-        traceReader(i)
-        return i
-        
-    def ReadInt32(self):
-        bytes = self.contents[self.offset:self.offset+4]
-        self.offset += 4
-        i = int.from_bytes(bytes,byteorder='little',signed=True)
-        traceReader(i)
-        return i
-
-    def ReadUint32(self):
-        bytes = self.contents[self.offset:self.offset+4]
-        self.offset += 4
-        i = int.from_bytes(bytes,byteorder='little',signed=False)
-        traceReader(i)
-        return i
-
-    def ReadInt64(self):
-        bytes = self.contents[self.offset:self.offset+8]
-        self.offset += 8
-        i = int.from_bytes(bytes,byteorder='little',signed=True)
-        traceReader(i)
-        return i
-
-    def ReadUint64(self):
-        bytes = self.contents[self.offset:self.offset+8]
-        self.offset += 8
-        i = int.from_bytes(bytes,byteorder='little',signed=False)
-        traceReader(i)
-        return i
-        
-    def ReadBoolean(self):
-        b = self.contents[self.offset]
-        self.offset += 1
-        traceReader(b)
-        return bool(b)
-
-    def ReadByte(self):
-        b = self.contents[self.offset]
-        self.offset += 1
-        traceReader(b)
-        return b
-
-    def ReadBytes(self,n):
-        bytes = self.contents[self.offset:self.offset+n]
-        self.offset += n
-        traceReader(bytes)
-        return bytes
-        
-    def isEOF(self):
-        return self.offset == len(self.contents)
-        
-    def dbg(self):
-        print(self.contents[self.offset:])
-        
 class Img:
     def __init__(self,br):
-        traceReader('Img:')
+        dbg.traceReader('Img:')
         self.w = br.ReadUint16()
         self.h = br.ReadUint16()
         self.mip = br.ReadByte()
@@ -124,10 +25,11 @@ class Img:
         
     def dbg(self):
         return '{ w='+str(self.w)+' h='+str(self.h)+' mip='+str(self.mip)+' fmt='+str(self.fmt)+' phash=['+str(len(self.phash))+']}'
+
  
 class HashedFile:
     def __init__(self,br):
-        traceReader('HashedFile:')
+        dbg.traceReader('HashedFile:')
         self.path = br.ReadString()
         self.hash = br.ReadUint64()
         if br.ReadBoolean():
@@ -167,7 +69,7 @@ def parseContents(hash,contents,gzipped=True):
     # print(rowi)
     # print(contents)
     try:
-        br = BinaryReader(contents)
+        br = binaryreader.BinaryReader(contents)
         
         hf = HashedFile(br)
         assert(br.isEOF())
@@ -178,7 +80,7 @@ def parseContents(hash,contents,gzipped=True):
         print("Parse Exception with hash="+str(hash)+": "+str(e))
         print(traceback.format_exc())
         print(contents)
-        dbgWait()
+        dbg.dbgWait()
         return None
 
 def normalizeHash(hash):
@@ -205,7 +107,7 @@ def aEntries(paths,hf,root_archive_hash):
             #print('NESTED:')
             #for ae in aes:
             #    print(ae.__dict__)
-            #dbgWait();
+            #dbg.dbgWait();
     return aes
 
 def loadVFS():
@@ -226,11 +128,11 @@ def loadVFS():
         #    wfile.write(contents)
         #if row[0]==6883218886720266700:
         #    print("6883218886720266700")
-            #dbgWait()
+            #dbg.dbgWait()
         hf = parseContents(row[0],contents)
         #if hf != None and hf.hash == 6883218886720266700:
         #    hf.dbg()
-            #dbgWait()
+            #dbg.dbgWait()
         nn += 1
         if hf == None:
             nx += 1
@@ -314,119 +216,120 @@ def escapeJSON(s):
 
 #############
 
-#contents=b''
-#print(contents)
-#parseContents(0,contents,False)
-#dbgWait()
+def wj2git():
+    #contents=b''
+    #print(contents)
+    #parseContents(0,contents,False)
+    #dbg.dbgWait()
 
-with open(COMPILER_SETTINGS, 'rt') as rfile:
-    compiler_settings = json.load(rfile)
-    
-profilename=compiler_settings['Profile']
-additionalprofilenames=compiler_settings['AdditionalProfiles']
-allprofilenames=additionalprofilenames
-allprofilenames.append(profilename)
-print("Processing profiles:"+str(allprofilenames))
-
-archives = loadHC()
-archiveEntries = loadVFS() 
-
-#fpath = "..\\MO2\\mods\\Hvergelmir's Aesthetics - Brows\\Brows.esp"
-#fpath = fpath.replace("'","''")
-
-home_dir = os.path.expanduser("~")
-hc = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite')
-#vfsc = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalVFSCache5.sqlite')
-chc = hc.cursor()
-#cvfsc = vfsc.cursor()
-
-allmods = {}
-for profile in allprofilenames:
-    with open(MO2+'profiles\\'+profile+'\\modlist.txt','r') as rfile:
-        modlist = [line.rstrip() for line in rfile]
-        for mod in modlist:
-            if(mod.startswith('+')):
-                modname = mod[1:]
-                allmods[modname]=1
-
-files = []
-
-nn = 0
-for modname in allmods:
-        print("mod="+modname)
-        for root, dirs, filenames in os.walk(MO2+'\\mods\\'+modname):
-            for filename in filenames:
-                # print("file="+filename)
-                nn += 1
-                fpath = os.path.abspath(os.path.join(root,filename))
-                files.append(fpath)
-
-files.sort()
-
-nwarn = 0
-MO2ABS = os.path.abspath(MO2)+'\\'
-ignore=compiler_settings['Ignore']
-
-# pre-cleanup
-modsdir = TARGETGITHUB+'mods'
-if os.path.isdir(modsdir):
-    shutil.rmtree(modsdir)
-# dbgWait()
-
-with open(TARGETGITHUB+'master.json','wt',encoding="utf-8") as wfile:
-    wfile.write('[\n')
-    nf = 0
-    for fpath in files:
-        archiveEntry, archive = findFile(chc,archives,archiveEntries,fpath)
+    with open(COMPILER_SETTINGS, 'rt') as rfile:
+        compiler_settings = json.load(rfile)
         
-        assert(fpath.lower().startswith(MO2ABS.lower()))
-        fpath = fpath[len(MO2ABS):]
-        toignore=False
-        for ign in ignore:
-            if fpath.startswith(ign):
-                toignore = True
-                break
-        if toignore:
-            continue
+    profilename=compiler_settings['Profile']
+    additionalprofilenames=compiler_settings['AdditionalProfiles']
+    allprofilenames=additionalprofilenames
+    allprofilenames.append(profilename)
+    print("Processing profiles:"+str(allprofilenames))
 
-        if nf:
-            wfile.write(",\n")
-        nf += 1
-        if archiveEntry == None:
-            processed = False
-            m = re.search('^mods\\\\(.*)\\\\meta.ini$',fpath)
-            if m:
-                mod = m.group(1)
-                if mod.find('\\') < 0:
-                    # print(mod)
-                    targetpath0 = 'MO2\\' + fpath
-                    targetpath = TARGETGITHUB + targetpath0
-                    # print(realpath)
-                    os.makedirs(os.path.split(targetpath)[0],exist_ok=True)
-                    srcpath = MO2 + fpath
-                    shutil.copyfile(srcpath,targetpath)
-                    processed = True
-                    # dbgWait()
-                    wfile.write( '    { "path":'+escapeJSON(fpath)+', "source":'+escapeJSON(targetpath0)+' }');
-                            
-            if not processed:
-                wfile.write( '    { "path":'+escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" }');
-                nwarn += 1
-        else:
-            wfile.write( '    { "path":'+escapeJSON(fpath)+', "hash":"'+str(archiveEntry.file_hash)+'", "size":"'+str(archiveEntry.file_hash)+'", "archive_hash":"'+str(archiveEntry.archive_hash)+'", "in_archive_path":[')
-            np = 0
-            for path in archiveEntry.intra_path:
-                if np:
-                    wfile.write(',')
-                wfile.write(escapeJSON(path))
-                np += 1
-            wfile.write('] }')
+    archives = loadHC()
+    archiveEntries = loadVFS() 
 
-    wfile.write('\n]\n')
+    #fpath = "..\\MO2\\mods\\Hvergelmir's Aesthetics - Brows\\Brows.esp"
+    #fpath = fpath.replace("'","''")
+
+    home_dir = os.path.expanduser("~")
+    hc = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite')
+    #vfsc = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalVFSCache5.sqlite')
+    chc = hc.cursor()
+    #cvfsc = vfsc.cursor()
+
+    allmods = {}
+    for profile in allprofilenames:
+        with open(MO2+'profiles\\'+profile+'\\modlist.txt','r') as rfile:
+            modlist = [line.rstrip() for line in rfile]
+            for mod in modlist:
+                if(mod.startswith('+')):
+                    modname = mod[1:]
+                    allmods[modname]=1
+
+    files = []
+
+    nn = 0
+    for modname in allmods:
+            print("mod="+modname)
+            for root, dirs, filenames in os.walk(MO2+'\\mods\\'+modname):
+                for filename in filenames:
+                    # print("file="+filename)
+                    nn += 1
+                    fpath = os.path.abspath(os.path.join(root,filename))
+                    files.append(fpath)
+
+    files.sort()
+
+    nwarn = 0
+    MO2ABS = os.path.abspath(MO2)+'\\'
+    ignore=compiler_settings['Ignore']
+
+    # pre-cleanup
+    modsdir = TARGETGITHUB+'mods'
+    if os.path.isdir(modsdir):
+        shutil.rmtree(modsdir)
+    # dbg.dbgWait()
+
+    with open(TARGETGITHUB+'master.json','wt',encoding="utf-8") as wfile:
+        wfile.write('[\n')
+        nf = 0
+        for fpath in files:
+            archiveEntry, archive = findFile(chc,archives,archiveEntries,fpath)
             
-print("nn="+str(nn)+" nwarn="+str(nwarn))
+            assert(fpath.lower().startswith(MO2ABS.lower()))
+            fpath = fpath[len(MO2ABS):]
+            toignore=False
+            for ign in ignore:
+                if fpath.startswith(ign):
+                    toignore = True
+                    break
+            if toignore:
+                continue
 
-#validating json
-if DBG:
-    with open(TARGETGITHUB+'master.json', 'rt',encoding="utf-8") as rfile:
-        dummy = json.load(rfile)
+            if nf:
+                wfile.write(",\n")
+            nf += 1
+            if archiveEntry == None:
+                processed = False
+                m = re.search('^mods\\\\(.*)\\\\meta.ini$',fpath)
+                if m:
+                    mod = m.group(1)
+                    if mod.find('\\') < 0:
+                        # print(mod)
+                        targetpath0 = 'MO2\\' + fpath
+                        targetpath = TARGETGITHUB + targetpath0
+                        # print(realpath)
+                        os.makedirs(os.path.split(targetpath)[0],exist_ok=True)
+                        srcpath = MO2 + fpath
+                        shutil.copyfile(srcpath,targetpath)
+                        processed = True
+                        # dbg.dbgWait()
+                        wfile.write( '    { "path":'+escapeJSON(fpath)+', "source":'+escapeJSON(targetpath0)+' }');
+                                
+                if not processed:
+                    wfile.write( '    { "path":'+escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" }');
+                    nwarn += 1
+            else:
+                wfile.write( '    { "path":'+escapeJSON(fpath)+', "hash":"'+str(archiveEntry.file_hash)+'", "size":"'+str(archiveEntry.file_hash)+'", "archive_hash":"'+str(archiveEntry.archive_hash)+'", "in_archive_path":[')
+                np = 0
+                for path in archiveEntry.intra_path:
+                    if np:
+                        wfile.write(',')
+                    wfile.write(escapeJSON(path))
+                    np += 1
+                wfile.write('] }')
+
+        wfile.write('\n]\n')
+                
+    print("nn="+str(nn)+" nwarn="+str(nwarn))
+
+    #validating json
+    if dbg.DBG:
+        with open(TARGETGITHUB+'master.json', 'rt',encoding="utf-8") as rfile:
+            dummy = json.load(rfile)
