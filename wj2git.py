@@ -399,14 +399,15 @@ with open(TARGETGITHUB+'master.json','wt',encoding="utf-8") as wfile:
                 mod = m.group(1)
                 if mod.find('\\') < 0:
                     # print(mod)
-                    targetpath = TARGETGITHUB + 'MO2\\' + fpath
+                    targetpath0 = 'MO2\\' + fpath
+                    targetpath = TARGETGITHUB + targetpath0
                     # print(realpath)
                     os.makedirs(os.path.split(targetpath)[0],exist_ok=True)
                     srcpath = MO2 + fpath
                     shutil.copyfile(srcpath,targetpath)
                     processed = True
                     # dbgWait()
-                    wfile.write( '    { "path":'+escapeJSON(fpath)+', "source":'+escapeJSON(targetpath)+' }');
+                    wfile.write( '    { "path":'+escapeJSON(fpath)+', "source":'+escapeJSON(targetpath0)+' }');
                             
             if not processed:
                 wfile.write( '    { "path":'+escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" }');
