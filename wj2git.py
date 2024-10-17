@@ -6,10 +6,10 @@ import json
 import re
 import shutil
 
-MO2='..\\MO2\\'
-COMPILER_SETTINGS='..\\MO2\\Kick Their Ass.compiler_settings'
+MO2='..\\..\\MO2\\'
+COMPILER_SETTINGS='..\\..\\MO2\\Kick Their Ass.compiler_settings'
 # PROFILE='KTA-FULL'
-TARGETGITHUB='..\\GitHub\\'
+TARGETGITHUB='..\\KTA\\'
 
 ###
 
@@ -388,9 +388,7 @@ with open(TARGETGITHUB+'master.json','wt',encoding="utf-8") as wfile:
                 break
         if toignore:
             continue
-        #idx = fpath.find('\\MO2\\')
-        #assert(idx>=0)
-        #fpath='..'+fpath[idx:]
+
         if nf:
             wfile.write(",\n")
         nf += 1
@@ -401,20 +399,20 @@ with open(TARGETGITHUB+'master.json','wt',encoding="utf-8") as wfile:
                 mod = m.group(1)
                 if mod.find('\\') < 0:
                     # print(mod)
-                    targetpath = TARGETGITHUB + fpath
+                    targetpath = TARGETGITHUB + 'MO2\\' + fpath
                     # print(realpath)
                     os.makedirs(os.path.split(targetpath)[0],exist_ok=True)
                     srcpath = MO2 + fpath
                     shutil.copyfile(srcpath,targetpath)
                     processed = True
                     # dbgWait()
-                    wfile.write( '{ "path":'+escapeJSON(fpath)+', "source":'+escapeJSON(targetpath)+' }');
+                    wfile.write( '    { "path":'+escapeJSON(fpath)+', "source":'+escapeJSON(targetpath)+' }');
                             
             if not processed:
-                wfile.write( '{ "path":'+escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" }');
+                wfile.write( '    { "path":'+escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" }');
                 nwarn += 1
         else:
-            wfile.write( '{ "path":'+escapeJSON(fpath)+', "hash":"'+str(archiveEntry.file_hash)+'", "size":"'+str(archiveEntry.file_hash)+'", "archive_hash":"'+str(archiveEntry.archive_hash)+'", "in_archive_path":[')
+            wfile.write( '    { "path":'+escapeJSON(fpath)+', "hash":"'+str(archiveEntry.file_hash)+'", "size":"'+str(archiveEntry.file_hash)+'", "archive_hash":"'+str(archiveEntry.archive_hash)+'", "in_archive_path":[')
             np = 0
             for path in archiveEntry.intra_path:
                 if np:
@@ -422,8 +420,7 @@ with open(TARGETGITHUB+'master.json','wt',encoding="utf-8") as wfile:
                 wfile.write(escapeJSON(path))
                 np += 1
             wfile.write('] }')
-            # print(archiveEntry.__dict__)
-            # print(archive.__dict__)
+
     wfile.write('\n]\n')
             
 print("nn="+str(nn)+" nwarn="+str(nwarn))
