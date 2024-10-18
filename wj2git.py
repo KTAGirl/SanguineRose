@@ -11,11 +11,6 @@ from enum import Enum
 import dbg
 import binaryreader
 
-MO2='..\\..\\MO2\\'
-COMPILER_SETTINGS='..\\..\\MO2\\Kick Their Ass.compiler_settings'
-# PROFILE='KTA-FULL'
-TARGETGITHUB='..\\KTA\\'
-
 def addToDictOfLists(dict,key,val):
     if key not in dict:
         dict[key]=[val]
@@ -288,10 +283,6 @@ def installfileAndModid(mod,mo2):
     installfile = installfiles[0]
     m = re.search('^installationFile *= *(.*)',installfile)
     installfile = m.group(1)
-    #if(installfile.startswith('C:/Modding/MO2/downloads/')):
-        # print('##: '+installfile)
-        # dbg.dbgWait()
-        # installfile = installfile[len('C:/Modding/MO2/downloads/'):]
     absdlpath = os.path.abspath(mo2+'downloads/').lower()
     absdlpath2 = absdlpath.replace('\\','/')
     assert(len(absdlpath)==len(absdlpath2))
@@ -383,19 +374,19 @@ def installfileModidManualUrlAndPrompt(mod,mo2):
         manualurl,prompt = manualUrlAndPrompt(installfile,mo2)
         return installfile,modid,manualurl,prompt
 
-def writeManualDownloads(md,modlist,toolinstallfiles=None):
-    md.write('## Kick Their Asses - Manual Downloads\n')
+def writeManualDownloads(md,modlistname,modlist,mo2,toolinstallfiles=None):
+    md.write('## '+modlistname+' - Manual Downloads\n')
     md.write('|#| URL | Comment |\n')
     md.write('|-----|-----|-----|\n')
     todl = {}
     if toolinstallfiles:
         for installfile in toolinstallfiles:
-            manualurl,prompt = manualUrlAndPrompt(installfile,MO2)
+            manualurl,prompt = manualUrlAndPrompt(installfile,mo2)
             if manualurl:
                 addToDictOfLists(todl,manualurl,prompt)
 
     for mod in modlist.allEnabled():
-        installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,MO2)
+        installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,mo2)
         if manualurl:
             addToDictOfLists(todl,manualurl,prompt)
 
@@ -414,13 +405,14 @@ def writeManualDownloads(md,modlist,toolinstallfiles=None):
 
 #############
 
-def wj2git():
+def wj2git(mo2,targetgithub):
     #contents=b''
     #print(contents)
     #parseContents(0,contents,False)
     #dbg.dbgWait()
+    compiler_settings_fname = mo2+ 'Kick Their Ass.compiler_settings'
 
-    with openModTxtFile(COMPILER_SETTINGS) as rfile:
+    with openModTxtFile(compiler_settings_fname) as rfile:
         compiler_settings = json.load(rfile)
         
     profilename=compiler_settings['Profile']
@@ -443,7 +435,7 @@ def wj2git():
 
     allmods = {}
     for profile in allprofilenames:
-        with openModTxtFile(MO2+'profiles\\'+profile+'\\modlist.txt') as rfile:
+        with openModTxtFile(mo2+'profiles\\'+profile+'\\modlist.txt') as rfile:
             modlist = [line.rstrip() for line in rfile]
             for mod in modlist:
                 if(mod.startswith('+')):
@@ -455,7 +447,7 @@ def wj2git():
     nn = 0
     for modname in allmods:
             print("mod="+modname)
-            for root, dirs, filenames in os.walk(MO2+'\\mods\\'+modname):
+            for root, dirs, filenames in os.walk(mo2+'\\mods\\'+modname):
                 for filename in filenames:
                     # print("file="+filename)
                     nn += 1
@@ -465,23 +457,23 @@ def wj2git():
     files.sort()
 
     nwarn = 0
-    MO2ABS = os.path.abspath(MO2)+'\\'
+    mo2abs = os.path.abspath(mo2)+'\\'
     ignore=compiler_settings['Ignore']
 
     # pre-cleanup
-    modsdir = TARGETGITHUB+'mods'
+    modsdir = targetgithub+'mods'
     if os.path.isdir(modsdir):
         shutil.rmtree(modsdir)
     # dbg.dbgWait()
 
-    with open(TARGETGITHUB+'master.json','wt',encoding="utf-8") as wfile:
+    with open(targetgithub+'master.json','wt',encoding="utf-8") as wfile:
         wfile.write('[\n')
         nf = 0
         for fpath in files:
             archiveEntry, archive = findFile(chc,archives,archiveEntries,fpath)
             
-            assert(fpath.lower().startswith(MO2ABS.lower()))
-            fpath = fpath[len(MO2ABS):]
+            assert(fpath.lower().startswith(mo2abs.lower()))
+            fpath = fpath[len(mo2abs):]
             toignore=False
             for ign in ignore:
                 if fpath.startswith(ign):
@@ -501,10 +493,10 @@ def wj2git():
                     if mod.find('\\') < 0:
                         # print(mod)
                         targetpath0 = 'MO2\\' + fpath
-                        targetpath = TARGETGITHUB + targetpath0
+                        targetpath = targetgithub + targetpath0
                         # print(realpath)
                         os.makedirs(os.path.split(targetpath)[0],exist_ok=True)
-                        srcpath = MO2 + fpath
+                        srcpath = mo2 + fpath
                         shutil.copyfile(srcpath,targetpath)
                         processed = True
                         # dbg.dbgWait()
@@ -529,5 +521,5 @@ def wj2git():
 
     #validating json
     if dbg.DBG:
-        with open(TARGETGITHUB+'master.json', 'rt',encoding="utf-8") as rfile:
+        with open(targetgithub+'master.json', 'rt',encoding="utf-8") as rfile:
             dummy = json.load(rfile)
