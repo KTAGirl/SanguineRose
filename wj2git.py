@@ -402,7 +402,7 @@ def writeManualDownloads(md,modlistname,modlist,mo2,config,toolinstallfiles=None
                     addToDictOfLists(todl,manualurl,prompt)
 
         for mod in modlist.allEnabled():
-            if mod in config['localmods']:
+            if mod in config['ownmods']:
                 continue
             installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,mo2)
             if manualurl:
@@ -583,7 +583,7 @@ def wj2git(mo2,compiler_settings_fname,targetgithub,config,stats):
             dummy = json.load(rfile)
 
     # copying local mods
-    for mod in config['localmods']:
+    for mod in config['ownmods']:
         shutil.copytree(mo2+'mods/'+mod, targetgithub + targetdir+'mods\\'+mod, dirs_exist_ok=True)
  
     # writing profiles
