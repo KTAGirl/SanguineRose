@@ -232,6 +232,10 @@ def findFile(chc,archives,archiveEntries,fpath):
     #print(archive.__dict__)
     return archiveEntry, archive
 
+def loadFromCompilerSettings(config,stats,compiler_settings):
+    config['modlistname']=compiler_settings['ModListName']
+    stats['VERSION']=compiler_settings['Version']
+
 def escapeJSON(s):
     return json.dumps(s)
 
@@ -389,7 +393,10 @@ def installfileModidManualUrlAndPrompt(mod,mo2):
         manualurl,prompt = manualUrlAndPrompt(installfile,mo2)
         return installfile,modid,manualurl,prompt
 
-def writeManualDownloads(md,modlistname,modlist,mo2,config,toolinstallfiles=None):
+def writeManualDownloads(md,modlist,todl0,config):
+    mo2 = config['mo2']
+    toolinstallfiles = config['toolinstallfiles']
+    modlistname = config['modlistname']
     with openModTxtFileW('manualdl.md') as md:
         md.write('## '+modlistname+' - Manual Downloads\n')
         md.write('|#| URL | Comment |\n')
@@ -401,12 +408,8 @@ def writeManualDownloads(md,modlistname,modlist,mo2,config,toolinstallfiles=None
                 if manualurl:
                     addToDictOfLists(todl,manualurl,prompt)
 
-        for mod in modlist.allEnabled():
-            if mod in config['ownmods']:
-                continue
-            installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,mo2)
-            if manualurl:
-                addToDictOfLists(todl,manualurl,prompt)
+        todl = todl | todl0
+
 
         rowidx = 1
         sorted_todl = dict(sorted(todl.items()))
@@ -456,13 +459,18 @@ def _copyRestOfProfile(mo2,fulltargetdir,profilename):
 
 #############
 
-def wj2git(mo2,compiler_settings_fname,targetgithub,config,stats):
+def wj2git(config):
     #contents=b''
     #print(contents)
     #parseContents(0,contents,False)
     #dbg.dbgWait()
+    mo2=config['mo2']
+    compiler_settings_fname=config['compiler_settings']
+    targetgithub=config['targetgithub']
+    ownmods=config['ownmods']
     
     targetdir = 'MO2\\'
+    stats = {}
 
     with openModTxtFile(mo2+compiler_settings_fname) as rfile:
         compiler_settings = json.load(rfile)
@@ -500,8 +508,15 @@ def wj2git(mo2,compiler_settings_fname,targetgithub,config,stats):
             allmods[mod]=1
         altmodlists[profile] = modlist
 
-    files = []
+    todl = {}
+    for mod in modlist.allEnabled():
+        if mod in ownmods:
+            continue
+        installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,mo2)
+        if manualurl:
+            addToDictOfLists(todl,manualurl,prompt)
 
+    files = []
     nn = 0
     for modname in allmods:
             print("mod="+modname)
@@ -544,7 +559,7 @@ def wj2git(mo2,compiler_settings_fname,targetgithub,config,stats):
             
             isown = False
             # print(fpath)
-            for own in config['ownmods']:
+            for own in ownmods:
                 ownpath = 'mods\\'+own+'\\'
                 # print(ownpath)
                 # print(fpath)
@@ -597,8 +612,8 @@ def wj2git(mo2,compiler_settings_fname,targetgithub,config,stats):
         with open(targetgithub+'master.json', 'rt',encoding="utf-8") as rfile:
             dummy = json.load(rfile)
 
-    # copying local mods
-    for mod in config['ownmods']:
+    # copying own mods
+    for mod in ownmods:
         shutil.copytree(mo2+'mods/'+mod, targetgithub + targetdir+'mods\\'+mod, dirs_exist_ok=True)
  
     # writing profiles
@@ -673,4 +688,4 @@ def wj2git(mo2,compiler_settings_fname,targetgithub,config,stats):
             modlist.writeDisablingIf(targetgithub+targetdir+'profiles\\'+profile+'\\', lambda mod: optionalmods_dict.get(mod))
             _copyRestOfProfile(mo2,targetgithub + targetdir,profile)
 
-    return compiler_settings,mastermodlist
+    return compiler_settings,mastermodlist,todl,stats
