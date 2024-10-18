@@ -444,12 +444,11 @@ def writeTxtFromTemplate(template,target,stats):
 
 #############
 
-def wj2git(mo2,targetgithub):
+def wj2git(mo2,compiler_settings_fname,targetgithub):
     #contents=b''
     #print(contents)
     #parseContents(0,contents,False)
     #dbg.dbgWait()
-    compiler_settings_fname = mo2+ 'Kick Their Ass.compiler_settings'
 
     with openModTxtFile(compiler_settings_fname) as rfile:
         compiler_settings = json.load(rfile)
