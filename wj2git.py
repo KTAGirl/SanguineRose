@@ -17,6 +17,16 @@ def addToDictOfLists(dict,key,val):
     else:
         dict[key].append(val)          
 
+def folderSize(rootpath):
+    total = 0
+    for dirpath, dirnames, filenames in os.walk(rootpath):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            # skip if it is symbolic link
+            if not os.path.islink(fp):
+                total += os.path.getsize(fp)
+    return total
+
 def isEslFlagged(filename):
     with open(filename, 'rb') as f:
         buf = f.read(10)
@@ -375,33 +385,53 @@ def installfileModidManualUrlAndPrompt(mod,mo2):
         return installfile,modid,manualurl,prompt
 
 def writeManualDownloads(md,modlistname,modlist,mo2,toolinstallfiles=None):
-    md.write('## '+modlistname+' - Manual Downloads\n')
-    md.write('|#| URL | Comment |\n')
-    md.write('|-----|-----|-----|\n')
-    todl = {}
-    if toolinstallfiles:
-        for installfile in toolinstallfiles:
-            manualurl,prompt = manualUrlAndPrompt(installfile,mo2)
+    with openModTxtFileW('manualdl.md') as md:
+        md.write('## '+modlistname+' - Manual Downloads\n')
+        md.write('|#| URL | Comment |\n')
+        md.write('|-----|-----|-----|\n')
+        todl = {}
+        if toolinstallfiles:
+            for installfile in toolinstallfiles:
+                manualurl,prompt = manualUrlAndPrompt(installfile,mo2)
+                if manualurl:
+                    addToDictOfLists(todl,manualurl,prompt)
+
+        for mod in modlist.allEnabled():
+            installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,mo2)
             if manualurl:
                 addToDictOfLists(todl,manualurl,prompt)
 
-    for mod in modlist.allEnabled():
-        installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,mo2)
-        if manualurl:
-            addToDictOfLists(todl,manualurl,prompt)
+        rowidx = 1
+        sorted_todl = dict(sorted(todl.items()))
+        for manualurl in sorted_todl:
+            prompts = sorted_todl[manualurl]
+            # print(manualurl+' '+str(prompts))
+            xprompt = ''
+            for prompt in prompts:
+                if len(xprompt) > 0:
+                    xprompt = xprompt + '<br>'
+                xprompt = xprompt + ':lips:' + prompt
+            md.write('|'+str(rowidx)+'|['+manualurl+']('+manualurl+')|'+xprompt+'|\n')
+            rowidx = rowidx + 1
 
-    rowidx = 1
-    sorted_todl = dict(sorted(todl.items()))
-    for manualurl in sorted_todl:
-        prompts = sorted_todl[manualurl]
-        # print(manualurl+' '+str(prompts))
-        xprompt = ''
-        for prompt in prompts:
-            if len(xprompt) > 0:
-                xprompt = xprompt + '<br>'
-            xprompt = xprompt + ':lips:' + prompt
-        md.write('|'+str(rowidx)+'|['+manualurl+']('+manualurl+')|'+xprompt+'|\n')
-        rowidx = rowidx + 1
+def fillCompiledStats(stats,statsfilename,prefix=''):
+    with openModTxtFile(statsfilename) as rfile:
+        statsjson = json.load(rfile)
+     
+        stats[prefix+'WBSIZE'] = f"{statsjson['Size']/1e9:.1f}G"
+        stats[prefix+'DLSIZE'] = f"{statsjson['SizeOfArchives']/1e9:.0f}G"
+        stats[prefix+'INSTALLSIZE'] = f"{statsjson['SizeOfInstalledFiles']/1e9:.0f}G"
+        stats[prefix+'TOTALSPACE'] = f"{round(((statsjson['Size']+statsjson['SizeOfArchives']+statsjson['SizeOfInstalledFiles'])/1e9+5)/5,0)*5:.0f}G"
+
+def statsFolderSize(folder):
+    return f"{folderSize(folder)/1e9:.1f}G"    
+
+def enabledModSizes(modlist,mo2):
+    sizes=[]
+    for mod in modlist.allEnabled():
+        sizes.append([mod,round(folderSize(mo2+'mods/'+mod)/1000000,2)])
+    sizes.sort(key=lambda x: x[1])
+    return sizes
 
 #############
 
