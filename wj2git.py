@@ -168,7 +168,7 @@ def wj2git(config):
             allmods[mod]=1
         altmodlists[profile] = modlist
 
-    allinstallfiles = []
+    allinstallfiles = {}
     todl = {}
     for mod in modlist.allEnabled():
         if mod in ownmods:
@@ -183,7 +183,7 @@ def wj2git(config):
             #dbg.dbgWait()
             archive = wjdb.findArchive(chc,archives,fpath)
             if archive:
-                allinstallfiles.append([installfile,archive.archive_hash])
+                allinstallfiles[archive.archive_hash] = installfile
             else:
                 print('WARNING: no archive found for '+installfile)
         if manualurl:
@@ -215,8 +215,11 @@ def wj2git(config):
     with open(targetgithub+'master.json','wt',encoding="utf-8") as wfile:
         wfile.write('{ "archives": [\n')
         na = 0
-        allinstallfiles.sort(key=lambda f: f[0])
-        for f in allinstallfiles:
+        aif = []
+        for key, value in allinstallfiles.items():
+            aif.append([value,key])
+        aif.sort(key=lambda f: f[0])
+        for f in aif:
             if na:
                 wfile.write(",\n")
             na += 1
@@ -284,7 +287,11 @@ def wj2git(config):
                         wfile.write(',')
                     wfile.write(escapeJSON(path))
                     np += 1
-                wfile.write('] }')
+                wfile.write(']')
+                
+                if not allinstallfiles.get(archiveEntry.archive_hash):
+                    wfile.write(', "warning":"archive found is NOT one of those listed"')
+                wfile.write(' }')
 
         wfile.write('\n]}\n')
                 
