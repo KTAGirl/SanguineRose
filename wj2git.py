@@ -389,7 +389,7 @@ def installfileModidManualUrlAndPrompt(mod,mo2):
         manualurl,prompt = manualUrlAndPrompt(installfile,mo2)
         return installfile,modid,manualurl,prompt
 
-def writeManualDownloads(md,modlistname,modlist,mo2,toolinstallfiles=None):
+def writeManualDownloads(md,modlistname,modlist,mo2,config,toolinstallfiles=None):
     with openModTxtFileW('manualdl.md') as md:
         md.write('## '+modlistname+' - Manual Downloads\n')
         md.write('|#| URL | Comment |\n')
@@ -402,6 +402,8 @@ def writeManualDownloads(md,modlistname,modlist,mo2,toolinstallfiles=None):
                     addToDictOfLists(todl,manualurl,prompt)
 
         for mod in modlist.allEnabled():
+            if mod in config['localmods']:
+                continue
             installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,mo2)
             if manualurl:
                 addToDictOfLists(todl,manualurl,prompt)
@@ -579,6 +581,10 @@ def wj2git(mo2,compiler_settings_fname,targetgithub,config,stats):
     if dbg.DBG:
         with open(targetgithub+'master.json', 'rt',encoding="utf-8") as rfile:
             dummy = json.load(rfile)
+
+    # copying local mods
+    for mod in config['localmods']:
+        shutil.copytree(mo2+'mods/'+mod, targetgithub + targetdir+mod, dirs_exist_ok=True)
  
     # writing profiles
     targetfdir = targetgithub + targetdir + 'profiles\\'+masterprofilename+'\\'
