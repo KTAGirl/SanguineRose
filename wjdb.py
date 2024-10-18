@@ -116,20 +116,9 @@ def loadVFS():
     nx = 0
     archiveEntries = {}
     for row in cur.execute('SELECT Hash,Contents FROM VFSCache'): # WHERE Hash=-8778729428874073019"):
-        # rowi += 1
-        # print(row)
-        # print(row[0])
         contents = row[1]
-        # print(contents)
-        # with open('gzipped', 'wb') as wfile:
-        #    wfile.write(contents)
-        #if row[0]==6883218886720266700:
-        #    print("6883218886720266700")
-            #dbg.dbgWait()
+
         hf = parseContents(row[0],contents)
-        #if hf != None and hf.hash == 6883218886720266700:
-        #    hf.dbg()
-            #dbg.dbgWait()
         nn += 1
         if hf == None:
             nx += 1
