@@ -383,6 +383,35 @@ def installfileModidManualUrlAndPrompt(mod,mo2):
         manualurl,prompt = manualUrlAndPrompt(installfile,mo2)
         return installfile,modid,manualurl,prompt
 
+def writeManualDownloads(md,modlist,toolinstallfiles=None):
+    md.write('## Kick Their Asses - Manual Downloads\n')
+    md.write('|#| URL | Comment |\n')
+    md.write('|-----|-----|-----|\n')
+    todl = {}
+    if toolinstallfiles:
+        for installfile in toolinstallfiles:
+            manualurl,prompt = manualUrlAndPrompt(installfile,MO2)
+            if manualurl:
+                addToDictOfLists(todl,manualurl,prompt)
+
+    for mod in modlist.allEnabled():
+        installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,MO2)
+        if manualurl:
+            addToDictOfLists(todl,manualurl,prompt)
+
+    rowidx = 1
+    sorted_todl = dict(sorted(todl.items()))
+    for manualurl in sorted_todl:
+        prompts = sorted_todl[manualurl]
+        # print(manualurl+' '+str(prompts))
+        xprompt = ''
+        for prompt in prompts:
+            if len(xprompt) > 0:
+                xprompt = xprompt + '<br>'
+            xprompt = xprompt + ':lips:' + prompt
+        md.write('|'+str(rowidx)+'|['+manualurl+']('+manualurl+')|'+xprompt+'|\n')
+        rowidx = rowidx + 1
+
 #############
 
 def wj2git():
