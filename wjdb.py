@@ -207,3 +207,21 @@ def findFile(chc,archives,archiveEntries,fpath):
         return None,None
     #print(archive.__dict__)
     return archiveEntry, archive
+
+def findArchive(chc,archives,fpath):
+    fpath=fpath.replace("'","''")
+    chc.execute("SELECT Path,LastModified,Hash FROM HashCache WHERE Path='"+fpath.lower()+"'")
+    row = chc.fetchone()
+    # print(row)
+    
+    if row == None:
+        print("WARNING: path="+fpath+" NOT FOUND")
+        return None
+
+    hash=normalizeHash(row[2])
+    archive = archives.get(hash)
+    if archive == None:
+        print("WARNING: archive with hash="+str(ahash)+" NOT FOUND")
+        return None
+    #print(archive.__dict__)
+    return archive

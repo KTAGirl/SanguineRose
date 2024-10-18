@@ -168,11 +168,24 @@ def wj2git(config):
             allmods[mod]=1
         altmodlists[profile] = modlist
 
+    allinstallfiles = []
     todl = {}
     for mod in modlist.allEnabled():
         if mod in ownmods:
             continue
         installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,mo2)
+        if installfile:
+            # print('if='+installfile)
+            fpath = config['downloads']+installfile
+            fpath = os.path.abspath(fpath)
+            fpath = fpath.replace('/','\\')
+            #print('#?'+fpath)
+            #dbg.dbgWait()
+            archive = wjdb.findArchive(chc,archives,fpath)
+            if archive:
+                allinstallfiles.append([installfile,archive.archive_hash])
+            else:
+                print('WARNING: no archive found for '+installfile)
         if manualurl:
             addToDictOfLists(todl,manualurl,prompt)
 
@@ -200,7 +213,15 @@ def wj2git(config):
     # dbg.dbgWait()
 
     with open(targetgithub+'master.json','wt',encoding="utf-8") as wfile:
-        wfile.write('[\n')
+        wfile.write('{ "archives": [\n')
+        na = 0
+        allinstallfiles.sort(key=lambda f: f[0])
+        for f in allinstallfiles:
+            if na:
+                wfile.write(",\n")
+            na += 1
+            wfile.write('    { "name": "'+str(f[0])+'", "hash": "'+str(f[1])+'" }')
+        wfile.write('\n], "files": [\n')
         nf = 0
         for fpath0 in files:            
             assert(fpath0.lower().startswith(mo2abs.lower()))
@@ -232,6 +253,8 @@ def wj2git(config):
                 # dbg.dbgWait()
                 continue
             
+            #print('#+'+fpath0)
+            #dbg.dbgWait()            
             archiveEntry, archive = wjdb.findFile(chc,archives,archiveEntries,fpath0)
             if archiveEntry == None:
                 processed = False
@@ -263,7 +286,7 @@ def wj2git(config):
                     np += 1
                 wfile.write('] }')
 
-        wfile.write('\n]\n')
+        wfile.write('\n]}\n')
                 
     print("nn="+str(nn)+" nwarn="+str(nwarn))
 
