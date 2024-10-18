@@ -584,7 +584,7 @@ def wj2git(mo2,compiler_settings_fname,targetgithub,config,stats):
 
     # copying local mods
     for mod in config['localmods']:
-        shutil.copytree(mo2+'mods/'+mod, targetgithub + targetdir+mod, dirs_exist_ok=True)
+        shutil.copytree(mo2+'mods/'+mod, targetgithub + targetdir+'mods\\'+mod, dirs_exist_ok=True)
  
     # writing profiles
     targetfdir = targetgithub + targetdir + 'profiles\\'+masterprofilename+'\\'
