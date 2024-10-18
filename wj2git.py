@@ -260,7 +260,7 @@ class ModList:
     def writeDisablingIf(self,path,f):
         fname = path + 'modlist.txt'
         with openModTxtFileW(fname) as wfile:
-            wfile.write("# This file was automatically modified by wj2git.\n`")
+            wfile.write("# This file was automatically modified by wj2git.\n")
             for mod0 in reversed(self.modlist):
                 if mod0[0]=='+':
                     mod = mod0[1:]
@@ -447,9 +447,14 @@ def writeTxtFromTemplate(template,target,stats):
     with openModTxtFileW(target) as fw:
         fw.write(templ)
 
+def _copyRestOfProfile(mo2,fulltargetdir,profilename):
+    srcfdir = mo2+'profiles\\'+profilename+'\\'
+    targetfdir = fulltargetdir + 'profiles\\'+profilename+'\\'
+    shutil.copyfile(srcfdir+'loadorder.txt',targetfdir+'loadorder.txt')
+
 #############
 
-def wj2git(mo2,compiler_settings_fname,targetgithub):
+def wj2git(mo2,compiler_settings_fname,targetgithub,config,stats):
     #contents=b''
     #print(contents)
     #parseContents(0,contents,False)
@@ -579,10 +584,72 @@ def wj2git(mo2,compiler_settings_fname,targetgithub):
     targetfdir = targetgithub + targetdir + 'profiles\\'+masterprofilename+'\\'
     makeDirsForFile(targetfdir+'modlist.txt')
     mastermodlist.write(targetfdir)
-    shutil.copyfile(mo2+'profiles\\'+masterprofilename+'\\loadorder.txt',targetfdir+'loadorder.txt')
+    # shutil.copyfile(mo2+'profiles\\'+masterprofilename+'\\loadorder.txt',targetfdir+'loadorder.txt')
+    _copyRestOfProfile(mo2,targetgithub + targetdir,masterprofilename)
+    cfgaltprof = config.get('altprofiles')
+    # print(altmodlists)
     for profile in altmodlists:
+        print(profile)
+        modlist = altmodlists[profile]
         fname = mo2+'profiles\\'+profile+'\\modlist.txt'
-        targetfdir = targetgithub + targetdir + 'profiles\\'+profile
-        makeDirsForFile(targetfdir+'\\modlist.txt')
- 
+        targetfdir = targetgithub + targetdir + 'profiles\\'+profile+'\\'
+        makeDirsForFile(targetfdir+'modlist.txt')
+        filterout = None
+        if cfgaltprof:
+            filterout = cfgaltprof.get(profile)
+        if filterout is None:
+            print('WARNING: no filterout lambda in config for profile'+profile)
+        else:
+            optionalmods=0
+            optionalesxs=0
+            optionalesxs_dict={}
+            optionalmods_dict={}
+
+            # section = ''
+            filteredout = False
+            for mod in modlist.modlist:
+                separ = ModList.isSeparator(mod)
+                # print(separ)
+                if separ:
+                    # section = separ
+                    filteredout = bool(filterout(separ))
+                    # print(separ+':'+str(filteredout))
+                else:
+                    if mod[0] != '+':
+                        continue
+                    mod = mod[1:]
+                    # print('mod='+mod)
+                    if filteredout:
+                        optionalmods += 1
+                        # print('OPTIONAL:'+mod)
+                        optionalmods_dict[mod] = 1
+                        esxs=allEsxs(mod,mo2)
+                        for esx in esxs:
+                            optionalesxs += 1
+                            key = os.path.split(esx)[1]
+                            # print(key)
+                            # assert(optionalesxs_dict.get(key)==None)
+                            optionalesxs_dict[key] = esx #rewriting if applicable
+                    else:
+                        esxs=allEsxs(mod,mo2)
+                        for esx in esxs:
+                            key = os.path.split(esx)[1]
+                            path = optionalesxs_dict.get(key)
+                            if path != None:
+                                # print(path + ' is overridden by '+ esx)
+                                optionalesxs_dict[key] = esx
+            
+            stats[profile+'.OPTIONALMODS']=optionalmods
+            stats[profile+'.OPTIONALESXS']=optionalesxs
+
+            # print(optionalesxs_dict)
+            for key in optionalesxs_dict:
+                esx = optionalesxs_dict.get(key)
+                assert(esx!=None)
+                if not isEslFlagged(esx):
+                    print('WARNING: OPTIONAL '+esx+' is not esl-flagged')
+
+            modlist.writeDisablingIf(targetgithub+targetdir+'profiles\\'+profile+'\\', lambda mod: optionalmods_dict.get(mod))
+            _copyRestOfProfile(mo2,targetgithub + targetdir,profile)
+
     return compiler_settings,mastermodlist
