@@ -433,6 +433,15 @@ def enabledModSizes(modlist,mo2):
     sizes.sort(key=lambda x: x[1])
     return sizes
 
+def writeTxtFromTemplate(template,target,stats):
+    with openModTxtFile(template) as fr:
+        templ = fr.read()
+    for key in stats:
+        key1 = '%'+key+'%'
+        templ = templ.replace(key1,str(stats[key]))
+    with openModTxtFileW(target) as fw:
+        fw.write(templ)
+
 #############
 
 def wj2git(mo2,targetgithub):
