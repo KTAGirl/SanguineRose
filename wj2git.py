@@ -291,6 +291,7 @@ def wj2git(config):
                 
                 if not allinstallfiles.get(archiveEntry.archive_hash):
                     wfile.write(', "warning":"archive found is NOT one of those listed"')
+                    nwarn += 1
                 wfile.write(' }')
 
         wfile.write('\n]}\n')
