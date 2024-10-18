@@ -253,12 +253,14 @@ class ModList:
     def write(self,path):
         fname = path + 'modlist.txt'
         with openModTxtFileW(fname) as wfile:
+            wfile.write("# This file was automatically modified by wj2git.\n")
             for line in reversed(self.modlist):
                 wfile.write(line+'\n')
             
     def writeDisablingIf(self,path,f):
         fname = path + 'modlist.txt'
         with openModTxtFileW(fname) as wfile:
+            wfile.write("# This file was automatically modified by wj2git.\n`")
             for mod0 in reversed(self.modlist):
                 if mod0[0]=='+':
                     mod = mod0[1:]
@@ -464,11 +466,9 @@ def wj2git(mo2,compiler_settings_fname,targetgithub):
     with openModTxtFileW(target_settings) as wfile:
         json.dump(compiler_settings, wfile, sort_keys=True, indent=4)
     
-    profilename=compiler_settings['Profile']
-    additionalprofilenames=compiler_settings['AdditionalProfiles']
-    allprofilenames=additionalprofilenames
-    allprofilenames.append(profilename)
-    print("Processing profiles:"+str(allprofilenames))
+    masterprofilename=compiler_settings['Profile']
+    altprofilenames=compiler_settings['AdditionalProfiles']
+    print("Processing profiles: "+masterprofilename+","+str(altprofilenames))
 
     archives = loadHC()
     archiveEntries = loadVFS() 
@@ -483,13 +483,15 @@ def wj2git(mo2,compiler_settings_fname,targetgithub):
     #cvfsc = vfsc.cursor()
 
     allmods = {}
-    for profile in allprofilenames:
-        with openModTxtFile(mo2+'profiles\\'+profile+'\\modlist.txt') as rfile:
-            modlist = [line.rstrip() for line in rfile]
-            for mod in modlist:
-                if(mod.startswith('+')):
-                    modname = mod[1:]
-                    allmods[modname]=1
+    mastermodlist = ModList(mo2+'profiles\\'+masterprofilename+'\\')
+    for mod in mastermodlist.allEnabled():
+        allmods[mod]=1
+    altmodlists = {}
+    for profile in altprofilenames:
+        modlist = ModList(mo2+'profiles\\'+profile+'\\')
+        for mod in modlist.allEnabled():
+            allmods[mod]=1
+        altmodlists[profile] = modlist
 
     files = []
 
@@ -572,5 +574,15 @@ def wj2git(mo2,compiler_settings_fname,targetgithub):
     if dbg.DBG:
         with open(targetgithub+'master.json', 'rt',encoding="utf-8") as rfile:
             dummy = json.load(rfile)
-            
-    return compiler_settings
+ 
+    # writing profiles
+    targetfdir = targetgithub + targetdir + 'profiles\\'+masterprofilename+'\\'
+    makeDirsForFile(targetfdir+'modlist.txt')
+    mastermodlist.write(targetfdir)
+    shutil.copyfile(mo2+'profiles\\'+masterprofilename+'\\loadorder.txt',targetfdir+'loadorder.txt')
+    for profile in altmodlists:
+        fname = mo2+'profiles\\'+profile+'\\modlist.txt'
+        targetfdir = targetgithub + targetdir + 'profiles\\'+profile
+        makeDirsForFile(targetfdir+'\\modlist.txt')
+ 
+    return compiler_settings,mastermodlist
