@@ -1,7 +1,7 @@
 # wj2git
 A set of scripts to enable github-centered collaboration on Wabbajack modlists
 
-## This project is WIP! - NOT redady to be used yet. Below are PLANNED features
+## This project is WIP! - NOT ready to be used yet. Below are PLANNED features
 
 ## Philosophy
 wj2git is a companion to Wabbajack, enabling github-centered collaboration around a Wabbajack project. In plain English - **now several people can work on a Wabbajack project.** And that's without risks of overwriting each other work, with change tracking, and so on - in short, using all the bells and whistles provided by git and github ❗😀
