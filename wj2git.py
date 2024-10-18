@@ -17,6 +17,9 @@ def addToDictOfLists(dict,key,val):
     else:
         dict[key].append(val)          
 
+def makeDirsForFile(fname):
+    os.makedirs(os.path.split(fname)[0],exist_ok=True)
+
 def folderSize(rootpath):
     total = 0
     for dirpath, dirnames, filenames in os.walk(rootpath):
@@ -449,10 +452,18 @@ def wj2git(mo2,compiler_settings_fname,targetgithub):
     #print(contents)
     #parseContents(0,contents,False)
     #dbg.dbgWait()
+    
+    targetdir = 'MO2\\'
 
-    with openModTxtFile(compiler_settings_fname) as rfile:
+    with openModTxtFile(mo2+compiler_settings_fname) as rfile:
         compiler_settings = json.load(rfile)
-        
+    
+    # writing beautified compiler settings
+    target_settings = targetdir + compiler_settings_fname
+    makeDirsForFile(target_settings)
+    with openModTxtFileW(target_settings) as wfile:
+        json.dump(compiler_settings, wfile, sort_keys=True, indent=4)
+    
     profilename=compiler_settings['Profile']
     additionalprofilenames=compiler_settings['AdditionalProfiles']
     allprofilenames=additionalprofilenames
@@ -530,10 +541,10 @@ def wj2git(mo2,compiler_settings_fname,targetgithub):
                     mod = m.group(1)
                     if mod.find('\\') < 0:
                         # print(mod)
-                        targetpath0 = 'MO2\\' + fpath
+                        targetpath0 = targetdir + fpath
                         targetpath = targetgithub + targetpath0
                         # print(realpath)
-                        os.makedirs(os.path.split(targetpath)[0],exist_ok=True)
+                        makeDirsForFile(targetpath)
                         srcpath = mo2 + fpath
                         shutil.copyfile(srcpath,targetpath)
                         processed = True
@@ -561,3 +572,5 @@ def wj2git(mo2,compiler_settings_fname,targetgithub):
     if dbg.DBG:
         with open(targetgithub+'master.json', 'rt',encoding="utf-8") as rfile:
             dummy = json.load(rfile)
+            
+    return compiler_settings
