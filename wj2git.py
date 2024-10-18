@@ -152,7 +152,6 @@ def wj2git(config):
     print("Processing profiles: "+masterprofilename+","+str(altprofilenames))
 
     archives = wjdb.loadHC()
-    archiveEntries = wjdb.loadVFS() 
 
     home_dir = os.path.expanduser("~")
     chc = wjdb.openHashCache(home_dir)
@@ -189,6 +188,8 @@ def wj2git(config):
         if manualurl:
             addToDictOfLists(todl,manualurl,prompt)
 
+    archiveEntries = wjdb.loadVFS(allinstallfiles)
+    
     files = []
     nn = 0
     for modname in allmods:

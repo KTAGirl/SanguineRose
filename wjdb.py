@@ -107,7 +107,7 @@ def aEntries(paths,hf,root_archive_hash):
             #dbg.dbgWait()
     return aes
 
-def loadVFS():
+def loadVFS(allinstallfiles):
     home_dir = os.path.expanduser("~")
     con = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalVFSCache5.sqlite')
     cur = con.cursor()
@@ -125,7 +125,8 @@ def loadVFS():
         else:
             aes = aEntries([],hf,hf.hash)
             for ae in aes:
-                archiveEntries[ae.file_hash]=ae
+                if archiveEntries.get(ae.file_hash) is None or allinstallfiles.get(ae.archive_hash):
+                    archiveEntries[ae.file_hash]=ae
             #for child in hf.children:
             #    if len(child.children)>0:
             #        print("TODO: nested children: path="+child.path)
