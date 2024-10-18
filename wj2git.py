@@ -459,7 +459,7 @@ def wj2git(mo2,compiler_settings_fname,targetgithub):
         compiler_settings = json.load(rfile)
     
     # writing beautified compiler settings
-    target_settings = targetdir + compiler_settings_fname
+    target_settings = targetgithub + targetdir + compiler_settings_fname
     makeDirsForFile(target_settings)
     with openModTxtFileW(target_settings) as wfile:
         json.dump(compiler_settings, wfile, sort_keys=True, indent=4)
