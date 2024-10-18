@@ -1,5 +1,3 @@
-# momodlist stands for 'MO modlist'
-
 def openModTxtFile(fname):
     return open(fname,'rt',encoding='cp1252',errors='replace')
 
