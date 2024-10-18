@@ -16,6 +16,12 @@ COMPILER_SETTINGS='..\\..\\MO2\\Kick Their Ass.compiler_settings'
 # PROFILE='KTA-FULL'
 TARGETGITHUB='..\\KTA\\'
 
+def addToDictOfLists(dict,key,val):
+    if key not in dict:
+        dict[key]=[val]
+    else:
+        dict[key].append(val)          
+
 def isEslFlagged(filename):
     with open(filename, 'rb') as f:
         buf = f.read(10)
@@ -265,7 +271,7 @@ class ModList:
             return modname[:len(modname)-len('_separator')]
         return None
         
-def installFileAndModid(mod,mo2):
+def installfileAndModid(mod,mo2):
     modmetaname = mo2+'mods/' + mod + '/meta.ini'
     # print(modmetaname)
     try:
@@ -300,11 +306,11 @@ def installFileAndModid(mod,mo2):
 
     modids = list(filter(lambda s: re.search('^modid *= *',s),modmetalines))
     assert(len(modids)<=1)
-    modid = 0
+    modid = None
     if(len(modids)==1):
         m = re.search('^modid *= *(.*)',modids[0])
         if m:
-            modid = m.group(1)
+            modid = int(m.group(1))
     # print(installfile)
     return installfile,modid
 
@@ -352,6 +358,31 @@ def allEsxs(mod,mo2):
     esxs = esxs + glob.glob(mo2+'mods/' + mod + '/*.esm')
     return esxs
     
+def manualUrlAndPrompt(installfile,mo2):
+    flag, manualurl, prompt = howToDownload(installfile,mo2)
+    match flag:
+        case HowToDownloadReturn.NoMeta:
+            print("WARNING: no .meta file for "+installfile)
+            return None,None
+        case HowToDownloadReturn.ManualOk:
+            return manualurl,prompt
+        case HowToDownloadReturn.NexusOk:
+            return None,None
+        case HowToDownloadReturn.NonNexusNonManual:
+            print("WARNING: neither manualURL no Nexus url in "+installfile+".meta")
+            return None,None    
+
+def installfileModidManualUrlAndPrompt(mod,mo2):
+    installfile,modid = installfileAndModid(mod,mo2)
+
+    manualurl = None
+    if not installfile:
+        print('WARNING: no installedFiles= found for mod '+mod)
+        return None,None,None,None
+    else:
+        manualurl,prompt = manualUrlAndPrompt(installfile,mo2)
+        return installfile,modid,manualurl,prompt
+
 #############
 
 def wj2git():
