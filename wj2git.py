@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import sys
 import gzip
 import traceback
 import json
@@ -10,6 +11,10 @@ from enum import Enum
 
 import dbg
 import binaryreader
+
+if not sys.version_info >= (3, 10):
+    print('Sorry, wj2git needs at least Python 3.10')
+    sys.exit(42)
 
 def addToDictOfLists(dict,key,val):
     if key not in dict:
