@@ -138,6 +138,7 @@ def loadVFS(allinstallfiles,dbgfile=None):
             #    if archiveEntries.get(child.hash)!=None:
             #        print("TODO: multiple entries for a file")
             #    archiveEntries[child.hash] = ArchiveEntry(hf.hash,child.path,child.size,child.hash)
+    con.close()
     print('loadVFS: nn='+str(nn)+' nx='+str(nx))
     return archiveEntries
 
@@ -156,14 +157,21 @@ class Archive:
             return False
         return True
 
-def loadHC():
+def loadHC(mo2):
+    mo2 = mo2.lower()
+    
     home_dir = os.path.expanduser("~")
     con = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite')
     cur = con.cursor()
     archives = {}
     nn = 0
+    nfiltered = 0
+    ndup = 0
     for row in cur.execute('SELECT Path,LastModified,Hash FROM HashCache'):
         nn += 1
+        if not row[0].startswith(mo2):
+            nfiltered += 1
+            continue
         hash = normalizeHash(row[2])
         
         olda = archives.get(hash)
@@ -171,10 +179,12 @@ def loadHC():
         if olda!=None and not olda.eq(newa):
             # print("TODO: multiple archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(newa.__dict__))
             # wait = input("Press Enter to continue.")
+            ndup += 1
             pass
         else:
             archives[hash] = newa
-    print('loadHC: nn='+str(nn))
+    con.close()
+    print('loadHC: nn='+str(nn)+' filtered out:'+str(nfiltered)+' duplicate hashes:'+str(ndup)+' size='+str(len(archives)))
     return archives
     
 def findFile(chc,archives,archiveEntries,fpath):

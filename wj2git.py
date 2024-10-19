@@ -122,6 +122,11 @@ def _copyRestOfProfile(mo2,fulltargetdir,profilename):
     srcfdir = mo2+'profiles\\'+profilename+'\\'
     targetfdir = fulltargetdir + 'profiles\\'+profilename+'\\'
     shutil.copyfile(srcfdir+'loadorder.txt',targetfdir+'loadorder.txt')
+    
+def _normalizePath(path):
+    path = os.path.abspath(path)
+    assert(path.find('/')<0)
+    return path
 
 #############
 
@@ -151,7 +156,7 @@ def wj2git(config):
     altprofilenames=compiler_settings['AdditionalProfiles']
     print("Processing profiles: "+masterprofilename+","+str(altprofilenames))
 
-    archives = wjdb.loadHC()
+    archives = wjdb.loadHC(_normalizePath(mo2))
 
     home_dir = os.path.expanduser("~")
     chc = wjdb.openHashCache(home_dir)
@@ -176,8 +181,7 @@ def wj2git(config):
         if installfile:
             # print('if='+installfile)
             fpath = config['downloads']+installfile
-            fpath = os.path.abspath(fpath)
-            fpath = fpath.replace('/','\\')
+            fpath = _normalizePath(fpath)
             #print('#?'+fpath)
             #dbg.dbgWait()
             archive = wjdb.findArchive(chc,archives,fpath)
@@ -205,13 +209,13 @@ def wj2git(config):
                 for filename in filenames:
                     # print("file="+filename)
                     nn += 1
-                    fpath = os.path.abspath(os.path.join(root,filename))
+                    fpath = _normalizePath(os.path.join(root,filename))
                     files.append(fpath)
 
     files.sort()
 
     nwarn = 0
-    mo2abs = os.path.abspath(mo2)+'\\'
+    mo2abs = _normalizePath(mo2)+'\\'
     ignore=compiler_settings['Ignore']
 
     # pre-cleanup
