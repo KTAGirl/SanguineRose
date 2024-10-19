@@ -139,9 +139,9 @@ def _normalizePath(path):
 def elapsedTime():
     return round(time.time()-wj2gitLoadedAt,2)
 
-def wjTimeToPythonTimestamp(wjftime):
-    microsecs = (wjftime - 116444736000000000) / 10**7
-    return microsecs 
+def wjTimestampToPythonTimestamp(wjftime):
+    usecs = (wjftime - 116444736000000000) / 10**7
+    return usecs 
 
 def getFileTimestamp(fname):
     path = pathlib.Path('..\\..\\mo2\\downloads\\1419098688_DeviousFollowers-ContinuedSEv2_14.5.7z')
@@ -154,7 +154,7 @@ def compareTimestamps(a,b):
 
 #last_modified = getFileTimestamp('..\\..\\mo2\\downloads\\1419098688_DeviousFollowers-ContinuedSEv2_14.5.7z')
 #print(last_modified)
-#wjts = wjTimeToPythonTimestamp(133701668551156765)
+#wjts = wjTimestampToPythonTimestamp(133701668551156765)
 #print(wjts)
 #print(compareTimestamps(last_modified,wjts))
 #
