@@ -144,7 +144,7 @@ def wjTimestampToPythonTimestamp(wjftime):
     return usecs 
 
 def getFileTimestamp(fname):
-    path = pathlib.Path('..\\..\\mo2\\downloads\\1419098688_DeviousFollowers-ContinuedSEv2_14.5.7z')
+    path = pathlib.Path(fname)
     return path.stat().st_mtime
 
 def compareTimestamps(a,b):
