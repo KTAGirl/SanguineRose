@@ -11,9 +11,10 @@ Python v3.10+ installed
   - Can be downloaded from [Python Releases for Windows](https://www.python.org/downloads/windows/). Latest greatest will do. And no, there won't be a Python2 version.  
 
 Installed modules:
+- xxhash: use `py -m pip install xxhash` to install
 - py7zr: use `py -m pip install py7zr` to install
 - bethesda-structs: use `py -m pip install bethesda-structs` to install
- 
+
 ## Workflow using github
 We assume that the Wabbajack github project is already setup to use wj2git. Let's name it COLLABWJ. One example of such a project is [KTA](https://github.com/KTAGirl/KTA). Now, to collaborate, you need to:
 - have Python installed
