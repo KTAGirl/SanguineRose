@@ -7,13 +7,20 @@ import shutil
 import glob
 import time
 
-import dbg
 import wjdb
+from dbg import dbgWait
+from dbg import DBG
 from modlist import openModTxtFile
 from modlist import openModTxtFileW
 from modlist import ModList
 from installfile import installfileModidManualUrlAndPrompt
 from installfile import manualUrlAndPrompt
+from archives import extract
+
+#extract('..\\..\\mo2\\downloads\\1419098688_DeviousFollowers-ContinuedSEv2_14.5.7z',['Devious Followers - Continued SE v 2.14.5\\meshes\\armor\\shitty\\Blade\\9no1_0.nif'],'')
+# e = extract('..\\..\\mo2\\downloads\\SexLab Strapon 3BA SOS Bodyslide.zip',['data\\CalienteTools\\BodySlide\\ShapeData\\strapon 3BA SOS\\strapon 3BA SOS.nif'],'')
+# print(e)
+# dbgWait()
 
 if not sys.version_info >= (3, 10):
     print('Sorry, wj2git needs at least Python 3.10')
@@ -313,7 +320,7 @@ def wj2git(config):
     print("nn="+str(nn)+" nwarn="+str(nwarn))
 
     #validating json
-    if dbg.DBG:
+    if DBG:
         with open(targetgithub+'master.json', 'rt',encoding="utf-8") as rfile:
             dummy = json.load(rfile)
 
