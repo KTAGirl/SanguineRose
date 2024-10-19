@@ -8,11 +8,11 @@ import glob
 
 import dbg
 import wjdb
-from modlistpy import openModTxtFile
-from modlistpy import openModTxtFileW
-from modlistpy import ModList
-from installfilepy import installfileModidManualUrlAndPrompt
-from installfilepy import manualUrlAndPrompt
+from modlist import openModTxtFile
+from modlist import openModTxtFileW
+from modlist import ModList
+from installfile import installfileModidManualUrlAndPrompt
+from installfile import manualUrlAndPrompt
 
 if not sys.version_info >= (3, 10):
     print('Sorry, wj2git needs at least Python 3.10')

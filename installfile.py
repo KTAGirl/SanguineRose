@@ -2,7 +2,7 @@ from enum import Enum
 import os
 import re
 
-from modlistpy import openModTxtFile
+from modlist import openModTxtFile
 
 def installfileAndModid(mod,mo2):
     modmetaname = mo2+'mods/' + mod + '/meta.ini'
