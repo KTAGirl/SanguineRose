@@ -1,6 +1,7 @@
 import os
 import py7zr
 import zipfile
+from bethesda_structs.archive import BSAArchive
 
 def extract(archive,list_of_files,targetpath):
     # list_of_files is a list of paths in the same format as in archiveEntries!
@@ -46,5 +47,20 @@ def extract(archive,list_of_files,targetpath):
                 out.append(None)
         print('Extraction done')
         z.close()
+        return out
+    elif ext == '.bsa':
+        bsa = BSAArchive.parse_file(archive)
+        # names = bsa.container.file_names
+        # print(names)
+        print('Extracting from '+archive+'...')
+        bsa.extract(targetpath)
+        out = []
+        for f in list_of_files:
+            if os.path.isfile(targetpath+f):
+                out.append(targetpath+f)
+            else:
+                print('WARNING: '+f+' NOT EXTRACTED from '+archive)
+                out.append(None)
+        print('Extraction done')
         return out
        

@@ -17,8 +17,9 @@ from installfile import installfileModidManualUrlAndPrompt
 from installfile import manualUrlAndPrompt
 from archives import extract
 
-#extract('..\\..\\mo2\\downloads\\1419098688_DeviousFollowers-ContinuedSEv2_14.5.7z',['Devious Followers - Continued SE v 2.14.5\\meshes\\armor\\shitty\\Blade\\9no1_0.nif'],'')
+# e = extract('..\\..\\mo2\\downloads\\1419098688_DeviousFollowers-ContinuedSEv2_14.5.7z',['Devious Followers - Continued SE v 2.14.5\\meshes\\armor\\shitty\\Blade\\9no1_0.nif'],'')
 # e = extract('..\\..\\mo2\\downloads\\SexLab Strapon 3BA SOS Bodyslide.zip',['data\\CalienteTools\\BodySlide\\ShapeData\\strapon 3BA SOS\\strapon 3BA SOS.nif'],'')
+# e = extract('..\\..\\mo2\\mods\\Suspicious City Guards\\suspiciouscityguards.bsa',['scripts\\source\\sf_scgalarmscene_0100690c.psc'],'.\\')
 # print(e)
 # dbgWait()
 
