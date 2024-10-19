@@ -40,6 +40,8 @@ def installfileAndModid(mod,mo2):
         m = re.search('^modid *= *(.*)',modids[0])
         if m:
             modid = int(m.group(1))
+            if modid==-1:
+                modid = None
     # print(installfile)
     return installfile,modid
 
