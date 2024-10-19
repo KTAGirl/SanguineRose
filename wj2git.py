@@ -6,6 +6,7 @@ import re
 import shutil
 import glob
 import time
+import pathlib
 
 import wjdb
 from dbg import dbgWait
@@ -27,7 +28,7 @@ if not sys.version_info >= (3, 10):
     print('Sorry, wj2git needs at least Python 3.10')
     sys.exit(42)
     
-w2gitLoadedAt = time.time()
+wj2gitLoadedAt = time.time()
 
 def addToDictOfLists(dict,key,val):
     if key not in dict:
@@ -136,7 +137,28 @@ def _normalizePath(path):
     return path
 
 def elapsedTime():
-    return round(time.time()-w2gitLoadedAt,2)
+    return round(time.time()-wj2gitLoadedAt,2)
+
+def wjTimeToPythonTimestamp(wjftime):
+    microsecs = (wjftime - 116444736000000000) / 10**7
+    return microsecs 
+
+def getFileTimestamp(fname):
+    path = pathlib.Path('..\\..\\mo2\\downloads\\1419098688_DeviousFollowers-ContinuedSEv2_14.5.7z')
+    return path.stat().st_mtime
+
+def compareTimestamps(a,b):
+    if abs(a-b) < 0.001: # TBD - can we reduce it - all the way to zero?
+        return 0
+    return -1 if a < b else 1
+
+#last_modified = getFileTimestamp('..\\..\\mo2\\downloads\\1419098688_DeviousFollowers-ContinuedSEv2_14.5.7z')
+#print(last_modified)
+#wjts = wjTimeToPythonTimestamp(133701668551156765)
+#print(wjts)
+#print(compareTimestamps(last_modified,wjts))
+#
+#dbgWait()
 
 #############
 
