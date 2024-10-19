@@ -7,6 +7,7 @@ import shutil
 import glob
 import time
 import pathlib
+import xxhash
 
 import wjdb
 from dbg import dbgWait
@@ -159,6 +160,26 @@ def compareTimestamps(a,b):
 #print(compareTimestamps(last_modified,wjts))
 #
 #dbgWait()
+
+def wjHash(fname):
+    h = xxhash.xxh64()
+    blocksize = 1048576
+    with open(fname,'rb') as f:
+        while True:
+            bb = f.read(blocksize)
+            h.update(bb)
+            assert(len(bb)<=blocksize)
+            if len(bb) != blocksize:
+                return h.intdigest()
+
+# tohash = '..\\..\\mo2\\mods\\Suspicious City Guards\\suspiciouscityguards.bsa'
+# with open(tohash, 'rb') as rfile:
+#    data = rfile.read() 
+# h = xxhash.xxh64_intdigest(data)
+# print(h)
+# print(wjHash(tohash))
+#
+# dbgWait()
 
 #############
 
