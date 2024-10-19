@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 import glob
+import time
 
 import dbg
 import wjdb
@@ -17,6 +18,8 @@ from installfile import manualUrlAndPrompt
 if not sys.version_info >= (3, 10):
     print('Sorry, wj2git needs at least Python 3.10')
     sys.exit(42)
+    
+w2gitLoadedAt = time.time()
 
 def addToDictOfLists(dict,key,val):
     if key not in dict:
@@ -48,16 +51,12 @@ def loadFromCompilerSettings(config,stats,compiler_settings):
 
 def escapeJSON(s):
     return json.dumps(s)
-
-
         
 def allEsxs(mod,mo2):
     esxs = glob.glob(mo2+'mods/' + mod + '/*.esl')
     esxs = esxs + glob.glob(mo2+'mods/' + mod + '/*.esp')
     esxs = esxs + glob.glob(mo2+'mods/' + mod + '/*.esm')
     return esxs
-    
-
 
 def writeManualDownloads(md,modlist,todl0,config):
     mo2 = config['mo2']
@@ -127,6 +126,9 @@ def _normalizePath(path):
     path = os.path.abspath(path)
     assert(path.find('/')<0)
     return path
+
+def elapsedTime():
+    return round(time.time()-w2gitLoadedAt,2)
 
 #############
 
