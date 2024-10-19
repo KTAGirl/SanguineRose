@@ -20,7 +20,7 @@ class Img:
         self.fmt = br.ReadByte()
         self.phash = br.ReadBytes(40)
         
-    def dbg(self):
+    def dbgString(self):
         return '{ w='+str(self.w)+' h='+str(self.h)+' mip='+str(self.mip)+' fmt='+str(self.fmt)+' phash=['+str(len(self.phash))+']}'
 
  
@@ -43,17 +43,17 @@ class HashedFile:
         for i in range(0,n):
             self.children.append(HashedFile(br))
             
-    def dbg(self):
+    def dbgString(self):
         s = '{ path='+self.path+' hash='+str(self.hash)
         if self.img:
-            s += ' img=' + self.img.dbg()
+            s += ' img=' + self.img.dbgString()
         if len(self.children):
             s += ' children=['
             ci = 0
             for child in self.children:
                 if ci:
                     s += ','
-                s += child.dbg()
+                s += child.dbgString()
                 ci += 1
             s += ']'
         s += ' }'
@@ -107,7 +107,7 @@ def aEntries(paths,hf,root_archive_hash):
             #dbg.dbgWait()
     return aes
 
-def loadVFS(allinstallfiles):
+def loadVFS(allinstallfiles,dbgfile=None):
     home_dir = os.path.expanduser("~")
     con = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalVFSCache5.sqlite')
     cur = con.cursor()
@@ -122,7 +122,11 @@ def loadVFS(allinstallfiles):
         nn += 1
         if hf == None:
             nx += 1
+            if dbgfile:
+                dbgfile.write('WARNING: CANNOT PARSE'+str(contents)+' FOR hash='+str(hash)+'\n')
         else:
+            if dbgfile:
+                dbgfile.write(str(hf.hash)+':'+hf.dbgString()+'\n')
             aes = aEntries([],hf,hf.hash)
             for ae in aes:
                 if archiveEntries.get(ae.file_hash) is None or allinstallfiles.get(ae.archive_hash):
@@ -215,3 +219,14 @@ def findArchive(chc,archives,fpath):
         return None
     #print(archive.__dict__)
     return archive
+
+def dbgDumpArchives(fname,archives):
+    with open(fname, 'wt', encoding="utf-8") as f:
+        for hash in archives:
+            f.write(str(hash)+':'+str(archives[hash].__dict__)+'\n')
+
+def dbgDumpArchiveEntries(fname,archiveEntries):
+    with open(fname, 'wt', encoding="utf-8") as f:
+        for hash in archiveEntries:
+            f.write(str(hash)+':'+str(archiveEntries[hash].__dict__)+'\n')
+    

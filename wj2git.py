@@ -188,7 +188,14 @@ def wj2git(config):
         if manualurl:
             addToDictOfLists(todl,manualurl,prompt)
 
-    archiveEntries = wjdb.loadVFS(allinstallfiles)
+    dbgfolder = config.get('dbgdumpdb')
+    if dbgfolder:
+        with open(dbgfolder+'loadvfs.txt','wt',encoding='utf-8') as fw:
+            archiveEntries = wjdb.loadVFS(allinstallfiles,fw)
+        wjdb.dbgDumpArchiveEntries(dbgfolder+'archiveentries.txt',archiveEntries)
+        wjdb.dbgDumpArchives(dbgfolder+'archives.txt',archives)
+    else:
+        archiveEntries = wjdb.loadVFS(allinstallfiles)
     
     files = []
     nn = 0
