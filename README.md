@@ -6,6 +6,13 @@ A set of scripts to enable github-centered collaboration on Wabbajack modlists
 ## Philosophy
 wj2git is a companion to Wabbajack, enabling github-centered collaboration around a Wabbajack project. In plain English - **now several people can work on a Wabbajack project.** And that's without risks of overwriting each other work, with change tracking, and so on - in short, using all the bells and whistles provided by git and github ❗😀
 
+## Prerequisites
+Python v3.10+ installed
+  - Can be downloaded from [Python Releases for Windows](https://www.python.org/downloads/windows/). Latest greatest will do. And no, there won't be a Python2 version.  
+
+Installed modules:
+- py7zr: use `py -m pip install py7zr`
+
 ## Workflow using github
 We assume that the Wabbajack github project is already setup to use wj2git. Let's name it COLLABWJ. One example of such a project is [KTA](https://github.com/KTAGirl/KTA). Now, to collaborate, you need to:
 - have Python installed
