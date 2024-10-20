@@ -190,7 +190,7 @@ def _addByHash(archives,ar):
 def _addByPath(files,ar):
     # to get around lambda restrictions
     files[ar.archive_path] = ar
-
+    
 def wj2git(config):
     #contents=b''
     #print(contents)
@@ -218,12 +218,12 @@ def wj2git(config):
     print("Processing profiles: "+masterprofilename+","+str(altprofilenames))
 
     archives = {}
-    files = {}
+    filesbypath = {}
     wjdb.loadHC([ 
                     (_normalizePath(config['downloads']),lambda ar: archives.get(ar.archive_hash), lambda ar: _addByHash(archives,ar)),
-                    (_normalizePath(mo2),lambda ar: files.get(ar.archive_path), lambda ar: _addByPath(files,ar))
+                    (_normalizePath(mo2),lambda ar: filesbypath.get(ar.archive_path), lambda ar: _addByPath(filesbypath,ar))
                 ])
-    print(str(len(archives))+" archives, "+str(len(files))+" files")
+    print(str(len(archives))+" archives, "+str(len(filesbypath))+" files")
 
     home_dir = os.path.expanduser("~")
     chc = wjdb.openHashCache(home_dir)
@@ -337,7 +337,8 @@ def wj2git(config):
             
             #print('#+'+fpath0)
             #dbg.dbgWait()            
-            archiveEntry, archive = wjdb.findFile(chc,archives,archiveEntries,fpath0)
+            #archiveEntry, archive = wjdb.findFile(chc,archives,archiveEntries,fpath0)
+            archiveEntry, archive = wjdb.findFile(filesbypath,archives,archiveEntries,fpath0)
             if archiveEntry == None:
                 processed = False
                 m = re.search('^mods\\\\(.*)\\\\meta.ini$',fpath)

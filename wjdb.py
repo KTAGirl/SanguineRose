@@ -208,6 +208,7 @@ def loadHC(dirs):
     #print(']')
     # return out
     
+'''
 def findFile(chc,archives,archiveEntries,fpath):
     fpath=fpath.replace("'","''")
     chc.execute("SELECT Path,LastModified,Hash FROM HashCache WHERE Path='"+fpath.lower()+"'")
@@ -232,7 +233,28 @@ def findFile(chc,archives,archiveEntries,fpath):
         return None,None
     #print(archive.__dict__)
     return archiveEntry, archive
+'''
+def findFile(files,archives,archiveEntries,fpath):
+    ar = files.get(fpath.lower())
+    if ar == None:
+        print("WARNING: path="+fpath+" NOT FOUND")
+        return None,None
 
+    hash=normalizeHash(ar.archive_hash)
+    archiveEntry = archiveEntries.get(hash)
+    if archiveEntry == None:
+        print("WARNING: archiveEntry for path="+fpath+" with hash="+str(hash)+" NOT FOUND")
+        return None,None
+    #print(archiveEntry.__dict__)
+
+    ahash = archiveEntry.archive_hash
+    archive = archives.get(ahash)
+    if archive == None:
+        print("WARNING: archive with hash="+str(ahash)+" NOT FOUND")
+        return None,None
+    #print(archive.__dict__)
+    return archiveEntry, archive
+    
 def findArchive(chc,archives,fpath):
     fpath=fpath.replace("'","''")
     chc.execute("SELECT Path,LastModified,Hash FROM HashCache WHERE Path='"+fpath.lower()+"'")
