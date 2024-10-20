@@ -7,13 +7,17 @@ A set of scripts to enable github-centered collaboration on Wabbajack modlists
 wj2git is a companion to Wabbajack, enabling github-centered collaboration around a Wabbajack project. In plain English - **now several people can work on a Wabbajack project.** And that's without risks of overwriting each other work, with change tracking, and so on - in short, using all the bells and whistles provided by git and github ❗😀
 
 ## Prerequisites
-Python v3.10+ installed
-  - Can be downloaded from [Python Releases for Windows](https://www.python.org/downloads/windows/). Latest greatest will do. And no, there won't be a Python2 version.  
+### Accounts
+**[NexusMods](https://www.nexusmods.com/)** (preferably premium)
 
-Installed modules:
+### Installed
+**MO2** ([MO2 on Nexus](https://www.nexusmods.com/skyrimspecialedition/mods/6194?tab=files))
+
+**Python v3.10+**. Can be downloaded from [Python Releases for Windows](https://www.python.org/downloads/windows/). Latest greatest will do. And no, there won't be a Python2 version. Make sure to put `py` into PATH too. And wj2git also needs the following modules:
+- xxhash: use `py -m pip install xxhash` to install
 - py7zr: use `py -m pip install py7zr` to install
 - bethesda-structs: use `py -m pip install bethesda-structs` to install
- 
+
 ## Workflow using github
 We assume that the Wabbajack github project is already setup to use wj2git. Let's name it COLLABWJ. One example of such a project is [KTA](https://github.com/KTAGirl/KTA). Now, to collaborate, you need to:
 - have Python installed
