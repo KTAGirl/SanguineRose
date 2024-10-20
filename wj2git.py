@@ -9,7 +9,8 @@ import time
 import pathlib
 import xxhash
 
-import wjdb
+# import wjdb
+import cache
 from dbg import dbgWait
 from dbg import DBG
 from modlist import openModTxtFile
@@ -132,11 +133,6 @@ def _copyRestOfProfile(mo2,fulltargetdir,profilename):
     targetfdir = fulltargetdir + 'profiles\\'+profilename+'\\'
     shutil.copyfile(srcfdir+'loadorder.txt',targetfdir+'loadorder.txt')
     
-def _normalizePath(path):
-    path = os.path.abspath(path)
-    assert(path.find('/')<0)
-    return path
-
 def elapsedTime():
     return round(time.time()-wj2gitLoadedAt,2)
 
@@ -182,15 +178,6 @@ def wjHash(fname):
 # dbgWait()
 
 #############
-
-def _addArchive(archives,archivesbypath,ar):
-    # to get around lambda restrictions
-    archives[ar.archive_hash] = ar
-    archivesbypath[ar.archive_path] = ar
-    
-def _addFile(files,ar):
-    # to get around lambda restrictions
-    files[ar.archive_path] = ar
     
 def wj2git(config):
     #contents=b''
@@ -201,6 +188,8 @@ def wj2git(config):
     compiler_settings_fname=config['compiler_settings']
     targetgithub=config['targetgithub']
     ownmods=config['ownmods']
+
+    filecache = cache.Cache(config)
     
     targetdir = 'MO2\\'
     stats = {}
@@ -217,19 +206,6 @@ def wj2git(config):
     masterprofilename=compiler_settings['Profile']
     altprofilenames=compiler_settings['AdditionalProfiles']
     print("Processing profiles: "+masterprofilename+","+str(altprofilenames))
-
-    archives = {}
-    archivesbypath = {}
-    filesbypath = {}
-    wjdb.loadHC([ 
-                    (_normalizePath(config['downloads']),lambda ar: archives.get(ar.archive_hash), lambda ar: _addArchive(archives,archivesbypath,ar)),
-                    (_normalizePath(mo2),lambda ar: filesbypath.get(ar.archive_path), lambda ar: _addFile(filesbypath,ar))
-                ])
-    assert(len(archives)==len(archivesbypath)) 
-    print(str(len(archives))+" archives, "+str(len(filesbypath))+" files")
-
-    home_dir = os.path.expanduser("~")
-    # chc = wjdb.openHashCache(home_dir)
 
     allmods = {}
     mastermodlist = ModList(mo2+'profiles\\'+masterprofilename+'\\')
@@ -251,11 +227,10 @@ def wj2git(config):
         if installfile:
             # print('if='+installfile)
             fpath = config['downloads']+installfile
-            fpath = _normalizePath(fpath)
             #print('#?'+fpath)
             #dbg.dbgWait()
             # archive = wjdb.findArchive(chc,archives,fpath)
-            archive = wjdb.findArchive(archivesbypath,archives,fpath)
+            archive = filecache.findArchive(fpath)
             if archive:
                 allinstallfiles[archive.archive_hash] = installfile
             else:
@@ -266,11 +241,10 @@ def wj2git(config):
     dbgfolder = config.get('dbgdumpdb')
     if dbgfolder:
         with open(dbgfolder+'loadvfs.txt','wt',encoding='utf-8') as fw:
-            archiveEntries = wjdb.loadVFS(allinstallfiles,fw)
-        wjdb.dbgDumpArchiveEntries(dbgfolder+'archiveentries.txt',archiveEntries)
-        wjdb.dbgDumpArchives(dbgfolder+'archives.txt',archives)
+            filecache.loadVFS(allinstallfiles,fw)
+        filecache.dbgDump(dbgfolder)
     else:
-        archiveEntries = wjdb.loadVFS(allinstallfiles)
+        filecache.loadVFS(allinstallfiles)
     
     files = []
     nn = 0
@@ -280,13 +254,13 @@ def wj2git(config):
                 for filename in filenames:
                     # print("file="+filename)
                     nn += 1
-                    fpath = _normalizePath(os.path.join(root,filename))
+                    fpath = cache.normalizePath(os.path.join(root,filename))
                     files.append(fpath)
 
     files.sort()
 
     nwarn = 0
-    mo2abs = _normalizePath(mo2)+'\\'
+    mo2abs = cache.normalizePath(mo2)+'\\'
     ignore=compiler_settings['Ignore']
 
     # pre-cleanup
@@ -339,10 +313,8 @@ def wj2git(config):
                 # dbg.dbgWait()
                 continue
             
-            #print('#+'+fpath0)
-            #dbg.dbgWait()            
-            #archiveEntry, archive = wjdb.findFile(chc,archives,archiveEntries,fpath0)
-            archiveEntry, archive = wjdb.findFile(filesbypath,archives,archiveEntries,fpath0)
+            # archiveEntry, archive = wjdb.findFile(filesbypath,archives,archiveEntries,fpath0)
+            archiveEntry, archive = filecache.findFile(fpath0)
             if archiveEntry == None:
                 processed = False
                 m = re.search('^mods\\\\(.*)\\\\meta.ini$',fpath)
