@@ -6,10 +6,12 @@ import traceback
 import binaryreader
 import dbg
 
+'''
 def openHashCache(home_dir):
     hc = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite')
     #vfsc = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalVFSCache5.sqlite')
     return hc.cursor()
+'''
     
 class Img:
     def __init__(self,br):
@@ -255,6 +257,7 @@ def findFile(files,archives,archiveEntries,fpath):
     #print(archive.__dict__)
     return archiveEntry, archive
     
+'''
 def findArchive(chc,archives,fpath):
     fpath=fpath.replace("'","''")
     chc.execute("SELECT Path,LastModified,Hash FROM HashCache WHERE Path='"+fpath.lower()+"'")
@@ -266,6 +269,25 @@ def findArchive(chc,archives,fpath):
         return None
 
     hash=normalizeHash(row[2])
+    archive = archives.get(hash)
+    if archive == None:
+        print("WARNING: archive with path="+fpath+" NOT FOUND")
+        return None
+    #print(archive.__dict__)
+    return archive
+'''
+
+def findArchive(archivesbypath,archives,fpath):
+    #fpath=fpath.replace("'","''")
+    #chc.execute("SELECT Path,LastModified,Hash FROM HashCache WHERE Path='"+fpath.lower()+"'")
+    #row = chc.fetchone()
+    # print(row)
+    ar = archivesbypath.get(fpath.lower())
+    if ar == None:
+        print("WARNING: path="+fpath+" NOT FOUND")
+        return None
+
+    hash=normalizeHash(ar.archive_hash)
     archive = archives.get(hash)
     if archive == None:
         print("WARNING: archive with path="+fpath+" NOT FOUND")
