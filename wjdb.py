@@ -174,7 +174,6 @@ def loadHC(dirs):
     home_dir = os.path.expanduser("~")
     con = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite')
     cur = con.cursor()
-    archives = {}
     nn = 0
     nfiltered = 0
     ndup = 0
@@ -193,7 +192,7 @@ def loadHC(dirs):
             continue
         hash = normalizeHash(row[2])
         
-        olda = archives.get(hash)
+        olda = out[idx].get(hash)
         newa = Archive(hash,row[1],row[0])
         if olda!=None and not olda.eq(newa):
             # print("TODO: multiple archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(newa.__dict__))
