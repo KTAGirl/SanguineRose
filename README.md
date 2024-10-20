@@ -11,7 +11,7 @@ wj2git is a companion to Wabbajack, enabling github-centered collaboration aroun
 **[NexusMods](https://www.nexusmods.com/)** (preferably premium)
 
 ### Installed
-**MO2** ([MO2 on Nexus](https://www.nexusmods.com/skyrimspecialedition/mods/6194?tab=files)]
+**MO2** ([MO2 on Nexus](https://www.nexusmods.com/skyrimspecialedition/mods/6194?tab=files))
 
 **Python v3.10+**. Can be downloaded from [Python Releases for Windows](https://www.python.org/downloads/windows/). Latest greatest will do. And no, there won't be a Python2 version. Make sure to put `py` into PATH too. And wj2git also needs the following modules:
 - xxhash: use `py -m pip install xxhash` to install
