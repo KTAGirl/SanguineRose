@@ -209,7 +209,7 @@ def wj2git(config):
     altprofilenames=compiler_settings['AdditionalProfiles']
     print("Processing profiles: "+masterprofilename+","+str(altprofilenames))
 
-    archives = wjdb.loadHC(_normalizePath(mo2))
+    archives,files = wjdb.loadHC([_normalizePath(config['downloads']),_normalizePath(mo2)])
 
     home_dir = os.path.expanduser("~")
     chc = wjdb.openHashCache(home_dir)

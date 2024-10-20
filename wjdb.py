@@ -157,8 +157,19 @@ class Archive:
             return False
         return True
 
-def loadHC(mo2):
-    mo2 = mo2.lower()
+def loadHC(dirs):
+    lodirs = []
+    for dir in dirs:
+        dirlo = dir.lower()
+        lodirs.append(dirlo)
+        for d2 in lodirs:
+            # print(d2)
+            # print(dirlo)
+            if d2 == dirlo:
+                break
+            assert(not dirlo.startswith(d2)) # if folders are overlapping, smaller one MUST go first
+            if d2.startswith(dirlo):
+                print('NOTICE: loadHC(): overlapping dirs, '+d2+' will be excluded from '+dirlo)
     
     home_dir = os.path.expanduser("~")
     con = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite')
@@ -167,9 +178,17 @@ def loadHC(mo2):
     nn = 0
     nfiltered = 0
     ndup = 0
+    out = []
+    for dir in dirs:
+        out.append({})
     for row in cur.execute('SELECT Path,LastModified,Hash FROM HashCache'):
         nn += 1
-        if not row[0].startswith(mo2):
+        idx = -1
+        for i in range(0,len(lodirs)):
+            if row[0].startswith(lodirs[i]):
+                idx = i
+                break
+        if idx < 0:
             nfiltered += 1
             continue
         hash = normalizeHash(row[2])
@@ -182,10 +201,13 @@ def loadHC(mo2):
             ndup += 1
             pass
         else:
-            archives[hash] = newa
+            out[idx][hash] = newa
     con.close()
-    print('loadHC: nn='+str(nn)+' filtered out:'+str(nfiltered)+' duplicate hashes:'+str(ndup)+' size='+str(len(archives)))
-    return archives
+    print('loadHC: nn='+str(nn)+' filtered out:'+str(nfiltered)+' duplicate hashes:'+str(ndup)+' sizes=[')
+    for o in out:
+        print(len(o))
+    print(']')
+    return out
     
 def findFile(chc,archives,archiveEntries,fpath):
     fpath=fpath.replace("'","''")
@@ -225,7 +247,7 @@ def findArchive(chc,archives,fpath):
     hash=normalizeHash(row[2])
     archive = archives.get(hash)
     if archive == None:
-        print("WARNING: archive with hash="+str(ahash)+" NOT FOUND")
+        print("WARNING: archive with path="+fpath+" NOT FOUND")
         return None
     #print(archive.__dict__)
     return archive
