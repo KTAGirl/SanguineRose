@@ -24,7 +24,7 @@ wj2git is a companion to Wabbajack, enabling github-centered collaboration aroun
 
 *Skyrim* (PRISTINE install folder is required for all WJ installs)
 
-*Wabbajack* from [wabbajack.org](https://www.wabbajack.org/).
+*Wabbajack* from [wabbajack.org](https://www.wabbajack.org/). *Make sure to go to WJ Settings and to login to Nexus!*
 
 *You don't really need MO2, or most of the tools such as LOOT or xEdit - with a properly configured COLLABWJ project they will be installed into \Modding\MO2\ from Wabbajack image*
 
