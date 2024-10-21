@@ -13,7 +13,7 @@ wj2git is a companion to Wabbajack, enabling github-centered collaboration aroun
 ### Installed
 **MO2** ([MO2 on Nexus](https://www.nexusmods.com/skyrimspecialedition/mods/6194?tab=files))
 
-**MSVC** Can be downloaded from (Microsoft C++ Build Tools)[https://visualstudio.microsoft.com/visual-cpp-build-tools/]. Necessary to install py7zr and bethesda-structs Python modules.
+**MSVC** Can be downloaded from (Microsoft C++ Build Tools)[https://visualstudio.microsoft.com/visual-cpp-build-tools/]. Necessary to install `py7zr` and `bethesda-structs` Python modules.
 
 **Python v3.10+**. Can be downloaded from [Python Releases for Windows](https://www.python.org/downloads/windows/). Latest greatest will do. And no, there won't be a Python2 version. Make sure to put `py` into PATH too. And wj2git also needs the following modules:
 - xxhash: use `py -m pip install xxhash` to install
