@@ -24,7 +24,7 @@ wj2git is a companion to Wabbajack, enabling github-centered collaboration aroun
 *Skyrim*
 *Wabbajack* from [wabbajack.org](https://www.wabbajack.org/).
 
-*MO2* ([MO2 on Nexus](https://www.nexusmods.com/skyrimspecialedition/mods/6194?tab=files)) - bread and butter of any serious modding, hard requirement for Wabbajack.   
+*You don't really need MO2, or most of the tools such as LOOT or xEdit - with a properly configured COLLABWJ project they will be installed into \Modding\MO2\ from Wabbajack image*
 
 *MSVC* Can be downloaded from [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/). Make sure to check `Desktop Development with C++` checkbox. Necessary to install `py7zr` and `bethesda-structs` Python modules.
 
