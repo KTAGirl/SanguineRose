@@ -54,8 +54,11 @@ wj2git is a companion to Wabbajack, enabling github-centered collaboration aroun
       + profiles
       + overwrite
       + ...
+    + ANOTHER-COLLABWJ # why not?
+    + ANOTHER-COLLABWJ-TEST
     + GitHub
-      + COLLABWJ # as it comes from GitHub, just scripts and .json config files 
+      + COLLABWJ # as it comes from GitHub, just scripts and .json config files
+      + ANOTHER-COLLABWJ # why not?
       + wj2git
     + MO2 # portable instance of MO2, the one installed by Wabbajack
       + downloads # Your main downloads folder. You may have it in a different place, but for f..k's sake, keep it on SSD or NVMe
