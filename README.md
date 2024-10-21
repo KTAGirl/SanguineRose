@@ -37,6 +37,8 @@ wj2git is a companion to Wabbajack, enabling github-centered collaboration aroun
           + Data
   + Modding
     + 3.7.3.0 # or something, it is a Wabbajack install folder
+    + COLLABWJ # folder where Wabbajack builds *your* new and shiny version of the WJ image 
+    + COLLABWJ-TEST # folder where you will install *your* version of WJ image to test it
     + GitHub
       + COLLABWJ
       + wj2git
