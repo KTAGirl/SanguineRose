@@ -8,17 +8,21 @@ wj2git is a companion to Wabbajack, enabling github-centered collaboration aroun
 
 ## Prerequisites
 ### Accounts
-**[NexusMods](https://www.nexusmods.com/)** (preferably premium) - for Wabbajack
+**[NexusMods](https://www.nexusmods.com/)** (preferably premium) - for Wabbajack.
 
 ### Installed
-**MO2** ([MO2 on Nexus](https://www.nexusmods.com/skyrimspecialedition/mods/6194?tab=files))
+**Wabbajack** from [wabbajack.org](https://www.wabbajack.org/).
+**MO2** ([MO2 on Nexus](https://www.nexusmods.com/skyrimspecialedition/mods/6194?tab=files)) - bread and butter of any serious modding, hard requirement for Wabbajack.   
 
-**MSVC** Can be downloaded from (Microsoft C++ Build Tools)[https://visualstudio.microsoft.com/visual-cpp-build-tools/]. Necessary to install `py7zr` and `bethesda-structs` Python modules.
+**MSVC** Can be downloaded from (Microsoft C++ Build Tools)[https://visualstudio.microsoft.com/visual-cpp-build-tools/]. Make sure to check **Desktop Development with C++** checkbox. Necessary to install `py7zr` and `bethesda-structs` Python modules.
 
 **Python v3.10+**. Can be downloaded from [Python Releases for Windows](https://www.python.org/downloads/windows/). Latest greatest will do. And no, there won't be a Python2 version. Make sure to put `py` into PATH too. And wj2git also needs the following modules:
 - xxhash: use `py -m pip install xxhash` to install
 - py7zr: use `py -m pip install py7zr` to install
 - bethesda-structs: use `py -m pip install bethesda-structs` to install
+
+### Recommended
+**GitHub Desktop** [Download GitHub Desktop](https://desktop.github.com/download/)
 
 ## Workflow using github
 We assume that the Wabbajack github project is already setup to use wj2git. Let's name it COLLABWJ. One example of such a project is [KTA](https://github.com/KTAGirl/KTA). Now, to collaborate, you need to:
