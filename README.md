@@ -38,14 +38,21 @@ wj2git is a companion to Wabbajack, enabling github-centered collaboration aroun
   + Modding
     + 3.7.3.0 # or something, it is a Wabbajack install folder
     + COLLABWJ # folder where Wabbajack builds *your* new and shiny version of the WJ image 
-    + COLLABWJ-TEST # folder where you will install *your* version of WJ image to test it
+    + COLLABWJ-TEST # folder where you will install *your* version of WJ image to test it. It is a stripped-down copy of \Modding\MO2, and another portable instance of MO2
+      + # no 'downloads'
+      + mods # stripped down
+      + profiles
+      + overwrite
+      + ...
     + GitHub
-      + COLLABWJ
+      + COLLABWJ # as it comes from GitHub, just scripts and .json config files 
       + wj2git
     + MO2 # portable instance of MO2, the one installed by Wabbajack
       + downloads # Your main downloads folder. You may have it in a different place, but for f..k's sake, keep it on SSD or NVMe
       + mods # your MO2 mods, HUGE folder
       + profiles
+      + overwrite
+      + ...
     + wabbajack.exe
 
 ## Workflow using github
