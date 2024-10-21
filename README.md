@@ -8,9 +8,12 @@ wj2git is a companion to Wabbajack, enabling github-centered collaboration aroun
 
 ## Prerequisites
 ### Accounts
+**Steam** - to get Skyrim
 **[NexusMods](https://www.nexusmods.com/)** (preferably premium) - for Wabbajack.
 
 ### Installed
+*Steam*
+*Skyrim*
 *Wabbajack* from [wabbajack.org](https://www.wabbajack.org/).
 
 *MO2* ([MO2 on Nexus](https://www.nexusmods.com/skyrimspecialedition/mods/6194?tab=files)) - bread and butter of any serious modding, hard requirement for Wabbajack.   
@@ -24,6 +27,24 @@ wj2git is a companion to Wabbajack, enabling github-centered collaboration aroun
 
 ### Recommended
 *GitHub Desktop* [Download GitHub Desktop](https://desktop.github.com/download/)
+
+## Typical folder structure
++ C:\
+  + Steam # it doesn't matter much where it is installed, as long as it is not in "special" Windows folders
+    + steamapps
+      + common
+        + Skyrim Special Edition
+          + Data
+  + Modding
+    + 3.7.3.0 # or something, it is a Wabbajack install folder
+    + GitHub
+      + COLLABWJ
+      + wj2git
+    + MO2 # portable instance of MO2, the one installed by Wabbajack
+      + downloads # Your main downloads folder. You may have it in a different place, but for f..k's sake, keep it on SSD or NVMe
+      + mods # your MO2 mods, HUGE folder
+      + profiles
+    + wabbajack.exe
 
 ## Workflow using github
 We assume that the Wabbajack github project is already setup to use wj2git. Let's name it COLLABWJ. One example of such a project is [KTA](https://github.com/KTAGirl/KTA). Now, to collaborate, you need to:
