@@ -7,9 +7,17 @@ A set of scripts to enable github-centered collaboration on Wabbajack modlists
 wj2git is a companion to Wabbajack, enabling github-centered collaboration around a Wabbajack project. In plain English - **now several people can work on a Wabbajack project.** And that's without risks of overwriting each other work, with change tracking, and so on - in short, using all the bells and whistles provided by git and github ❗😀
 
 ## Prerequisites
+### Hardware
+*whatever is necessary to run your modlist*
+
+*16G RAM*, 32G strongly recommended
+
+*additional 2x of size for your modlist* (one for Wabbajack image, another one for test install from this Wabbajack image)
+
 ### Accounts
-**Steam** - to get Skyrim
-**[NexusMods](https://www.nexusmods.com/)** (preferably premium) - for Wabbajack.
+*Steam* - to get Skyrim
+
+*[NexusMods](https://www.nexusmods.com/)* (preferably premium) - for Wabbajack downloads.
 
 ### Installed
 *Steam*
@@ -36,7 +44,7 @@ wj2git is a companion to Wabbajack, enabling github-centered collaboration aroun
         + Skyrim Special Edition
           + Data
   + Modding
-    + 3.7.3.0 # or something, it is a Wabbajack install folder
+    + 3.7.3.0 # or something, it is where Wabbajack itself (but not modlists) is installed
     + COLLABWJ # folder where Wabbajack builds *your* new and shiny version of the WJ image 
     + COLLABWJ-TEST # folder where you will install *your* version of WJ image to test it. It is a stripped-down copy of \Modding\MO2, and another portable instance of MO2
       + *no 'downloads' here*
