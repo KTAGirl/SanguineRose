@@ -30,7 +30,7 @@ if not sys.version_info >= (3, 10):
     print('Sorry, wj2git needs at least Python 3.10')
     sys.exit(42)
     
-wj2gitLoadedAt = time.time()
+wj2gitLoadedAt = time.perf_counter()
 
 def addToDictOfLists(dict,key,val):
     if key not in dict:
@@ -133,7 +133,7 @@ def _copyRestOfProfile(mo2,fulltargetdir,profilename):
     shutil.copyfile(srcfdir+'loadorder.txt',targetfdir+'loadorder.txt')
     
 def elapsedTime():
-    return round(time.time()-wj2gitLoadedAt,2)
+    return round(time.perf_counter()-wj2gitLoadedAt,2)
 
     
 def wj2git(config):

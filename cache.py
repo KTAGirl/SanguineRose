@@ -39,8 +39,7 @@ def _addFile(files,ar):
 ###
 
 def _wjTimestampToPythonTimestamp(wjftime):
-    usecs = (wjftime - 116444736000000000) / 10**7
-    return usecs 
+    return (wjftime - 116444736000000000) / 10**7
 
 def _getFileTimestamp(fname):
     path = pathlib.Path(fname)
@@ -79,6 +78,15 @@ def _wjHash(fname):
 #
 # dbgWait()
 
+class Elapsed:
+    def __init__(self):
+        self.t0 = time.perf_counter()
+        
+    def printAndReset(self,where):
+        t1 = time.perf_counter()
+        print(where+' took '+str(round(t1-self.t0,2))+'s')
+        self.t0 = t1
+
 #############
 
 class Cache:
@@ -89,20 +97,24 @@ class Cache:
         self.downloads = {}
         self.downloadsbypath = {}
         self.filesbypath = {}
+        timer = Elapsed()
         wjdb.loadHC([ 
                         (downloadsdir,lambda ar: _foundDownload(self.downloads, self.downloadsbypath,ar), lambda ar: _addDownload(self.downloads,self.downloadsbypath,ar)),
                         (mo2,lambda ar: self.filesbypath.get(ar.archive_path), lambda ar: _addFile(self.filesbypath,ar))
                     ])
         assert(len(self.downloads)==len(self.downloadsbypath)) 
         print(str(len(self.downloads))+" downloads, "+str(len(self.filesbypath))+" files")
-
+        timer.printAndReset('Loading WJ HashCache')
+        
         self.modifieddownloads = self._loadDir(downloadsdir,self.downloadsbypath)
         print('modified downloads:'+str(len(self.modifieddownloads)))
+        timer.printAndReset('Scanning downloads')
         #for key in self.downloads:
         #    print(self.downloads[key].__dict__)
         
         self.modifiedfiles = self._loadDir(mo2,self.filesbypath,downloadsdir)
         print('modified files:'+str(len(self.modifiedfiles)))
+        timer.printAndReset('Scanning MO2')
  
     def _loadDir(self,dir,dicttolook,ignoredir=None):
         files = []
@@ -129,7 +141,9 @@ class Cache:
         return files
 
     def loadVFS(self,allinstallfiles,dbgfile=None):
+        timer = Elapsed()
         self.archiveEntries = wjdb.loadVFS(allinstallfiles,dbgfile) 
+        timer.printAndReset('Loading WJ VFS')
 
     def findArchive(self,fpath):
         fpath = normalizePath(fpath)
