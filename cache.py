@@ -1,5 +1,8 @@
 import os
+import pathlib
+import xxhash
 
+import dbg
 import wjdb
 
 def normalizePath(path):
@@ -7,54 +10,135 @@ def normalizePath(path):
     assert(path.find('/')<0)
     return path
     
-def _foundArchive(archives,archivesbypath,ar):
-    return archives.get(ar.archive_hash)
-'''    out = archives.get(ar.archive_hash)
+def _foundDownload(downloads,downloadsbypath,ar):
+    return downloads.get(ar.archive_hash)
+''' TODO: review   
+    out = downloads.get(ar.archive_hash)
     if out:
-        if not archivesbypath.get(ar.archive_path):
+        if not downloadsbypath.get(ar.archive_path):
             print('WARNING: hash '+str(ar.archive_hash)+' is already in Cache, but path '+ar.archive_path+' is not')
             return None
         else:
             return out
     else:
-        assert(not archivesbypath.get(ar.archive_path))
+        assert(not downloadsbypath.get(ar.archive_path))
         return None
 '''
     
-def _addArchive(archives,archivesbypath,ar):
+def _addDownload(downloads,downloadsbypath,ar):
     # to get around lambda restrictions
-    archives[ar.archive_hash] = ar
-    archivesbypath[ar.archive_path] = ar
+    downloads[ar.archive_hash] = ar
+    downloadsbypath[ar.archive_path] = ar
     
 def _addFile(files,ar):
     # to get around lambda restrictions
     files[ar.archive_path] = ar
 
+###
+
+def _wjTimestampToPythonTimestamp(wjftime):
+    usecs = (wjftime - 116444736000000000) / 10**7
+    return usecs 
+
+def _getFileTimestamp(fname):
+    path = pathlib.Path(fname)
+    return path.stat().st_mtime
+
+def _compareTimestamps(a,b):
+    if abs(a-b) == 0: #< 0.000001: 
+        return 0
+    return -1 if a < b else 1
+
+#last_modified = getFileTimestamp('..\\..\\mo2\\downloads\\1419098688_DeviousFollowers-ContinuedSEv2_14.5.7z')
+#print(last_modified)
+#wjts = wjTimestampToPythonTimestamp(133701668551156765)
+#print(wjts)
+#print(compareTimestamps(last_modified,wjts))
+#
+#dbgWait()
+
+def _wjHash(fname):
+    h = xxhash.xxh64()
+    blocksize = 1048576
+    with open(fname,'rb') as f:
+        while True:
+            bb = f.read(blocksize)
+            h.update(bb)
+            assert(len(bb)<=blocksize)
+            if len(bb) != blocksize:
+                return h.intdigest()
+
+# tohash = '..\\..\\mo2\\mods\\Suspicious City Guards\\suspiciouscityguards.bsa'
+# with open(tohash, 'rb') as rfile:
+#    data = rfile.read() 
+# h = xxhash.xxh64_intdigest(data)
+# print(h)
+# print(wjHash(tohash))
+#
+# dbgWait()
+
+#############
+
 class Cache:
     def __init__(self,config):
-        self.archives = {}
-        self.archivesbypath = {}
+        mo2 = normalizePath(config['mo2'])
+        downloadsdir = normalizePath(config['downloads'])
+
+        self.downloads = {}
+        self.downloadsbypath = {}
         self.filesbypath = {}
         wjdb.loadHC([ 
-                        (normalizePath(config['downloads']),lambda ar: _foundArchive(self.archives, self.archivesbypath,ar), lambda ar: _addArchive(self.archives,self.archivesbypath,ar)),
-                        (normalizePath(config['mo2']),lambda ar: self.filesbypath.get(ar.archive_path), lambda ar: _addFile(self.filesbypath,ar))
+                        (downloadsdir,lambda ar: _foundDownload(self.downloads, self.downloadsbypath,ar), lambda ar: _addDownload(self.downloads,self.downloadsbypath,ar)),
+                        (mo2,lambda ar: self.filesbypath.get(ar.archive_path), lambda ar: _addFile(self.filesbypath,ar))
                     ])
-        assert(len(self.archives)==len(self.archivesbypath)) 
-        print(str(len(self.archives))+" archives, "+str(len(self.filesbypath))+" files")
+        assert(len(self.downloads)==len(self.downloadsbypath)) 
+        print(str(len(self.downloads))+" downloads, "+str(len(self.filesbypath))+" files")
+
+        self.modifieddownloads = self._loadDir(downloadsdir,self.downloadsbypath)
+        print('modified downloads:'+str(len(self.modifieddownloads)))
+        #for key in self.downloads:
+        #    print(self.downloads[key].__dict__)
+        
+        self.modifiedfiles = self._loadDir(mo2,self.filesbypath,downloadsdir)
+        print('modified files:'+str(len(self.modifiedfiles)))
+ 
+    def _loadDir(self,dir,dicttolook,ignoredir=None):
+        files = []
+        for dirpath, dirs, filenames in os.walk(dir):
+            for filename in filenames:
+                if ignoredir and dirpath.startswith(ignoredir):
+                    continue
+                fpath = os.path.join(dirpath,filename)
+                if dbg.DBG:
+                    assert(normalizePath(fpath)==fpath) # if stands - remove all normalizations after os.walk, asserting under dbg.DBG
+                assert(not os.path.islink(fpath))
+                tstamp = _getFileTimestamp(fpath)
+                # print(fpath)
+                found = dicttolook.get(fpath.lower())
+                if found:
+                    tstamp2 = found.archive_modified
+                    # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
+                    if _compareTimestamps(tstamp,_wjTimestampToPythonTimestamp(tstamp2))!=0:
+                        print('WARNING: '+fpath+' was updated since wj caching')
+                        files.append(wjdb.Archive(-1,tstamp,fpath))
+                else:
+                    print('WARNING: '+fpath+' was added since wj caching')
+                    files.append(wjdb.Archive(-1,tstamp,fpath))
+        return files
 
     def loadVFS(self,allinstallfiles,dbgfile=None):
         self.archiveEntries = wjdb.loadVFS(allinstallfiles,dbgfile) 
 
     def findArchive(self,fpath):
         fpath = normalizePath(fpath)
-        ar = self.archivesbypath.get(fpath.lower())
+        ar = self.downloadsbypath.get(fpath.lower())
         if ar == None:
             print("WARNING: path="+fpath+" NOT FOUND")
             return None
 
         hash=ar.archive_hash
         assert(hash>=0)
-        archive = self.archives.get(hash)
+        archive = self.downloads.get(hash)
         if archive == None:
             print("WARNING: archive with path="+fpath+" NOT FOUND")
             return None
@@ -76,7 +160,7 @@ class Cache:
         #print(archiveEntry.__dict__)
 
         ahash = archiveEntry.archive_hash
-        archive = self.archives.get(ahash)
+        archive = self.downloads.get(ahash)
         if archive == None:
             print("WARNING: archive with hash="+str(ahash)+" NOT FOUND")
             return None,None
@@ -84,9 +168,9 @@ class Cache:
         return archiveEntry, archive
          
     def dbgDump(self,folder):
-        with open(folder+'archives.txt', 'wt', encoding="utf-8") as f:
-            for hash in self.archives:
-                f.write(str(hash)+':'+str(self.archives[hash].__dict__)+'\n')
+        with open(folder+'downloads.txt', 'wt', encoding="utf-8") as f:
+            for hash in self.downloads:
+                f.write(str(hash)+':'+str(self.downloads[hash].__dict__)+'\n')
         with open(folder+'archiveentries.txt', 'wt', encoding="utf-8") as f:
             for hash in self.archiveEntries:
                 f.write(str(hash)+':'+str(self.archiveEntries[hash].__dict__)+'\n')

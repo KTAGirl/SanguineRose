@@ -133,13 +133,6 @@ def loadVFS(allinstallfiles,dbgfile=None):
             for ae in aes:
                 if archiveEntries.get(ae.file_hash) is None or allinstallfiles.get(ae.archive_hash):
                     archiveEntries[ae.file_hash]=ae
-            #for child in hf.children:
-            #    if len(child.children)>0:
-            #        print("TODO: nested children: path="+child.path)
-            #        print(child.dbg())
-            #    if archiveEntries.get(child.hash)!=None:
-            #        print("TODO: multiple entries for a file")
-            #    archiveEntries[child.hash] = ArchiveEntry(hf.hash,child.path,child.size,child.hash)
     con.close()
     print('loadVFS: nn='+str(nn)+' nx='+str(nx))
     return archiveEntries

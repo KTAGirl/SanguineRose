@@ -6,8 +6,8 @@ import re
 import shutil
 import glob
 import time
-import pathlib
-import xxhash
+# import pathlib
+# import xxhash
 
 # import wjdb
 import cache
@@ -46,9 +46,8 @@ def folderSize(rootpath):
     for dirpath, dirnames, filenames in os.walk(rootpath):
         for f in filenames:
             fp = os.path.join(dirpath, f)
-            # skip if it is symbolic link
-            if not os.path.islink(fp):
-                total += os.path.getsize(fp)
+            assert(not os.path.islink(fp))
+            total += os.path.getsize(fp)
     return total
 
 def isEslFlagged(filename):
@@ -136,48 +135,6 @@ def _copyRestOfProfile(mo2,fulltargetdir,profilename):
 def elapsedTime():
     return round(time.time()-wj2gitLoadedAt,2)
 
-def wjTimestampToPythonTimestamp(wjftime):
-    usecs = (wjftime - 116444736000000000) / 10**7
-    return usecs 
-
-def getFileTimestamp(fname):
-    path = pathlib.Path(fname)
-    return path.stat().st_mtime
-
-def compareTimestamps(a,b):
-    if abs(a-b) < 0.001: # TBD - can we reduce it - all the way to zero?
-        return 0
-    return -1 if a < b else 1
-
-#last_modified = getFileTimestamp('..\\..\\mo2\\downloads\\1419098688_DeviousFollowers-ContinuedSEv2_14.5.7z')
-#print(last_modified)
-#wjts = wjTimestampToPythonTimestamp(133701668551156765)
-#print(wjts)
-#print(compareTimestamps(last_modified,wjts))
-#
-#dbgWait()
-
-def wjHash(fname):
-    h = xxhash.xxh64()
-    blocksize = 1048576
-    with open(fname,'rb') as f:
-        while True:
-            bb = f.read(blocksize)
-            h.update(bb)
-            assert(len(bb)<=blocksize)
-            if len(bb) != blocksize:
-                return h.intdigest()
-
-# tohash = '..\\..\\mo2\\mods\\Suspicious City Guards\\suspiciouscityguards.bsa'
-# with open(tohash, 'rb') as rfile:
-#    data = rfile.read() 
-# h = xxhash.xxh64_intdigest(data)
-# print(h)
-# print(wjHash(tohash))
-#
-# dbgWait()
-
-#############
     
 def wj2git(config):
     #contents=b''
@@ -250,11 +207,12 @@ def wj2git(config):
     nn = 0
     for modname in allmods:
             print("mod="+modname)
-            for root, dirs, filenames in os.walk(mo2+'\\mods\\'+modname):
+            for dirpath, dirs, filenames in os.walk(mo2+'\\mods\\'+modname):
                 for filename in filenames:
                     # print("file="+filename)
                     nn += 1
-                    fpath = cache.normalizePath(os.path.join(root,filename))
+                    fpath = cache.normalizePath(os.path.join(dirpath,filename))
+                    assert(not os.path.islink(fpath))
                     files.append(fpath)
 
     files.sort()
