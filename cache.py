@@ -1,8 +1,10 @@
 import os
 import pathlib
+import time
 import xxhash
 
-import dbg
+from w2gdebug import DEBUG
+from w2gdebug import dbgWait
 import wjdb
 
 def normalizePath(path):
@@ -109,7 +111,7 @@ class Cache:
                 if ignoredir and dirpath.startswith(ignoredir):
                     continue
                 fpath = os.path.join(dirpath,filename)
-                if dbg.DBG:
+                if DEBUG:
                     assert(normalizePath(fpath)==fpath) # if stands - remove all normalizations after os.walk, asserting under dbg.DBG
                 assert(not os.path.islink(fpath))
                 tstamp = _getFileTimestamp(fpath)

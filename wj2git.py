@@ -11,8 +11,8 @@ import time
 
 # import wjdb
 import cache
-from dbg import dbgWait
-from dbg import DBG
+from w2gdebug import DEBUG
+from w2gdebug import dbgWait
 from modlist import openModTxtFile
 from modlist import openModTxtFileW
 from modlist import ModList
@@ -140,7 +140,7 @@ def wj2git(config):
     #contents=b''
     #print(contents)
     #parseContents(0,contents,False)
-    #dbg.dbgWait()
+    #dbgWait()
     mo2=config['mo2']
     compiler_settings_fname=config['compiler_settings']
     targetgithub=config['targetgithub']
@@ -185,7 +185,7 @@ def wj2git(config):
             # print('if='+installfile)
             fpath = config['downloads']+installfile
             #print('#?'+fpath)
-            #dbg.dbgWait()
+            #dbgWait()
             # archive = wjdb.findArchive(chc,archives,fpath)
             archive = filecache.findArchive(fpath)
             if archive:
@@ -225,7 +225,7 @@ def wj2git(config):
     modsdir = targetgithub+'mods'
     if os.path.isdir(modsdir):
         shutil.rmtree(modsdir)
-    # dbg.dbgWait()
+    # dbgWait()
 
     with open(targetgithub+'master.json','wt',encoding="utf-8") as wfile:
         wfile.write('{ "archives": [\n')
@@ -268,7 +268,7 @@ def wj2git(config):
             if isown:
                 targetpath0 = targetdir + fpath
                 wfile.write( '    { "path":'+escapeJSON(fpath)+', "source":'+escapeJSON(targetpath0)+' }')
-                # dbg.dbgWait()
+                # dbgWait()
                 continue
             
             # archiveEntry, archive = wjdb.findFile(filesbypath,archives,archiveEntries,fpath0)
@@ -287,7 +287,7 @@ def wj2git(config):
                         srcpath = mo2 + fpath
                         shutil.copyfile(srcpath,targetpath)
                         processed = True
-                        # dbg.dbgWait()
+                        # dbgWait()
                         wfile.write( '    { "path":'+escapeJSON(fpath)+', "source":'+escapeJSON(targetpath0)+' }')
                                 
                 if not processed:
@@ -313,7 +313,7 @@ def wj2git(config):
     print("nn="+str(nn)+" nwarn="+str(nwarn))
 
     #validating json
-    if DBG:
+    if DEBUG:
         with open(targetgithub+'master.json', 'rt',encoding="utf-8") as rfile:
             dummy = json.load(rfile)
 

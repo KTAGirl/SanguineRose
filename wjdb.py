@@ -4,18 +4,12 @@ import os
 import traceback
 
 import binaryreader
-import dbg
-
-'''
-def openHashCache(home_dir):
-    hc = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite')
-    #vfsc = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalVFSCache5.sqlite')
-    return hc.cursor()
-'''
+from w2gdebug import DEBUG
+from w2gdebug import dbgWait
     
 class Img:
     def __init__(self,br):
-        dbg.traceReader('Img:')
+        binaryreader.traceReader('Img:')
         self.w = br.ReadUint16()
         self.h = br.ReadUint16()
         self.mip = br.ReadByte()
@@ -28,7 +22,7 @@ class Img:
  
 class HashedFile:
     def __init__(self,br):
-        dbg.traceReader('HashedFile:')
+        binaryreader.traceReader('HashedFile:')
         self.path = br.ReadString()
         self.hash = br.ReadUint64()
         if br.ReadBoolean():
@@ -79,7 +73,7 @@ def parseContents(hash,contents,gzipped=True):
         print("Parse Exception with hash="+str(hash)+": "+str(e))
         print(traceback.format_exc())
         print(contents)
-        dbg.dbgWait()
+        dbgWait()
         return None
 
 def normalizeHash(hash):
@@ -106,7 +100,7 @@ def aEntries(paths,hf,root_archive_hash):
             #print('NESTED:')
             #for ae in aes:
             #    print(ae.__dict__)
-            #dbg.dbgWait()
+            #dbgWait()
     return aes
 
 def loadVFS(allinstallfiles,dbgfile=None):
