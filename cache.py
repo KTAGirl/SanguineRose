@@ -1,4 +1,5 @@
 import os
+import stat
 import pathlib
 import time
 import xxhash
@@ -41,9 +42,13 @@ def _addFile(files,ar):
 def _wjTimestampToPythonTimestamp(wjftime):
     return (wjftime - 116444736000000000) / 10**7
 
-def _getFileTimestamp(fname):
+def _getFileTimestamp(s):
     path = pathlib.Path(fname)
     return path.stat().st_mtime
+
+def _getFileTimestampFromSt(st):
+    # path = pathlib.Path(fname)
+    return st.st_mtime
 
 def _compareTimestamps(a,b):
     if abs(a-b) == 0: #< 0.000001: 
@@ -119,7 +124,7 @@ class Cache:
         # print(excludefolders)
         # print(reincludefolders)
         nscanned = 0
-        if False: #two equivalent implementations; apparently, very close performance-wise too 
+        if False: #two equivalent implementations; after recent performance fix recursive one performs better 
             # os.walk - based: we're scanning the whole tree at once, but cannot skip ignored parts
             for dirpath, dirs, filenames in os.walk(dir):
                 for filename in filenames:
@@ -160,15 +165,20 @@ class Cache:
                         files.append(wjdb.Archive(-1,tstamp,fpath))
             return nscanned
         else:
-            # recursive one: able to skip subtrees, but more calls (lots of os.listdir() and isfile() etc. instead of single os.walk())
+            # recursive one: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
+            # still, after recent performance fix seems to win like 1.5x over os.walk-based one
             for f in os.listdir(dir):
                 fpath = dir+f
-                if os.path.isfile(fpath):
-                    assert(not os.path.islink(fpath))
+                st = os.lstat(fpath)
+                fmode = st.st_mode
+                # if os.path.isfile(fpath):
+                if stat.S_ISREG(fmode):
+                    #assert(not os.path.islink(fpath))
+                    assert(not stat.S_ISLNK(fmode))
                     if DEBUG:
                         assert(normalizePath(fpath)==fpath)
                     nscanned += 1
-                    tstamp = _getFileTimestamp(fpath)
+                    tstamp = _getFileTimestampFromSt(st)
                     # print(fpath)
                     found = dicttolook.get(fpath.lower())
                     if found:
@@ -180,7 +190,8 @@ class Cache:
                     else:
                         print('WARNING: '+fpath+' was added since wj caching')
                         files.append(wjdb.Archive(-1,tstamp,fpath))
-                elif os.path.isdir(fpath):
+                # elif os.path.isdir(fpath):
+                elif stat.S_ISDIR(fmode):
                     newdir=fpath+'\\'
                     '''exclude = False
                     for x in excludefolders:
