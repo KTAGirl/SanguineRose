@@ -135,6 +135,12 @@ def _copyRestOfProfile(mo2,fulltargetdir,profilename):
 def elapsedTime():
     return round(time.perf_counter()-wj2gitLoadedAt,2)
 
+def _absDir(dir):
+    if DEBUG:
+        assert(dir.endswith('\\') or dir.endswith('/'))
+    return os.path.abspath(dir)+'\\'
+
+###
     
 def wj2git(config):
     #contents=b''
@@ -145,8 +151,6 @@ def wj2git(config):
     compiler_settings_fname=config['compiler_settings']
     targetgithub=config['targetgithub']
     ownmods=config['ownmods']
-
-    filecache = cache.Cache(config)
     
     targetdir = 'MO2\\'
     stats = {}
@@ -175,6 +179,15 @@ def wj2git(config):
             allmods[mod]=1
         altmodlists[profile] = modlist
 
+    downloadsdir = config['downloads']
+    mo2excludefolders = [_absDir(mo2+'downloads\\'), # even if downloadsdirs is different
+                         _absDir(downloadsdir), # even if different from mo2+'downloads\\'
+                         _absDir(mo2+'mods\\')]
+    mo2reincludefolders = []
+    for mod in modlist.allEnabled():
+        mo2reincludefolders.append(_absDir(mo2+'mods\\'+mod+'\\'))
+    filecache = cache.Cache(_absDir(downloadsdir),_absDir(mo2),mo2excludefolders,mo2reincludefolders)
+
     allinstallfiles = {}
     todl = {}
     for mod in modlist.allEnabled():
@@ -183,7 +196,7 @@ def wj2git(config):
         installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,mo2)
         if installfile:
             # print('if='+installfile)
-            fpath = config['downloads']+installfile
+            fpath = downloadsdir+installfile
             #print('#?'+fpath)
             #dbgWait()
             # archive = wjdb.findArchive(chc,archives,fpath)

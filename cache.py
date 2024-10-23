@@ -90,10 +90,7 @@ class Elapsed:
 #############
 
 class Cache:
-    def __init__(self,config):
-        mo2 = normalizePath(config['mo2'])
-        downloadsdir = normalizePath(config['downloads'])
-
+    def __init__(self,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders):
         self.downloads = {}
         self.downloadsbypath = {}
         self.filesbypath = {}
@@ -106,39 +103,117 @@ class Cache:
         print(str(len(self.downloads))+" downloads, "+str(len(self.filesbypath))+" files")
         timer.printAndReset('Loading WJ HashCache')
         
-        self.modifieddownloads = self._loadDir(downloadsdir,self.downloadsbypath)
-        print('modified downloads:'+str(len(self.modifieddownloads)))
+        self.modifieddownloads = []
+        nscanned = Cache._loadDir(self.modifieddownloads,downloadsdir,self.downloadsbypath)
+        print('scanned/modified downloads:'+str(nscanned)+'/'+str(len(self.modifieddownloads)))
         timer.printAndReset('Scanning downloads')
         #for key in self.downloads:
         #    print(self.downloads[key].__dict__)
         
-        self.modifiedfiles = self._loadDir(mo2,self.filesbypath,downloadsdir)
-        print('modified files:'+str(len(self.modifiedfiles)))
+        self.modifiedfiles = []
+        nscanned = Cache._loadDir(self.modifiedfiles,mo2,self.filesbypath,mo2excludefolders,mo2reincludefolders)
+        print('scanned/modified files:'+str(nscanned)+'/'+str(len(self.modifiedfiles)))
         timer.printAndReset('Scanning MO2')
- 
-    def _loadDir(self,dir,dicttolook,ignoredir=None):
-        files = []
-        for dirpath, dirs, filenames in os.walk(dir):
-            for filename in filenames:
-                if ignoredir and dirpath.startswith(ignoredir):
-                    continue
-                fpath = os.path.join(dirpath,filename)
-                if DEBUG:
-                    assert(normalizePath(fpath)==fpath) # if stands - remove all normalizations after os.walk, asserting under dbg.DBG
-                assert(not os.path.islink(fpath))
-                tstamp = _getFileTimestamp(fpath)
-                # print(fpath)
-                found = dicttolook.get(fpath.lower())
-                if found:
-                    tstamp2 = found.archive_modified
-                    # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
-                    if _compareTimestamps(tstamp,_wjTimestampToPythonTimestamp(tstamp2))!=0:
-                        print('WARNING: '+fpath+' was updated since wj caching')
+
+    def _loadDir(files,dir,dicttolook,excludefolders=[],reincludefolders=[]):
+        # print(excludefolders)
+        # print(reincludefolders)
+        nscanned = 0
+        if False: #two equivalent implementations; apparently, very close performance-wise too 
+            # os.walk - based: we're scanning the whole tree at once, but cannot skip ignored parts
+            for dirpath, dirs, filenames in os.walk(dir):
+                for filename in filenames:
+                    # print(dirpath)
+                    dirpath1 = dirpath + '\\'
+                    exclude = False
+                    for x in excludefolders:
+                        if dirpath1.startswith(x):
+                            exclude = True
+                            break
+                    if exclude:
+                        for i in reincludefolders:
+                            if dirpath1.startswith(i):
+                                exclude = False
+                                break
+
+                    if exclude:
+                        continue
+
+                    nscanned += 1
+                    fpath = os.path.join(dirpath,filename)
+                    if DEBUG:
+                        # print(fpath)
+                        assert(normalizePath(fpath)==fpath) # if stands - remove all normalizations after os.walk, asserting under dbg.DBG
+                    assert(not os.path.islink(fpath))
+
+                    tstamp = _getFileTimestamp(fpath)
+                    # print(fpath)
+                    found = dicttolook.get(fpath.lower())
+                    if found:
+                        tstamp2 = found.archive_modified
+                        # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
+                        if _compareTimestamps(tstamp,_wjTimestampToPythonTimestamp(tstamp2))!=0:
+                            print('WARNING: '+fpath+' was updated since wj caching')
+                            files.append(wjdb.Archive(-1,tstamp,fpath))
+                    else:
+                        print('WARNING: '+fpath+' was added since wj caching')
                         files.append(wjdb.Archive(-1,tstamp,fpath))
+            return nscanned
+        else:
+            # recursive one: able to skip subtrees, but more calls (lots of os.listdir() and isfile() etc. instead of single os.walk())
+            for f in os.listdir(dir):
+                fpath = dir+f
+                if os.path.isfile(fpath):
+                    assert(not os.path.islink(fpath))
+                    if DEBUG:
+                        assert(normalizePath(fpath)==fpath)
+                    nscanned += 1
+                    tstamp = _getFileTimestamp(fpath)
+                    # print(fpath)
+                    found = dicttolook.get(fpath.lower())
+                    if found:
+                        tstamp2 = found.archive_modified
+                        # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
+                        if _compareTimestamps(tstamp,_wjTimestampToPythonTimestamp(tstamp2))!=0:
+                            print('WARNING: '+fpath+' was updated since wj caching')
+                            files.append(wjdb.Archive(-1,tstamp,fpath))
+                    else:
+                        print('WARNING: '+fpath+' was added since wj caching')
+                        files.append(wjdb.Archive(-1,tstamp,fpath))
+                elif os.path.isdir(fpath):
+                    newdir=fpath+'\\'
+                    '''exclude = False
+                    for x in excludefolders:
+                        if newdir.startswith(x):
+                            exclude = True
+                            break
+                    if exclude:
+                        for i in reincludefolders:
+                            if newdir.startswith(i):
+                                exclude = False
+                                break
+                    '''
+                    # print(newdir)
+                    # if len(excludefolders):
+                    #    print(excludefolders[2])
+                    # print(newdir in excludefolders)
+                    exclude = newdir in excludefolders
+                    if exclude:
+                        # print('Excluding '+newdir)
+                        for f2 in os.listdir(newdir):
+                            newdir2 = newdir + f2 
+                            if os.path.isdir(newdir2):
+                                newdir2 += '\\'
+                                # print(newdir2)
+                                if newdir2 in reincludefolders:
+                                    # print('Re-including '+newdir2)
+                                    nscanned += Cache._loadDir(files,newdir2,dicttolook,excludefolders,reincludefolders)
+                    else:
+                        nscanned += Cache._loadDir(files,newdir,dicttolook,excludefolders,reincludefolders)
                 else:
-                    print('WARNING: '+fpath+' was added since wj caching')
-                    files.append(wjdb.Archive(-1,tstamp,fpath))
-        return files
+                    print(fpath)
+                    assert(False)
+            return nscanned
 
     def loadVFS(self,allinstallfiles,dbgfile=None):
         timer = Elapsed()
