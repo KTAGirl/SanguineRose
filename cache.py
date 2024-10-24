@@ -6,6 +6,8 @@ import xxhash
 
 from w2gdebug import DEBUG
 from w2gdebug import dbgWait
+from modlist import openModTxtFile
+from modlist import openModTxtFileW
 import wjdb
 
 def normalizePath(path):
@@ -13,29 +15,29 @@ def normalizePath(path):
     assert(path.find('/')<0)
     return path
     
-def _foundDownload(downloads,downloadsbypath,ar):
-    return downloads.get(ar.archive_hash)
-''' TODO: review   
-    out = downloads.get(ar.archive_hash)
-    if out:
-        if not downloadsbypath.get(ar.archive_path):
-            print('WARNING: hash '+str(ar.archive_hash)+' is already in Cache, but path '+ar.archive_path+' is not')
-            return None
-        else:
-            return out
+def _hcFoundDownload(archives,archivesbypath,ndup,ar):
+    if ar.archive_path.endswith('.meta'):
+        return
+    olda = archives.get(ar.archive_hash)
+    if olda!=None and not olda.eq(ar):
+        print("WARNING: identical archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(ar.__dict__))
+        # dbgWait()
+        ndup.val += 1
+        pass
     else:
-        assert(not downloadsbypath.get(ar.archive_path))
-        return None
-'''
+        # out[idx][hash] = ar
+        archives[ar.archive_hash] = ar
+        archivesbypath[ar.archive_path] = ar
     
-def _addDownload(downloads,downloadsbypath,ar):
-    # to get around lambda restrictions
-    downloads[ar.archive_hash] = ar
-    downloadsbypath[ar.archive_path] = ar
-    
-def _addFile(files,ar):
-    # to get around lambda restrictions
-    files[ar.archive_path] = ar
+def _hcFoundFile(filesbypath,ndup,ar):
+    olda = filesbypath.get(ar.archive_path)
+    if olda!=None and not olda.eq(ar):
+        # print("TODO: multiple archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(ar.__dict__))
+        # wait = input("Press Enter to continue.")
+        ndup.val += 1
+        pass
+    else:
+        filesbypath[ar.archive_path] = ar
 
 ###
 
@@ -92,35 +94,100 @@ class Elapsed:
         print(where+' took '+str(round(t1-self.t0,2))+'s')
         self.t0 = t1
 
+class Val:
+    def __init__(self,initval):
+        self.val = initval
+        
+    def __str__(self):
+        return str(self.val)
+
+def _getFromOneOfDicts(dicttolook,dicttolook2,key):
+    found = dicttolook.get(key)
+    if found != None:
+        return found
+    return dicttolook2.get(key)
+
+def _diffFound(fpath,tstamp,addar,updatednotadded):
+    # print(fpath)
+    hash = _wjHash(fpath)
+    newa = wjdb.Archive(hash,tstamp,fpath)
+    addar(newa,updatednotadded)
+
+def _diffArchive(jsonarchives,jsonarchivesbypath,nmodified,ar,updatednotadded):
+    if ar.archive_path.endswith('.meta'):
+        return
+    print('WARNING: '+ar.archive_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
+    jsonarchives[ar.archive_hash]=ar
+    jsonarchivesbypath[ar.archive_path]=ar
+    nmodified.val += 1
+   
+def _diffFile(jsonfilesbypath,nmodified,ar,updatednotadded):
+    print('WARNING: '+ar.archive_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
+    jsonfilesbypath[ar.archive_path]=ar
+    nmodified.val += 1
+    
 #############
 
 class Cache:
-    def __init__(self,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders):
-        self.downloads = {}
-        self.downloadsbypath = {}
+    def __init__(self,cachedir,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders):
+        self.archives = {}
+        self.archivesbypath = {}
         self.filesbypath = {}
         timer = Elapsed()
+        
+        # Loading WJ HashCache
+        ndupdl = Val(0) #passable by ref
+        ndupf = Val(0)
         wjdb.loadHC([ 
-                        (downloadsdir,lambda ar: _foundDownload(self.downloads, self.downloadsbypath,ar), lambda ar: _addDownload(self.downloads,self.downloadsbypath,ar)),
-                        (mo2,lambda ar: self.filesbypath.get(ar.archive_path), lambda ar: _addFile(self.filesbypath,ar))
+                        (downloadsdir,lambda ar: _hcFoundDownload(self.archives, self.archivesbypath,ndupdl,ar)),
+                        (mo2,lambda ar: _hcFoundFile(self.filesbypath,ndupf,ar))
                     ])
-        assert(len(self.downloads)==len(self.downloadsbypath)) 
-        print(str(len(self.downloads))+" downloads, "+str(len(self.filesbypath))+" files")
+        assert(len(self.archives)==len(self.archivesbypath)) 
+        print(str(len(self.archives))+' archives ('+str(ndupdl)+' duplicates), '+str(len(self.filesbypath))+' files ('+str(ndupf)+' duplicates)')
         timer.printAndReset('Loading WJ HashCache')
         
-        self.modifieddownloads = []
-        nscanned = Cache._loadDir(self.modifieddownloads,downloadsdir,self.downloadsbypath)
-        print('scanned/modified downloads:'+str(nscanned)+'/'+str(len(self.modifieddownloads)))
+        # Loading JSON HashCache
+        self.jsonarchives = {}
+        try:
+            with openModTxtFile(cachedir+'archives.json') as rfile:
+                self.jsonarchives = json.load(rfile)
+        except Exception as e:
+            print('WARNING: error loading JSON cache archives.json: '+str(e)+'. Will continue w/o JSON cache')
+            self.jsonarchives = {} # just in case            
+        self.jsonarchivesbypath = {}
+        for key in self.jsonarchives:
+            val = self.jsonarchives[key]
+            self.jsonarchivesbypath[val.archive_path] = val
+        assert(len(self.jsonarchives)==len(self.jsonarchivesbypath)) 
+        print(str(len(self.jsonarchives))+' JSON archives')
+
+        self.jsonfilesbypath = {}
+        try:
+            with openModTxtFile(cachedir+'files.json') as rfile:
+                self.jsonfilesbypath = json.load(rfile)
+        except Exception as e:
+            print('WARNING: error loading JSON cache archives.json: '+str(e)+'. Will continue w/o JSON cache')
+            self.jsonfilesbypath = {} # just in case            
+
+        print(str(len(self.jsonfilesbypath))+' JSON files')
+        timer.printAndReset('Loading JSON HashCache')
+
+        nmodified = Val(0)
+        nscanned = Cache._loadDir(downloadsdir,self.jsonarchivesbypath,self.archivesbypath,[],[],
+                                  lambda ar,updatednotadded: _diffArchive(self.jsonarchives,self.jsonarchivesbypath,nmodified,ar,updatednotadded)
+                                 )
+        assert(len(self.jsonarchives)==len(self.jsonarchivesbypath)) 
+        print('scanned/modified archives:'+str(nscanned)+'/'+str(nmodified)+', '+str(len(self.jsonarchives))+' JSON archives')
         timer.printAndReset('Scanning downloads')
-        #for key in self.downloads:
-        #    print(self.downloads[key].__dict__)
         
-        self.modifiedfiles = []
-        nscanned = Cache._loadDir(self.modifiedfiles,mo2,self.filesbypath,mo2excludefolders,mo2reincludefolders)
-        print('scanned/modified files:'+str(nscanned)+'/'+str(len(self.modifiedfiles)))
+        nmodified.val = 0
+        nscanned = Cache._loadDir(mo2,self.jsonfilesbypath,self.filesbypath,mo2excludefolders,mo2reincludefolders,
+                                  lambda ar,updatednotadded: _diffFile(self.jsonfilesbypath,nmodified,ar,updatednotadded)
+                                 )
+        print('scanned/modified files:'+str(nscanned)+'/'+str(nmodified)+', '+str(len(self.jsonfilesbypath))+' JSON files')
         timer.printAndReset('Scanning MO2')
 
-    def _loadDir(files,dir,dicttolook,excludefolders=[],reincludefolders=[]):
+    def _loadDir(dir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar):
         # print(excludefolders)
         # print(reincludefolders)
         nscanned = 0
@@ -153,20 +220,19 @@ class Cache:
 
                     tstamp = _getFileTimestamp(fpath)
                     # print(fpath)
-                    found = dicttolook.get(fpath.lower())
+                    found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath.lower()) # dicttolook.get(fpath.lower())
                     if found:
                         tstamp2 = found.archive_modified
                         # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
                         if _compareTimestamps(tstamp,_wjTimestampToPythonTimestamp(tstamp2))!=0:
-                            print('WARNING: '+fpath+' was updated since wj caching')
-                            files.append(wjdb.Archive(-1,tstamp,fpath))
+                            files.append(wjdb.Archive(-1,tstamp,fpath,True))
                     else:
-                        print('WARNING: '+fpath+' was added since wj caching')
-                        files.append(wjdb.Archive(-1,tstamp,fpath))
+                        files.append(wjdb.Archive(-1,tstamp,fpath,False))
             return nscanned
         else:
             # recursive one: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
             # still, after recent performance fix seems to win like 1.5x over os.walk-based one
+            ndup = 0
             for f in os.listdir(dir):
                 fpath = dir+f
                 st = os.lstat(fpath)
@@ -180,16 +246,15 @@ class Cache:
                     nscanned += 1
                     tstamp = _getFileTimestampFromSt(st)
                     # print(fpath)
-                    found = dicttolook.get(fpath.lower())
+                    found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath.lower()) # dicttolook.get(fpath.lower())
                     if found:
                         tstamp2 = found.archive_modified
                         # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
                         if _compareTimestamps(tstamp,_wjTimestampToPythonTimestamp(tstamp2))!=0:
-                            print('WARNING: '+fpath+' was updated since wj caching')
-                            files.append(wjdb.Archive(-1,tstamp,fpath))
+                            ndup += 1
+                            _diffFound(fpath,tstamp,addar,True)
                     else:
-                        print('WARNING: '+fpath+' was added since wj caching')
-                        files.append(wjdb.Archive(-1,tstamp,fpath))
+                        _diffFound(fpath,tstamp,addar,False)
                 # elif os.path.isdir(fpath):
                 elif stat.S_ISDIR(fmode):
                     newdir=fpath+'\\'
@@ -211,16 +276,16 @@ class Cache:
                     exclude = newdir in excludefolders
                     if exclude:
                         # print('Excluding '+newdir)
-                        for f2 in os.listdir(newdir):
-                            newdir2 = newdir + f2 
+                        for ff in os.listdir(newdir):
+                            newdir2 = newdir + ff 
                             if os.path.isdir(newdir2):
                                 newdir2 += '\\'
                                 # print(newdir2)
                                 if newdir2 in reincludefolders:
                                     # print('Re-including '+newdir2)
-                                    nscanned += Cache._loadDir(files,newdir2,dicttolook,excludefolders,reincludefolders)
+                                    nscanned += Cache._loadDir(newdir2,dicttolook,dicttolook2,excludefolders,reincludefolders,addar)
                     else:
-                        nscanned += Cache._loadDir(files,newdir,dicttolook,excludefolders,reincludefolders)
+                        nscanned += Cache._loadDir(newdir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar)
                 else:
                     print(fpath)
                     assert(False)
@@ -233,14 +298,14 @@ class Cache:
 
     def findArchive(self,fpath):
         fpath = normalizePath(fpath)
-        ar = self.downloadsbypath.get(fpath.lower())
+        ar = self.archivesbypath.get(fpath.lower())
         if ar == None:
             print("WARNING: path="+fpath+" NOT FOUND")
             return None
 
         hash=ar.archive_hash
         assert(hash>=0)
-        archive = self.downloads.get(hash)
+        archive = self.archives.get(hash)
         if archive == None:
             print("WARNING: archive with path="+fpath+" NOT FOUND")
             return None
@@ -262,7 +327,7 @@ class Cache:
         #print(archiveEntry.__dict__)
 
         ahash = archiveEntry.archive_hash
-        archive = self.downloads.get(ahash)
+        archive = self.archives.get(ahash)
         if archive == None:
             print("WARNING: archive with hash="+str(ahash)+" NOT FOUND")
             return None,None
@@ -271,7 +336,7 @@ class Cache:
          
     def dbgDump(self,folder):
         with open(folder+'downloads.txt', 'wt', encoding="utf-8") as f:
-            for hash in self.downloads:
+            for hash in self.archives:
                 f.write(str(hash)+':'+str(self.downloads[hash].__dict__)+'\n')
         with open(folder+'archiveentries.txt', 'wt', encoding="utf-8") as f:
             for hash in self.archiveEntries:

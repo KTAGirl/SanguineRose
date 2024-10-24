@@ -165,7 +165,6 @@ def loadHC(dirs):
     cur = con.cursor()
     nn = 0
     nfiltered = 0
-    ndup = 0
     for row in cur.execute('SELECT Path,LastModified,Hash FROM HashCache'):
         nn += 1
         idx = -1
@@ -180,17 +179,9 @@ def loadHC(dirs):
         
         newa = Archive(hash,row[1],row[0])
         # olda = out[idx].get(hash)
-        olda = dirs[idx][1](newa)
-        if olda!=None and not olda.eq(newa):
-            # print("TODO: multiple archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(newa.__dict__))
-            # wait = input("Press Enter to continue.")
-            ndup += 1
-            pass
-        else:
-            # out[idx][hash] = newa
-            dirs[idx][2](newa)
+        dirs[idx][1](newa)
     con.close()
-    print('loadHC: nn='+str(nn)+' filtered out:'+str(nfiltered)+' duplicate hashes:'+str(ndup))
+    print('loadHC: nn='+str(nn)+' filtered out:'+str(nfiltered))
     #+' sizes=[')
     #for o in out:
     #    print(len(o))

@@ -184,9 +184,11 @@ def wj2git(config):
                          _absDir(downloadsdir), # even if different from mo2+'downloads\\'
                          _absDir(mo2+'mods\\')]
     mo2reincludefolders = []
+    cachedir = config['cache']
+    os.makedirs(cachedir,exist_ok=True)
     for mod in modlist.allEnabled():
         mo2reincludefolders.append(_absDir(mo2+'mods\\'+mod+'\\'))
-    filecache = cache.Cache(_absDir(downloadsdir),_absDir(mo2),mo2excludefolders,mo2reincludefolders)
+    filecache = cache.Cache(_absDir(cachedir),_absDir(downloadsdir),_absDir(mo2),mo2excludefolders,mo2reincludefolders)
 
     allinstallfiles = {}
     todl = {}
