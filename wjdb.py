@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import binaryreader
 from w2gdebug import DEBUG
 from w2gdebug import dbgWait
-    
+
 class Img:
     def __init__(self,br):
         binaryreader.traceReader('Img:')
@@ -57,7 +57,7 @@ class HashedFile:
         s += ' }'
         return s
 
-def parseContents(hash,contents,gzipped=True):
+def _parseContents(hash,contents,gzipped=True):
     if gzipped:
         contents = gzip.decompress(contents)
     # print(contents)
@@ -116,7 +116,7 @@ def loadVFS(allinstallfiles,dbgfile=None):
     for row in cur.execute('SELECT Hash,Contents FROM VFSCache'): # WHERE Hash=-8778729428874073019"):
         contents = row[1]
 
-        hf = parseContents(row[0],contents)
+        hf = _parseContents(row[0],contents)
         nn += 1
         if hf == None:
             nx += 1
@@ -133,6 +133,9 @@ def loadVFS(allinstallfiles,dbgfile=None):
     print('loadVFS: nn='+str(nn)+' nx='+str(nx))
     return archiveEntries
 
+def _wjTimestampToPythonTimestamp(wjftime):
+    return (wjftime - 116444736000000000) / 10**7
+
 class Archive:
     def __init__(self,archive_hash,archive_modified,archive_path):
         self.archive_hash=archive_hash
@@ -148,8 +151,8 @@ class Archive:
             return False
         return True
         
-    def toJSON(self):
-        return json.dumps(self,default=lambda o: o.__dict__)
+    #def toJSON(self):
+    #    return json.dumps(self,default=lambda o: o.__dict__)
         
     def fromJSON(s):
         return json.loads(s, object_hook=lambda d: SimpleNamespace(**d))
@@ -185,7 +188,7 @@ def loadHC(dirs):
             continue
         hash = normalizeHash(row[2])
         
-        newa = Archive(hash,row[1],row[0])
+        newa = Archive(hash,_wjTimestampToPythonTimestamp(row[1]),row[0])
         # olda = out[idx].get(hash)
         dirs[idx][1](newa)
     con.close()

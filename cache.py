@@ -42,9 +42,6 @@ def _hcFoundFile(filesbypath,ndup,ar):
 
 ###
 
-def _wjTimestampToPythonTimestamp(wjftime):
-    return (wjftime - 116444736000000000) / 10**7
-
 def _getFileTimestamp(s):
     path = pathlib.Path(fname)
     return path.stat().st_mtime
@@ -111,7 +108,7 @@ def _getFromOneOfDicts(dicttolook,dicttolook2,key):
 def _diffFound(fpath,tstamp,addar,updatednotadded):
     # print(fpath)
     hash = _wjHash(fpath)
-    newa = wjdb.Archive(hash,tstamp,fpath)
+    newa = wjdb.Archive(hash,tstamp,fpath.lower())
     addar(newa,updatednotadded)
 
 def _diffArchive(jsonarchives,jsonarchivesbypath,nmodified,ar,updatednotadded):
@@ -135,6 +132,7 @@ def _dictOfArsFromJsonFile(path):
     with openModTxtFile(path) as rfile:
         for line in rfile:
             ar = wjdb.Archive.fromJSON(line)
+            # print(ar.__dict__)
             out[ar.archive_path] = ar
     return out
 
@@ -142,7 +140,8 @@ def _dictOfArsToJsonFile(path,ars):
     with openModTxtFileW(path) as wfile:
         for key in sorted(ars):
             ar = ars[key]
-            wfile.write(ar.toJSON()+'\n')
+            wfile.write('{"archive_hash":'+str(ar.archive_hash)+', "archive_modified": '+str(ar.archive_modified)+', "archive_path": '+escapeJSON(ar.archive_path)+'}\n')
+            # wfile.write(ar.towfile.write('JSON()+'\n')
 
 #############
 
@@ -245,7 +244,7 @@ class Cache:
                     if found:
                         tstamp2 = found.archive_modified
                         # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
-                        if _compareTimestamps(tstamp,_wjTimestampToPythonTimestamp(tstamp2))!=0:
+                        if _compareTimestamps(tstamp,tstamp2)!=0:
                             files.append(wjdb.Archive(-1,tstamp,fpath,True))
                     else:
                         files.append(wjdb.Archive(-1,tstamp,fpath,False))
@@ -253,7 +252,6 @@ class Cache:
         else:
             # recursive one: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
             # still, after recent performance fix seems to win like 1.5x over os.walk-based one
-            ndup = 0
             for f in os.listdir(dir):
                 fpath = dir+f
                 st = os.lstat(fpath)
@@ -271,8 +269,11 @@ class Cache:
                     if found:
                         tstamp2 = found.archive_modified
                         # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
-                        if _compareTimestamps(tstamp,_wjTimestampToPythonTimestamp(tstamp2))!=0:
-                            ndup += 1
+                        if _compareTimestamps(tstamp,tstamp2)!=0:
+                            #print(fpath+':'+str(tstamp)+'!='+str(tstamp2))
+                            #print(dicttolook.get(fpath.lower()))
+                            #print(dicttolook2.get(fpath.lower()).__dict__)
+                            #dbgWait()
                             _diffFound(fpath,tstamp,addar,True)
                     else:
                         _diffFound(fpath,tstamp,addar,False)
