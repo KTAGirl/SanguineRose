@@ -136,6 +136,9 @@ def loadVFS(allinstallfiles,dbgfile=None):
 def _wjTimestampToPythonTimestamp(wjftime):
     return (wjftime - 116444736000000000) / 10**7
 
+def escapeJSON(s):
+    return json.dumps(s)
+
 class Archive:
     def __init__(self,archive_hash,archive_modified,archive_path):
         self.archive_hash=archive_hash
@@ -150,12 +153,14 @@ class Archive:
         if self.archive_path != other.archive_path:
             return False
         return True
-        
-    #def toJSON(self):
-    #    return json.dumps(self,default=lambda o: o.__dict__)
-        
+                
     def fromJSON(s):
         return json.loads(s, object_hook=lambda d: SimpleNamespace(**d))
+
+    def toJSON(ar):
+        # works both for ar=Archive, and ar=SimpleNamespace
+        # for SimpleNamespace cannot use return json.dumps(self,default=lambda o: o.__dict__)
+        return '{"archive_hash":'+str(ar.archive_hash)+', "archive_modified": '+str(ar.archive_modified)+', "archive_path": '+escapeJSON(ar.archive_path)+'}'
 
 def loadHC(dirs):
     lodirs = []

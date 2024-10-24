@@ -10,6 +10,7 @@ from w2gdebug import dbgWait
 from modlist import openModTxtFile
 from modlist import openModTxtFileW
 import wjdb
+from wjdb import escapeJSON 
 
 def normalizePath(path):
     path = os.path.abspath(path)
@@ -124,8 +125,6 @@ def _diffFile(jsonfilesbypath,nmodified,ar,updatednotadded):
     jsonfilesbypath[ar.archive_path]=ar
     nmodified.val += 1
 
-def escapeJSON(s):
-    return json.dumps(s)
 
 def _dictOfArsFromJsonFile(path):
     out = {}
@@ -140,8 +139,7 @@ def _dictOfArsToJsonFile(path,ars):
     with openModTxtFileW(path) as wfile:
         for key in sorted(ars):
             ar = ars[key]
-            wfile.write('{"archive_hash":'+str(ar.archive_hash)+', "archive_modified": '+str(ar.archive_modified)+', "archive_path": '+escapeJSON(ar.archive_path)+'}\n')
-            # wfile.write(ar.towfile.write('JSON()+'\n')
+            wfile.write(wjdb.Archive.toJSON(ar)+'\n')
 
 #############
 
