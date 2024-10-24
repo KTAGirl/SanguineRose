@@ -3,6 +3,7 @@ import stat
 import pathlib
 import time
 import xxhash
+import json
 
 from w2gdebug import DEBUG
 from w2gdebug import dbgWait
@@ -125,7 +126,24 @@ def _diffFile(jsonfilesbypath,nmodified,ar,updatednotadded):
     print('WARNING: '+ar.archive_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
     jsonfilesbypath[ar.archive_path]=ar
     nmodified.val += 1
-    
+
+def escapeJSON(s):
+    return json.dumps(s)
+
+def _dictOfArsFromJsonFile(path):
+    out = {}
+    with openModTxtFile(path) as rfile:
+        for line in rfile:
+            ar = wjdb.Archive.fromJSON(line)
+            out[ar.archive_path] = ar
+    return out
+
+def _dictOfArsToJsonFile(path,ars):
+    with openModTxtFileW(path) as wfile:
+        for key in sorted(ars):
+            ar = ars[key]
+            wfile.write(ar.toJSON()+'\n')
+
 #############
 
 class Cache:
@@ -147,26 +165,24 @@ class Cache:
         timer.printAndReset('Loading WJ HashCache')
         
         # Loading JSON HashCache
-        self.jsonarchives = {}
-        try:
-            with openModTxtFile(cachedir+'archives.json') as rfile:
-                self.jsonarchives = json.load(rfile)
-        except Exception as e:
-            print('WARNING: error loading JSON cache archives.json: '+str(e)+'. Will continue w/o JSON cache')
-            self.jsonarchives = {} # just in case            
         self.jsonarchivesbypath = {}
-        for key in self.jsonarchives:
-            val = self.jsonarchives[key]
-            self.jsonarchivesbypath[val.archive_path] = val
+        try:
+            self.jsonarchivesbypath = _dictOfArsFromJsonFile(cachedir+'archives.njson')
+        except Exception as e:
+            print('WARNING: error loading JSON cache archives.json: '+str(e)+'. Will continue w/o archive JSON cache')
+            self.jsonarchivesbypath = {} # just in case            
+        self.jsonarchives = {}
+        for key in self.jsonarchivesbypath:
+            val = self.jsonarchivesbypath[key]
+            self.jsonarchives[val.archive_hash] = val
         assert(len(self.jsonarchives)==len(self.jsonarchivesbypath)) 
         print(str(len(self.jsonarchives))+' JSON archives')
 
         self.jsonfilesbypath = {}
         try:
-            with openModTxtFile(cachedir+'files.json') as rfile:
-                self.jsonfilesbypath = json.load(rfile)
+            self.jsonfilesbypath = _dictOfArsFromJsonFile(cachedir+'files.njson')
         except Exception as e:
-            print('WARNING: error loading JSON cache archives.json: '+str(e)+'. Will continue w/o JSON cache')
+            print('WARNING: error loading JSON cache files.json: '+str(e)+'. Will continue w/o file JSON cache')
             self.jsonfilesbypath = {} # just in case            
 
         print(str(len(self.jsonfilesbypath))+' JSON files')
@@ -186,6 +202,11 @@ class Cache:
                                  )
         print('scanned/modified files:'+str(nscanned)+'/'+str(nmodified)+', '+str(len(self.jsonfilesbypath))+' JSON files')
         timer.printAndReset('Scanning MO2')
+
+        # Writing JSON HashCache
+        _dictOfArsToJsonFile(cachedir+'archives.njson',self.jsonarchivesbypath)
+        _dictOfArsToJsonFile(cachedir+'files.njson',self.jsonfilesbypath)
+        timer.printAndReset('Writing JSON HashCache')
 
     def _loadDir(dir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar):
         # print(excludefolders)

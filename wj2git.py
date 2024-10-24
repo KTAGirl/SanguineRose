@@ -58,9 +58,6 @@ def isEslFlagged(filename):
 def loadFromCompilerSettings(config,stats,compiler_settings):
     config['modlistname']=compiler_settings['ModListName']
     stats['VERSION']=compiler_settings['Version']
-
-def escapeJSON(s):
-    return json.dumps(s)
         
 def allEsxs(mod,mo2):
     esxs = glob.glob(mo2+'mods/' + mod + '/*.esl')
@@ -282,7 +279,7 @@ def wj2git(config):
                     break
             if isown:
                 targetpath0 = targetdir + fpath
-                wfile.write( '    { "path":'+escapeJSON(fpath)+', "source":'+escapeJSON(targetpath0)+' }')
+                wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "source":'+cache.escapeJSON(targetpath0)+' }')
                 # dbgWait()
                 continue
             
@@ -303,18 +300,18 @@ def wj2git(config):
                         shutil.copyfile(srcpath,targetpath)
                         processed = True
                         # dbgWait()
-                        wfile.write( '    { "path":'+escapeJSON(fpath)+', "source":'+escapeJSON(targetpath0)+' }')
+                        wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "source":'+cache.escapeJSON(targetpath0)+' }')
                                 
                 if not processed:
-                    wfile.write( '    { "path":'+escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" }')
+                    wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" }')
                     nwarn += 1
             else:
-                wfile.write( '    { "path":'+escapeJSON(fpath)+', "hash":"'+str(archiveEntry.file_hash)+'", "size":"'+str(archiveEntry.file_hash)+'", "archive_hash":"'+str(archiveEntry.archive_hash)+'", "in_archive_path":[')
+                wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "hash":"'+str(archiveEntry.file_hash)+'", "size":"'+str(archiveEntry.file_hash)+'", "archive_hash":"'+str(archiveEntry.archive_hash)+'", "in_archive_path":[')
                 np = 0
                 for path in archiveEntry.intra_path:
                     if np:
                         wfile.write(',')
-                    wfile.write(escapeJSON(path))
+                    wfile.write(cache.escapeJSON(path))
                     np += 1
                 wfile.write(']')
                 

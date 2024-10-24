@@ -1,7 +1,9 @@
 import sqlite3
 import gzip
 import os
+import json
 import traceback
+from types import SimpleNamespace
 
 import binaryreader
 from w2gdebug import DEBUG
@@ -145,6 +147,12 @@ class Archive:
         if self.archive_path != other.archive_path:
             return False
         return True
+        
+    def toJSON(self):
+        return json.dumps(self,default=lambda o: o.__dict__)
+        
+    def fromJSON(s):
+        return json.loads(s, object_hook=lambda d: SimpleNamespace(**d))
 
 def loadHC(dirs):
     lodirs = []
