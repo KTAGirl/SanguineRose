@@ -177,6 +177,18 @@ def wj2git(config):
         altmodlists[profile] = modlist
 
     downloadsdir = config['downloads']
+    allarchivenames = []
+    todl = {}
+    for mod in modlist.allEnabled():
+        if mod in ownmods:
+            continue
+        installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,mo2)
+        if installfile:
+            fpath = downloadsdir+installfile
+            allarchivenames.append(cache.normalizePath(fpath))
+        if manualurl:
+            addToDictOfLists(todl,manualurl,prompt)
+
     mo2excludefolders = [_absDir(mo2+'downloads\\'), # even if downloadsdirs is different
                          _absDir(downloadsdir), # even if different from mo2+'downloads\\'
                          _absDir(mo2+'mods\\')]
@@ -185,47 +197,29 @@ def wj2git(config):
     os.makedirs(cachedir,exist_ok=True)
     for mod in modlist.allEnabled():
         mo2reincludefolders.append(_absDir(mo2+'mods\\'+mod+'\\'))
-    filecache = cache.Cache(_absDir(cachedir),_absDir(downloadsdir),_absDir(mo2),mo2excludefolders,mo2reincludefolders)
+    filecache = cache.Cache(allarchivenames,_absDir(cachedir),_absDir(downloadsdir),_absDir(mo2),mo2excludefolders,mo2reincludefolders,config.get('dbgdumpdb'))
 
     allinstallfiles = {}
-    todl = {}
-    for mod in modlist.allEnabled():
-        if mod in ownmods:
-            continue
-        installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,mo2)
-        if installfile:
-            # print('if='+installfile)
-            fpath = downloadsdir+installfile
-            #print('#?'+fpath)
-            #dbgWait()
-            # archive = wjdb.findArchive(chc,archives,fpath)
-            archive = filecache.findArchive(fpath)
-            if archive:
-                allinstallfiles[archive.archive_hash] = installfile
-            else:
-                print('WARNING: no archive found for '+installfile)
-        if manualurl:
-            addToDictOfLists(todl,manualurl,prompt)
+    for arname in allarchivenames:
+        archive = filecache.findArchive(arname)
+        if archive:
+            allinstallfiles[archive.archive_hash] = cache.denormalizePath(cache.normalizePath(downloadsdir)+'\\',arname)
+        else:
+            print('WARNING: no archive found for '+arname)
+    #print(allinstallfiles)
+    #dbgWait()
 
-    dbgfolder = config.get('dbgdumpdb')
-    if dbgfolder:
-        with open(dbgfolder+'loadvfs.txt','wt',encoding='utf-8') as fw:
-            filecache.loadVFS(allinstallfiles,fw)
-        filecache.dbgDump(dbgfolder)
-    else:
-        filecache.loadVFS(allinstallfiles)
-    
     files = []
     nn = 0
     for modname in allmods:
-            print("mod="+modname)
-            for dirpath, dirs, filenames in os.walk(mo2+'\\mods\\'+modname):
-                for filename in filenames:
-                    # print("file="+filename)
-                    nn += 1
-                    fpath = cache.normalizePath(os.path.join(dirpath,filename))
-                    assert(not os.path.islink(fpath))
-                    files.append(fpath)
+        print("mod="+modname)
+        for dirpath, dirs, filenames in os.walk(mo2+'\\mods\\'+modname):
+            for filename in filenames:
+                # print("file="+filename)
+                nn += 1
+                fpath = cache.normalizePath(os.path.join(dirpath,filename))
+                assert(not os.path.islink(fpath))
+                files.append(fpath)
 
     files.sort()
 

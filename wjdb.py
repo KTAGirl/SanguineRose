@@ -90,7 +90,15 @@ class ArchiveEntry:
         self.intra_path = intra_path
         self.file_size = file_size
         self.file_hash = file_hash
+        
+    def fromJSON(s):
+        return json.loads(s, object_hook=lambda d: SimpleNamespace(**d))
 
+    def toJSON(ar):
+        # works both for ar=ArchiveEntry, and ar=SimpleNamespace
+        # for SimpleNamespace cannot use return json.dumps(self,default=lambda o: o.__dict__)
+        return '{"archive_hash":'+str(ar.archive_hash)+', "intra_path": '+escapeJSON(ar.intra_path)+', "file_size": '+str(ar.file_size)+', "file_hash": '+str(ar.file_hash)+'}'
+        
 def aEntries(paths,hf,root_archive_hash):
     aes = []
     for child in hf.children:
@@ -105,7 +113,7 @@ def aEntries(paths,hf,root_archive_hash):
             #dbgWait()
     return aes
 
-def loadVFS(allinstallfiles,dbgfile=None):
+def loadVFS(allarchivehashes,dbgfile=None):
     home_dir = os.path.expanduser("~")
     con = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalVFSCache5.sqlite')
     cur = con.cursor()
@@ -113,7 +121,7 @@ def loadVFS(allinstallfiles,dbgfile=None):
     nn = 0
     nx = 0
     archiveEntries = {}
-    for row in cur.execute('SELECT Hash,Contents FROM VFSCache'): # WHERE Hash=-8778729428874073019"):
+    for row in cur.execute('SELECT Hash,Contents FROM VFSCache'): 
         contents = row[1]
 
         hf = _parseContents(row[0],contents)
@@ -127,7 +135,7 @@ def loadVFS(allinstallfiles,dbgfile=None):
                 dbgfile.write(str(hf.hash)+':'+hf.dbgString()+'\n')
             aes = aEntries([],hf,hf.hash)
             for ae in aes:
-                if archiveEntries.get(ae.file_hash) is None or allinstallfiles.get(ae.archive_hash):
+                if archiveEntries.get(ae.file_hash) is None or allarchivehashes.get(ae.archive_hash):
                     archiveEntries[ae.file_hash]=ae
     con.close()
     print('loadVFS: nn='+str(nn)+' nx='+str(nx))
