@@ -13,10 +13,10 @@ def _loadPlugins(plugindir,basecls,found):
     for py in glob.glob(thisdir+plugindir+'*.py'):
         # print(py)
         modulename = os.path.splitext(os.path.split(py)[1])[0]
-        if modulename == '__init__':
+        if modulename == '__init__' or modulename.startswith('_'):
             continue
         # print(modulename)
-        module = importlib.import_module('wj2git.plugins.archives.'+modulename)
+        module = importlib.import_module('wj2git.'+plugindir.replace('/','.')+modulename)
         ok = False
         for name, obj in inspect.getmembers(module):
             if inspect.isclass(obj):
