@@ -251,26 +251,26 @@ class Cache:
                 
         if dbgfolder:
             with open(dbgfolder+'loadvfs.txt','wt',encoding='utf-8') as dbgfile:
-                self.archiveEntries = wjdb.loadVFS(allarchivehashes,dbgfile) 
+                self.archiveentries = wjdb.loadVFS(allarchivehashes,dbgfile) 
         else:
-            self.archiveEntries = wjdb.loadVFS(allarchivehashes)            
+            self.archiveentries = wjdb.loadVFS(allarchivehashes)            
         timer.printAndReset('Loading WJ VFS')
         
         # Loading NJSON VFS Cache
-        self.jsonArchiveEntries = {}
+        self.jsonarchiveentries = {}
         try:
-            self.jsonArchiveEntries = _dictOfArEntriesFromJsonFile(self.cachedir+'archiveentries.njson')
+            self.jsonarchiveentries = _dictOfArEntriesFromJsonFile(self.cachedir+'archiveentries.njson')
         except Exception as e:
             print('WARNING: error loading JSON cache archiveentries.njson: '+str(e)+'. Will continue w/o archiveentries JSON cache')
-            self.jsonArchiveEntries = {} # just in case            
-        print(str(len(self.jsonArchiveEntries))+' JSON archiveentries')
+            self.jsonarchiveentries = {} # just in case            
+        print(str(len(self.jsonarchiveentries))+' JSON archiveentries')
         timer.printAndReset('Loading JSON archiveentries')
 
         ### Scanning
         # Scanning downloads
         nmodified = Val(0)
         nscanned = Cache._loadDir(downloadsdir,self.jsonarchivesbypath,self.archivesbypath,[],[],
-                                  lambda ar,updatednotadded: _diffArchive(self.jsonarchives,self.jsonarchivesbypath,self.jsonArchiveEntries,tmppathbase,nmodified,ar,updatednotadded)
+                                  lambda ar,updatednotadded: _diffArchive(self.jsonarchives,self.jsonarchivesbypath,self.jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded)
                                  )
         assert(len(self.jsonarchives)==len(self.jsonarchivesbypath)) 
         print('scanned/modified archives:'+str(nscanned)+'/'+str(nmodified)+', '+str(len(self.jsonarchives))+' JSON archives')
@@ -287,7 +287,7 @@ class Cache:
         ### Writing JSON HashCache
         _dictOfArsToJsonFile(self.cachedir+'archives.njson',self.jsonarchivesbypath)
         _dictOfArsToJsonFile(self.cachedir+'files.njson',self.jsonfilesbypath)
-        _dictOfArEntriesToJsonFile(self.cachedir+'archiveentries.njson',self.jsonArchiveEntries)
+        _dictOfArEntriesToJsonFile(self.cachedir+'archiveentries.njson',self.jsonarchiveentries)
         timer.printAndReset('Writing JSON HashCache')
         
     def _loadDir(dir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar):
@@ -363,8 +363,8 @@ class Cache:
 
         hash=ar.archive_hash
         assert(hash>=0)
-        #archiveEntry = self.archiveEntries.get(hash)
-        archiveEntry = _getFromOneOfDicts(self.jsonArchiveEntries,self.archiveEntries,hash)
+        #archiveEntry = self.archiveentries.get(hash)
+        archiveEntry = _getFromOneOfDicts(self.jsonarchiveentries,self.archiveentries,hash)
         if archiveEntry == None:
             print("WARNING: archiveEntry for path="+fpath+" with hash="+str(hash)+" NOT FOUND")
             return None,None
@@ -384,6 +384,6 @@ class Cache:
             for hash in self.archives:
                 f.write(str(hash)+':'+str(self.downloads[hash].__dict__)+'\n')
         with open(folder+'archiveentries.txt', 'wt', encoding="utf-8") as f:
-            for hash in self.archiveEntries:
-                f.write(str(hash)+':'+str(self.archiveEntries[hash].__dict__)+'\n')
+            for hash in self.archiveentries:
+                f.write(str(hash)+':'+str(self.archiveentries[hash].__dict__)+'\n')
                 
