@@ -9,7 +9,7 @@ import wj2git.binaryreader as binaryreader
 from wj2git.debug import DEBUG
 from wj2git.debug import dbgWait
 
-class Img:
+class _Img:
     def __init__(self,br):
         binaryreader.traceReader('Img:')
         self.w = br.ReadUint16()
@@ -22,13 +22,13 @@ class Img:
         return '{ w='+str(self.w)+' h='+str(self.h)+' mip='+str(self.mip)+' fmt='+str(self.fmt)+' phash=['+str(len(self.phash))+']}'
 
  
-class HashedFile:
+class _HashedFile:
     def __init__(self,br):
-        binaryreader.traceReader('HashedFile:')
+        binaryreader.traceReader('_HashedFile:')
         self.path = br.ReadString()
         self.hash = br.ReadUint64()
         if br.ReadBoolean():
-            self.img = Img(br)
+            self.img = _Img(br)
             # print(self.img.__dict__)
             # br.dbg()
         else:
@@ -39,7 +39,7 @@ class HashedFile:
         assert(n>=0)
         self.children = []
         for i in range(0,n):
-            self.children.append(HashedFile(br))
+            self.children.append(_HashedFile(br))
             
     def dbgString(self):
         s = '{ path='+self.path+' hash='+str(self.hash)
@@ -66,7 +66,7 @@ def _parseContents(hash,contents,gzipped=True):
     try:
         br = binaryreader.BinaryReader(contents)
         
-        hf = HashedFile(br)
+        hf = _HashedFile(br)
         assert(br.isEOF())
         # print(br.contents[br.offset:])
         # print(str(hash)+':'+hf.dbg())
