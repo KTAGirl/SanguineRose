@@ -187,10 +187,13 @@ def wj2git(config):
                          _absDir(mo2+'mods\\')]
     mo2reincludefolders = []
     cachedir = config['cache']
+    tmpbasepath = config.get('tmp')
+    if not tmpbasepath:
+        tmpbasepath = cachedir
     os.makedirs(cachedir,exist_ok=True)
     for mod in modlist.allEnabled():
         mo2reincludefolders.append(_absDir(mo2+'mods\\'+mod+'\\'))
-    filecache = cache.Cache(allarchivenames,_absDir(cachedir),_absDir(downloadsdir),_absDir(mo2),mo2excludefolders,mo2reincludefolders,config.get('dbgdumpdb'))
+    filecache = cache.Cache(allarchivenames,_absDir(cachedir),_absDir(downloadsdir),_absDir(mo2),mo2excludefolders,mo2reincludefolders,tmpbasepath,config.get('dbgdumpdb'))
 
     allinstallfiles = {}
     for arname in allarchivenames:

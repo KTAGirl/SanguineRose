@@ -102,37 +102,55 @@ def _diffFound(fpath,tstamp,addar,updatednotadded):
     newa = wjdb.Archive(hash,tstamp,fpath.lower())
     addar(newa,updatednotadded)
 
-def _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,nmodified,ar,updatednotadded):
+def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plugin,archivepath):
+    if not os.path.isdir(tmppath):
+        os.makedirs(tmppath)
+    plugin.extractAll(archivepath,tmppath)
+    #dbgWait()
+    exts = pluginhandler.allArchivePluginsExtensions()
+    for root, dirs, files in os.walk(tmppath):
+        nf = 0
+        for f in files:
+            nf += 1
+            fpath = os.path.join(root, f)
+            assert(os.path.isfile(fpath))
+            # print(fpath)
+            hash = _wjHash(fpath)
+            assert(fpath.startswith(tmppath))
+            intra_path = cur_intra_path.copy()
+            intra_path.append(fpath[len(tmppath):])
+            ae = wjdb.ArchiveEntry(archive_hash,intra_path,os.path.getsize(fpath),hash)
+            # print(ae.__dict__)
+            jsonarchiveentries[ae.file_hash]=ae
+
+            ext = os.path.split(fpath)[1].lower()
+            if ext in exts:
+                nested_plugin = pluginhandler.archivePluginFor(fpath)
+                assert(nested_plugin != None)
+                _archiveToEntries(jsonarchiveentries,archive_hash,tmppath + str(nf) + '/',intra_path,nested_plugin,fpath)
+
+def _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded):
     if ar.archive_path.endswith('.meta'):
         return
     print('WARNING: '+ar.archive_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
     jsonarchives[ar.archive_hash]=ar
     jsonarchivesbypath[ar.archive_path]=ar
     
-    tmppath = '../../tmp/' #TODO: move to config
+    tmproot = tmppathbase + 'tmp/'
+    if os.path.isdir(tmproot):
+        shutil.rmtree(tmproot)
+    os.makedirs(tmproot,exist_ok=True)
     plugin = pluginhandler.archivePluginFor(ar.archive_path)
+    #print(plugin)
+    #dbgWait()
     if plugin == None:
         print('WARNING: no archive plugin found for '+ar.archive_path)
     else:
-        if os.path.isdir(tmppath):
-            shutil.rmtree(tmppath)
-        os.makedirs(tmppath)
-        plugin.extractAll(ar.archive_path,tmppath)
-        for root, dirs, files in os.walk(tmppath):
-            for f in files:
-                fpath = os.path.join(root, f)
-                assert(os.path.isfile(fpath))
-                # print(fpath)
-                hash = _wjHash(fpath)
-                assert(fpath.startswith(tmppath))
-                intra_path = fpath[len(tmppath):]
-                ae = wjdb.ArchiveEntry(ar.archive_hash,intra_path,os.path.getsize(fpath),hash)
-                # print(ae.__dict__)
-                jsonarchiveentries[ae.file_hash]=ae
-        # dbgWait()
-        shutil.rmtree(tmppath)
+        _archiveToEntries(jsonarchiveentries,ar.archive_hash,tmproot,[],plugin,ar.archive_path)
+
+    shutil.rmtree(tmproot)
     nmodified.val += 1
-   
+  
 def _diffFile(jsonfilesbypath,nmodified,ar,updatednotadded):
     print('WARNING: '+ar.archive_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
     jsonfilesbypath[ar.archive_path]=ar
@@ -173,7 +191,7 @@ def _dictOfArEntriesToJsonFile(path,aes):
 #############
 
 class Cache:
-    def __init__(self,allarchivenames,cachedir,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders,dbgfolder):
+    def __init__(self,allarchivenames,cachedir,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders,tmppathbase,dbgfolder):
         self.cachedir = cachedir
         
         self.archives = {}
@@ -252,7 +270,7 @@ class Cache:
         # Scanning downloads
         nmodified = Val(0)
         nscanned = Cache._loadDir(downloadsdir,self.jsonarchivesbypath,self.archivesbypath,[],[],
-                                  lambda ar,updatednotadded: _diffArchive(self.jsonarchives,self.jsonarchivesbypath,self.jsonArchiveEntries,nmodified,ar,updatednotadded)
+                                  lambda ar,updatednotadded: _diffArchive(self.jsonarchives,self.jsonarchivesbypath,self.jsonArchiveEntries,tmppathbase,nmodified,ar,updatednotadded)
                                  )
         assert(len(self.jsonarchives)==len(self.jsonarchivesbypath)) 
         print('scanned/modified archives:'+str(nscanned)+'/'+str(nmodified)+', '+str(len(self.jsonarchives))+' JSON archives')
