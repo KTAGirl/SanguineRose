@@ -120,7 +120,7 @@ def loadVFS(allarchivehashes,dbgfile=None):
     # rowi = -1
     nn = 0
     nx = 0
-    archiveEntries = {}
+    archiveentries = {}
     for row in cur.execute('SELECT Hash,Contents FROM VFSCache'): 
         contents = row[1]
 
@@ -135,13 +135,16 @@ def loadVFS(allarchivehashes,dbgfile=None):
                 dbgfile.write(str(hf.hash)+':'+hf.dbgString()+'\n')
             aes = _aEntries([],hf,hf.hash)
             for ae in aes:
-                # print(ae.__dict__)
-                # dbgWait()
-                if archiveEntries.get(ae.file_hash) is None or allarchivehashes.get(ae.archive_hash):
-                    archiveEntries[ae.file_hash]=ae
+                #if archiveentries.get(ae.file_hash) is None or allarchivehashes.get(ae.archive_hash):
+                #    archiveentries[ae.file_hash]=ae
+                if allarchivehashes.get(ae.archive_hash) is not None:
+                    archiveentries[ae.file_hash]=ae
+                #else:
+                #    print('WARNING/loadVFS(): archive with hash='+str(ae.archive_hash)+' is not found')
+                
     con.close()
     print('loadVFS: nn='+str(nn)+' nx='+str(nx))
-    return archiveEntries
+    return archiveentries
 
 def _wjTimestampToPythonTimestamp(wjftime):
     return (wjftime - 116444736000000000) / 10**7
@@ -178,8 +181,6 @@ def loadHC(dirs):
         dirlo = dir[0].lower()
         lodirs.append(dirlo)
         for d2 in lodirs:
-            # print(d2)
-            # print(dirlo)
             if d2 == dirlo:
                 break
             assert(not dirlo.startswith(d2)) # if folders are overlapping, smaller one MUST go first
@@ -208,11 +209,7 @@ def loadHC(dirs):
         dirs[idx][1](newa)
     con.close()
     print('loadHC: nn='+str(nn)+' filtered out:'+str(nfiltered))
-    #+' sizes=[')
-    #for o in out:
-    #    print(len(o))
-    #print(']')
-    # return out
+
 
 
 
