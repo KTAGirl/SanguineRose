@@ -7,6 +7,7 @@ class ZipArchivePlugin(ArchivePluginBase):
         return ['.zip']
         
     def extract(self,archive,list_of_files,targetpath):
+        print('Extracting from '+archive+'...')
         z = zipfile.ZipFile(archive)
         names = z.namelist()
         lof_normalized = []
@@ -15,7 +16,6 @@ class ZipArchivePlugin(ArchivePluginBase):
             lof_normalized.append(normf)
             if normf not in names:
                 print('WARNING: '+f+' NOT FOUND in '+archive)
-        print('Extracting from '+archive+'...')
         out = []
         for f in lof_normalized:
             z.extract(f,path=targetpath)
@@ -24,6 +24,13 @@ class ZipArchivePlugin(ArchivePluginBase):
             else:
                 print('WARNING: '+f+' NOT EXTRACTED from '+archive)
                 out.append(None)
-        print('Extraction done')
         z.close()
+        print('Extraction done')
         return out
+        
+    def extractAll(self,archive,targetpath):
+        print('Extracting from '+archive+'...')
+        z = zipfile.ZipFile(archive)
+        z.extractAll(targetpath)
+        z.close()
+        print('Extraction done')

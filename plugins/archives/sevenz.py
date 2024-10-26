@@ -7,6 +7,7 @@ class SevenzArchivePlugin(ArchivePluginBase):
         return ['.7z']
         
     def extract(self,archive,list_of_files,targetpath):
+        print('Extracting from '+archive+'...')
         sevenz = py7zr.SevenZipFile(archive)
         names = sevenz.namelist()
         lof_normalized = []
@@ -15,7 +16,6 @@ class SevenzArchivePlugin(ArchivePluginBase):
             lof_normalized.append(normf)
             if normf not in names:
                 print('WARNING: '+f+' NOT FOUND in '+archive)
-        print('Extracting from '+archive+'...')
         sevenz.extract(path=targetpath,targets=lof_normalized)
         out = []
         for f in list_of_files:
@@ -24,6 +24,13 @@ class SevenzArchivePlugin(ArchivePluginBase):
             else:
                 print('WARNING: '+f+' NOT EXTRACTED from '+archive)
                 out.append(None)
-        print('Extraction done')
         sevenz.close()
+        print('Extraction done')
         return out
+        
+    def extractAll(self,archive,targetpath):
+        print('Extracting from '+archive+'...')
+        sevenz = py7zr.SevenZipFile(archive)
+        sevenz.extractall(path=targetpath)
+        sevenz.close()
+        print('Extraction done')

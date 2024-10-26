@@ -20,12 +20,6 @@ from wj2git.installfile import installfileModidManualUrlAndPrompt
 from wj2git.installfile import manualUrlAndPrompt
 import wj2git.pluginhandler
 
-# e = extract('..\\..\\mo2\\downloads\\1419098688_DeviousFollowers-ContinuedSEv2_14.5.7z',['Devious Followers - Continued SE v 2.14.5\\meshes\\armor\\shitty\\Blade\\9no1_0.nif'],'')
-# e = extract('..\\..\\mo2\\downloads\\SexLab Strapon 3BA SOS Bodyslide.zip',['data\\CalienteTools\\BodySlide\\ShapeData\\strapon 3BA SOS\\strapon 3BA SOS.nif'],'')
-# e = extract('..\\..\\mo2\\mods\\Suspicious City Guards\\suspiciouscityguards.bsa',['scripts\\source\\sf_scgalarmscene_0100690c.psc'],'.\\')
-# print(e)
-# dbgWait()
-
 ###
 
 if not sys.version_info >= (3, 10):
@@ -86,7 +80,6 @@ def writeManualDownloads(md,modlist,todl0,config):
 
         todl = todl | todl0
 
-
         rowidx = 1
         sorted_todl = dict(sorted(todl.items()))
         for manualurl in sorted_todl:
@@ -144,10 +137,6 @@ def _absDir(dir):
 ###
     
 def wj2git(config):
-    #contents=b''
-    #print(contents)
-    #parseContents(0,contents,False)
-    #dbgWait()
     mo2=config['mo2']
     compiler_settings_fname=config['compiler_settings']
     targetgithub=config['targetgithub']

@@ -2,8 +2,10 @@ import os
 import stat
 import pathlib
 import time
-import xxhash
 import json
+import shutil
+
+import xxhash
 
 from wj2git.debug import DEBUG
 from wj2git.debug import dbgWait
@@ -11,6 +13,7 @@ from wj2git.modlist import openModTxtFile
 from wj2git.modlist import openModTxtFileW
 import wj2git.wjdb as wjdb
 from wj2git.wjdb import escapeJSON 
+import wj2git.pluginhandler as pluginhandler
 
 def normalizePath(path):
     path = os.path.abspath(path)
@@ -99,12 +102,35 @@ def _diffFound(fpath,tstamp,addar,updatednotadded):
     newa = wjdb.Archive(hash,tstamp,fpath.lower())
     addar(newa,updatednotadded)
 
-def _diffArchive(jsonarchives,jsonarchivesbypath,nmodified,ar,updatednotadded):
+def _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,nmodified,ar,updatednotadded):
     if ar.archive_path.endswith('.meta'):
         return
     print('WARNING: '+ar.archive_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
     jsonarchives[ar.archive_hash]=ar
     jsonarchivesbypath[ar.archive_path]=ar
+    
+    tmppath = '../../tmp/' #TODO: move to config
+    plugin = pluginhandler.archivePluginFor(ar.archive_path)
+    if plugin == None:
+        print('WARNING: no archive plugin found for '+ar.archive_path)
+    else:
+        if os.path.isdir(tmppath):
+            shutil.rmtree(tmppath)
+        os.makedirs(tmppath)
+        plugin.extractAll(ar.archive_path,tmppath)
+        for root, dirs, files in os.walk(tmppath):
+            for f in files:
+                fpath = os.path.join(root, f)
+                assert(os.path.isfile(fpath))
+                # print(fpath)
+                hash = _wjHash(fpath)
+                assert(fpath.startswith(tmppath))
+                intra_path = fpath[len(tmppath):]
+                ae = wjdb.ArchiveEntry(ar.archive_hash,intra_path,os.path.getsize(fpath),hash)
+                # print(ae.__dict__)
+                jsonarchiveentries[ae.file_hash]=ae
+        # dbgWait()
+        shutil.rmtree(tmppath)
     nmodified.val += 1
    
 def _diffFile(jsonfilesbypath,nmodified,ar,updatednotadded):
@@ -226,7 +252,7 @@ class Cache:
         # Scanning downloads
         nmodified = Val(0)
         nscanned = Cache._loadDir(downloadsdir,self.jsonarchivesbypath,self.archivesbypath,[],[],
-                                  lambda ar,updatednotadded: _diffArchive(self.jsonarchives,self.jsonarchivesbypath,nmodified,ar,updatednotadded)
+                                  lambda ar,updatednotadded: _diffArchive(self.jsonarchives,self.jsonarchivesbypath,self.jsonArchiveEntries,nmodified,ar,updatednotadded)
                                  )
         assert(len(self.jsonarchives)==len(self.jsonarchivesbypath)) 
         print('scanned/modified archives:'+str(nscanned)+'/'+str(nmodified)+', '+str(len(self.jsonarchives))+' JSON archives')
@@ -243,6 +269,7 @@ class Cache:
         ### Writing JSON HashCache
         _dictOfArsToJsonFile(self.cachedir+'archives.njson',self.jsonarchivesbypath)
         _dictOfArsToJsonFile(self.cachedir+'files.njson',self.jsonfilesbypath)
+        _dictOfArEntriesToJsonFile(self.cachedir+'archiveentries.njson',self.jsonArchiveEntries)
         timer.printAndReset('Writing JSON HashCache')
         
     def _loadDir(dir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar):

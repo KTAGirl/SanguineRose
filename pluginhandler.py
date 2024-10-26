@@ -44,6 +44,10 @@ class ArchivePluginBase:
     # @abstractmethod
     def extract(self,archive,list_of_files,targetpath):
         pass
+        
+     # @abstractmethod
+    def extractAll(self,archive,targetpath):
+        pass
 
 def _foundArchivePlugin(archiveplugins,plugin):
     for ext in plugin.extensions():
@@ -53,3 +57,7 @@ archiveplugins = {} # file_extension -> ArchivePluginBase
 _loadPlugins('plugins/archives/',ArchivePluginBase,lambda plugin: _foundArchivePlugin(archiveplugins,plugin))
 print(archiveplugins)
 # dbgWait()
+
+def archivePluginFor(path):
+    ext=os.path.splitext(path)[1].lower()
+    return archiveplugins.get(ext)

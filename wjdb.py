@@ -99,13 +99,13 @@ class ArchiveEntry:
         # for SimpleNamespace cannot use return json.dumps(self,default=lambda o: o.__dict__)
         return '{"archive_hash":'+str(ar.archive_hash)+', "intra_path": '+escapeJSON(ar.intra_path)+', "file_size": '+str(ar.file_size)+', "file_hash": '+str(ar.file_hash)+'}'
         
-def aEntries(paths,hf,root_archive_hash):
+def _aEntries(paths,hf,root_archive_hash):
     aes = []
     for child in hf.children:
         cp = paths + [child.path]
         aes.append(ArchiveEntry(root_archive_hash,cp,child.size,child.hash))
         if len(child.children)>0:
-            aes2 = aes + aEntries(cp,child,root_archive_hash)
+            aes2 = aes + _aEntries(cp,child,root_archive_hash)
             aes = aes2
             #print('NESTED:')
             #for ae in aes:
@@ -133,8 +133,10 @@ def loadVFS(allarchivehashes,dbgfile=None):
         else:
             if dbgfile:
                 dbgfile.write(str(hf.hash)+':'+hf.dbgString()+'\n')
-            aes = aEntries([],hf,hf.hash)
+            aes = _aEntries([],hf,hf.hash)
             for ae in aes:
+                # print(ae.__dict__)
+                # dbgWait()
                 if archiveEntries.get(ae.file_hash) is None or allarchivehashes.get(ae.archive_hash):
                     archiveEntries[ae.file_hash]=ae
     con.close()

@@ -7,10 +7,10 @@ class BsaArchivePlugin(ArchivePluginBase):
         return ['.bsa']
         
     def extract(self,archive,list_of_files,targetpath):
+        print('Extracting from '+archive+'...')
         bsa = BSAArchive.parse_file(archive)
         # names = bsa.container.file_names
         # print(names)
-        print('Extracting from '+archive+'...')
         bsa.extract(targetpath)
         out = []
         for f in list_of_files:
@@ -21,3 +21,9 @@ class BsaArchivePlugin(ArchivePluginBase):
                 out.append(None)
         print('Extraction done')
         return out
+        
+    def extractAll(self,archive,targetpath):
+        print('Extracting from '+archive+'...')
+        bsa = BSAArchive.parse_file(archive)
+        bsa.extract(targetpath)
+        print('Extraction done')
