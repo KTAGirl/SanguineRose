@@ -164,15 +164,15 @@ def wj2git(config):
         allmods[mod]=1
     altmodlists = {}
     for profile in altprofilenames:
-        modlist = ModList(mo2+'profiles\\'+profile+'\\')
-        for mod in modlist.allEnabled():
+        aml = ModList(mo2+'profiles\\'+profile+'\\')
+        for mod in aml.allEnabled():
             allmods[mod]=1
-        altmodlists[profile] = modlist
+        altmodlists[profile] = aml
 
     downloadsdir = config['downloads']
     allarchivenames = []
     todl = {}
-    for mod in modlist.allEnabled():
+    for mod in mastermodlist.allEnabled():
         if mod in ownmods:
             continue
         installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,mo2)
@@ -191,8 +191,9 @@ def wj2git(config):
     if not tmpbasepath:
         tmpbasepath = cachedir
     os.makedirs(cachedir,exist_ok=True)
-    for mod in modlist.allEnabled():
+    for mod in mastermodlist.allEnabled():
         mo2reincludefolders.append(_absDir(mo2+'mods\\'+mod+'\\'))
+        #print('reincluded:'+mod)
     filecache = cache.Cache(allarchivenames,_absDir(cachedir),_absDir(downloadsdir),_absDir(mo2),mo2excludefolders,mo2reincludefolders,tmpbasepath,config.get('dbgdumpdb'))
 
     allinstallfiles = {}
@@ -333,7 +334,7 @@ def wj2git(config):
     # print(altmodlists)
     for profile in altmodlists:
         # print(profile)
-        modlist = altmodlists[profile]
+        ml = altmodlists[profile]
         fname = mo2+'profiles\\'+profile+'\\modlist.txt'
         targetfdir = targetgithub + targetdir + 'profiles\\'+profile+'\\'
         makeDirsForFile(targetfdir+'modlist.txt')
@@ -350,7 +351,7 @@ def wj2git(config):
 
             # section = ''
             filteredout = False
-            for mod in modlist.modlist:
+            for mod in ml.modlist:
                 separ = ModList.isSeparator(mod)
                 # print(separ)
                 if separ:
@@ -392,7 +393,7 @@ def wj2git(config):
                 if not isEslFlagged(esx):
                     print('WARNING: OPTIONAL '+esx+' is not esl-flagged')
 
-            modlist.writeDisablingIf(targetgithub+targetdir+'profiles\\'+profile+'\\', lambda mod: optionalmods_dict.get(mod))
+            ml.writeDisablingIf(targetgithub+targetdir+'profiles\\'+profile+'\\', lambda mod: optionalmods_dict.get(mod))
             _copyRestOfProfile(mo2,targetgithub + targetdir,profile)
 
     return compiler_settings,mastermodlist,todl,stats

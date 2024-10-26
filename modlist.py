@@ -7,11 +7,14 @@ def openModTxtFileW(fname):
 class ModList:
     def __init__(self,path):
         fname = path + 'modlist.txt'
+        # print(fname)
         self.modlist = None
         with openModTxtFile(fname) as rfile:
             self.modlist = [line.rstrip() for line in rfile]
         self.modlist = list(filter(lambda s: s.endswith('_separator') or not s.startswith('-'),self.modlist))
         self.modlist.reverse() # 'natural' order
+        # print(self.modlist)
+        # dbgWait()
 
     def write(self,path):
         fname = path + 'modlist.txt'

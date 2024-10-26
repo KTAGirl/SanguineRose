@@ -338,14 +338,16 @@ class Cache:
 
     def findArchive(self,fpath):
         fpath = normalizePath(fpath)
-        ar = self.archivesbypath.get(fpath.lower())
+        #ar = self.archivesbypath.get(fpath.lower())
+        ar = _getFromOneOfDicts(self.jsonarchivesbypath,self.archivesbypath,fpath.lower())
         if ar == None:
             print("WARNING: path="+fpath+" NOT FOUND")
             return None
 
         hash=ar.archive_hash
         assert(hash>=0)
-        archive = self.archives.get(hash)
+        #archive = self.archives.get(hash)
+        archive = _getFromOneOfDicts(self.jsonarchives,self.archives,hash)
         if archive == None:
             print("WARNING: archive with path="+fpath+" NOT FOUND")
             return None
@@ -353,21 +355,24 @@ class Cache:
         return archive
 
     def findFile(self,fpath):
-        ar = self.filesbypath.get(fpath.lower())
+        #ar = self.filesbypath.get(fpath.lower())
+        ar = _getFromOneOfDicts(self.jsonfilesbypath,self.filesbypath,fpath.lower())
         if ar == None:
             print("WARNING: path="+fpath+" NOT FOUND")
             return None,None
 
         hash=ar.archive_hash
         assert(hash>=0)
-        archiveEntry = self.archiveEntries.get(hash)
+        #archiveEntry = self.archiveEntries.get(hash)
+        archiveEntry = _getFromOneOfDicts(self.jsonArchiveEntries,self.archiveEntries,hash)
         if archiveEntry == None:
             print("WARNING: archiveEntry for path="+fpath+" with hash="+str(hash)+" NOT FOUND")
             return None,None
         #print(archiveEntry.__dict__)
 
         ahash = archiveEntry.archive_hash
-        archive = self.archives.get(ahash)
+        #archive = self.archives.get(ahash)
+        archive = _getFromOneOfDicts(self.jsonarchives,self.archives,ahash)
         if archive == None:
             print("WARNING: archive with hash="+str(ahash)+" NOT FOUND")
             return None,None
