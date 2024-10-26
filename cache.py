@@ -5,12 +5,12 @@ import time
 import xxhash
 import json
 
-from w2gdebug import DEBUG
-from w2gdebug import dbgWait
-from modlist import openModTxtFile
-from modlist import openModTxtFileW
-import wjdb
-from wjdb import escapeJSON 
+from wj2git.debug import DEBUG
+from wj2git.debug import dbgWait
+from wj2git.modlist import openModTxtFile
+from wj2git.modlist import openModTxtFileW
+import wj2git.wjdb as wjdb
+from wj2git.wjdb import escapeJSON 
 
 def normalizePath(path):
     path = os.path.abspath(path)

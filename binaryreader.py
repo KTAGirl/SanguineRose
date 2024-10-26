@@ -1,5 +1,5 @@
-from w2gdebug import DEBUG
-from w2gdebug import dbgWait
+from wj2git.debug import DEBUG
+from wj2git.debug import dbgWait
 
 def traceReader(x):
     # print("'"+str(x)+"'")
