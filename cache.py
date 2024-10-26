@@ -60,14 +60,6 @@ def _compareTimestamps(a,b):
         return 0
     return -1 if a < b else 1
 
-#last_modified = getFileTimestamp('..\\..\\mo2\\downloads\\1419098688_DeviousFollowers-ContinuedSEv2_14.5.7z')
-#print(last_modified)
-#wjts = wjTimestampToPythonTimestamp(133701668551156765)
-#print(wjts)
-#print(compareTimestamps(last_modified,wjts))
-#
-#dbgWait()
-
 def _wjHash(fname):
     h = xxhash.xxh64()
     blocksize = 1048576
@@ -78,15 +70,6 @@ def _wjHash(fname):
             assert(len(bb)<=blocksize)
             if len(bb) != blocksize:
                 return h.intdigest()
-
-# tohash = '..\\..\\mo2\\mods\\Suspicious City Guards\\suspiciouscityguards.bsa'
-# with open(tohash, 'rb') as rfile:
-#    data = rfile.read() 
-# h = xxhash.xxh64_intdigest(data)
-# print(h)
-# print(wjHash(tohash))
-#
-# dbgWait()
 
 class Elapsed:
     def __init__(self):
@@ -266,107 +249,47 @@ class Cache:
         # print(excludefolders)
         # print(reincludefolders)
         nscanned = 0
-        if False: #two equivalent implementations; after recent performance fix recursive one performs better 
-            # os.walk - based: we're scanning the whole tree at once, but cannot skip ignored parts
-            for dirpath, dirs, filenames in os.walk(dir):
-                for filename in filenames:
-                    # print(dirpath)
-                    dirpath1 = dirpath + '\\'
-                    exclude = False
-                    for x in excludefolders:
-                        if dirpath1.startswith(x):
-                            exclude = True
-                            break
-                    if exclude:
-                        for i in reincludefolders:
-                            if dirpath1.startswith(i):
-                                exclude = False
-                                break
-
-                    if exclude:
-                        continue
-
-                    nscanned += 1
-                    fpath = os.path.join(dirpath,filename)
-                    if DEBUG:
-                        # print(fpath)
-                        assert(normalizePath(fpath)==fpath) # if stands - remove all normalizations after os.walk, asserting under dbg.DBG
-                    assert(not os.path.islink(fpath))
-
-                    tstamp = _getFileTimestamp(fpath)
-                    # print(fpath)
-                    found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath.lower()) # dicttolook.get(fpath.lower())
-                    if found:
-                        tstamp2 = found.archive_modified
-                        # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
-                        if _compareTimestamps(tstamp,tstamp2)!=0:
-                            files.append(wjdb.Archive(-1,tstamp,fpath,True))
-                    else:
-                        files.append(wjdb.Archive(-1,tstamp,fpath,False))
-            return nscanned
-        else:
-            # recursive one: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
-            # still, after recent performance fix seems to win like 1.5x over os.walk-based one
-            for f in os.listdir(dir):
-                fpath = dir+f
-                st = os.lstat(fpath)
-                fmode = st.st_mode
-                # if os.path.isfile(fpath):
-                if stat.S_ISREG(fmode):
-                    #assert(not os.path.islink(fpath))
-                    assert(not stat.S_ISLNK(fmode))
-                    if DEBUG:
-                        assert(normalizePath(fpath)==fpath)
-                    nscanned += 1
-                    tstamp = _getFileTimestampFromSt(st)
-                    # print(fpath)
-                    found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath.lower()) # dicttolook.get(fpath.lower())
-                    if found:
-                        tstamp2 = found.archive_modified
-                        # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
-                        if _compareTimestamps(tstamp,tstamp2)!=0:
-                            #print(fpath+':'+str(tstamp)+'!='+str(tstamp2))
-                            #print(dicttolook.get(fpath.lower()))
-                            #print(dicttolook2.get(fpath.lower()).__dict__)
-                            #dbgWait()
-                            _diffFound(fpath,tstamp,addar,True)
-                    else:
-                        _diffFound(fpath,tstamp,addar,False)
-                # elif os.path.isdir(fpath):
-                elif stat.S_ISDIR(fmode):
-                    newdir=fpath+'\\'
-                    '''exclude = False
-                    for x in excludefolders:
-                        if newdir.startswith(x):
-                            exclude = True
-                            break
-                    if exclude:
-                        for i in reincludefolders:
-                            if newdir.startswith(i):
-                                exclude = False
-                                break
-                    '''
-                    # print(newdir)
-                    # if len(excludefolders):
-                    #    print(excludefolders[2])
-                    # print(newdir in excludefolders)
-                    exclude = newdir in excludefolders
-                    if exclude:
-                        # print('Excluding '+newdir)
-                        for ff in os.listdir(newdir):
-                            newdir2 = newdir + ff 
-                            if os.path.isdir(newdir2):
-                                newdir2 += '\\'
-                                # print(newdir2)
-                                if newdir2 in reincludefolders:
-                                    # print('Re-including '+newdir2)
-                                    nscanned += Cache._loadDir(newdir2,dicttolook,dicttolook2,excludefolders,reincludefolders,addar)
-                    else:
-                        nscanned += Cache._loadDir(newdir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar)
+        # recursive implementation: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
+        # still, after recent performance fix seems to win like 1.5x over os.walk-based one
+        for f in os.listdir(dir):
+            fpath = dir+f
+            st = os.lstat(fpath)
+            fmode = st.st_mode
+            if stat.S_ISREG(fmode):
+                #assert(not os.path.islink(fpath))
+                assert(not stat.S_ISLNK(fmode))
+                if DEBUG:
+                    assert(normalizePath(fpath)==fpath)
+                nscanned += 1
+                tstamp = _getFileTimestampFromSt(st)
+                # print(fpath)
+                found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath.lower()) # dicttolook.get(fpath.lower())
+                if found:
+                    tstamp2 = found.archive_modified
+                    # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
+                    if _compareTimestamps(tstamp,tstamp2)!=0:
+                        _diffFound(fpath,tstamp,addar,True)
                 else:
-                    print(fpath)
-                    assert(False)
-            return nscanned
+                    _diffFound(fpath,tstamp,addar,False)
+            elif stat.S_ISDIR(fmode):
+                newdir=fpath+'\\'
+                exclude = newdir in excludefolders
+                if exclude:
+                    # print('Excluding '+newdir)
+                    for ff in os.listdir(newdir):
+                        newdir2 = newdir + ff 
+                        if os.path.isdir(newdir2):
+                            newdir2 += '\\'
+                            # print(newdir2)
+                            if newdir2 in reincludefolders:
+                                # print('Re-including '+newdir2)
+                                nscanned += Cache._loadDir(newdir2,dicttolook,dicttolook2,excludefolders,reincludefolders,addar)
+                else:
+                    nscanned += Cache._loadDir(newdir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar)
+            else:
+                print(fpath)
+                assert(False)
+        return nscanned
 
     def findArchive(self,fpath):
         fpath = normalizePath(fpath)
