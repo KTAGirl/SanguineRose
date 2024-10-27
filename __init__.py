@@ -3,10 +3,6 @@ import time
 import os
 
 from mo2git.common import isEslFlagged, escapeJSON, openModTxtFile, openModTxtFileW, allEsxs
-# from mo2git.installfile import installfileModidManualUrlAndPrompt
-# from mo2git.mo2git import _mo2git as mo2git, _writeTxtFromTemplate as writeTxtFromTemplate
-# from mo2git.mo2git import _loadFromCompilerSettings as loadFromCompilerSettings, _statsFolderSize as statsFolderSize
-# from mo2git.mo2git import _writeManualDownloads as writeManualDownloads, _fillCompiledStats as fillCompiledStats
 import mo2git.mo2git as mo2git
 
 if not sys.version_info >= (3, 10):
@@ -22,9 +18,24 @@ def run(config):
     if argc >= 2:
         match argv[1].lower():
             case 'mo2git':
-                if argc == 2:
-                    mo2git._mo2git(config)
-                    ok = True
+                if argc >= 2:
+                    i = 2
+                    dbgdumpwjdb = None
+                    optionsok = True
+                    while i < len(argv):
+                        if argv[i].lower() == '-debug.dumpwjdb':
+                            if i+1 == len(argv):
+                                optionsok = False
+                                break
+                            else:
+                                dbgdumpwjdb = argv[i+1]
+                                i += 2
+                        else:
+                            optionsok = False
+                            break
+                    if optionsok:
+                        mo2git._mo2git(config,dbgdumpwjdb)
+                        ok = True
             case 'debug.modsizes':
                 if argc == 2:
                     mo2,modlist = mo2git.mo2AndMasterModList(config)
@@ -38,6 +49,6 @@ def run(config):
         print(exe+' took '+str(elapsed)+' sec')
     else:
         print('Usage:\n\t'
-               +exe+' mo2git\n\t'
+               +exe+' mo2git [-debug.dumpwjdb <target-folder>]\n\t'
                +exe+' debug.modsizes\n'
-             )      
+             )

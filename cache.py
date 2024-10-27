@@ -182,10 +182,6 @@ class Cache:
         print(str(len(self.archives))+' archives ('+str(ndupdl)+' duplicates), '+str(len(self.filesbypath))+' files ('+str(ndupf)+' duplicates)')
         timer.printAndReset('Loading WJ HashCache')
 
-        if dbgfolder:
-            dbgDmp(dbgfolder)
-            timer.printAndReset('Dumping dbgfolder')
-
         # Loading NJSON HashCache
         self.jsonarchivesbypath = {}
         try:
@@ -236,6 +232,10 @@ class Cache:
             self.jsonarchiveentries = {} # just in case            
         print(str(len(self.jsonarchiveentries))+' JSON archiveentries')
         timer.printAndReset('Loading JSON archiveentries')
+
+        if dbgfolder:
+            self.dbgDump(dbgfolder)
+            timer.printAndReset('Dumping dbgfolder')
 
         ### Scanning
         # Scanning downloads
@@ -351,9 +351,9 @@ class Cache:
         return archiveEntry, archive
          
     def dbgDump(self,folder):
-        with open(folder+'downloads.txt', 'wt', encoding="utf-8") as f:
+        with open(folder+'archives.txt', 'wt', encoding="utf-8") as f:
             for hash in self.archives:
-                f.write(str(hash)+':'+str(self.downloads[hash].__dict__)+'\n')
+                f.write(str(hash)+':'+str(self.archives[hash].__dict__)+'\n')
         with open(folder+'archiveentries.txt', 'wt', encoding="utf-8") as f:
             for hash in self.archiveentries:
                 f.write(str(hash)+':'+str(self.archiveentries[hash].__dict__)+'\n')
