@@ -1,28 +1,15 @@
 import os
 import stat
 import pathlib
-import time
 import json
 import shutil
 
 import xxhash
 
-from mo2git.debug import DEBUG
-from mo2git.debug import dbgWait
-from mo2git.modlist import openModTxtFile
-from mo2git.modlist import openModTxtFileW
+from mo2git.debug import *
+from mo2git.common import *
 import mo2git.wjdb as wjdb
-from mo2git.wjdb import escapeJSON 
 import mo2git.pluginhandler as pluginhandler
-
-def normalizePath(path):
-    path = os.path.abspath(path)
-    assert(path.find('/')<0)
-    return path
-
-def denormalizePath(base,path):
-    assert(path.startswith(base))
-    return path[len(base):]
 
 def _hcFoundDownload(archives,archivesbypath,ndup,ar):
     if ar.archive_path.endswith('.meta'):
@@ -73,22 +60,6 @@ def _wjHash(fname):
             assert(len(bb)<=blocksize)
             if len(bb) != blocksize:
                 return h.intdigest()
-
-class Elapsed:
-    def __init__(self):
-        self.t0 = time.perf_counter()
-        
-    def printAndReset(self,where):
-        t1 = time.perf_counter()
-        print(where+' took '+str(round(t1-self.t0,2))+'s')
-        self.t0 = t1
-
-class Val:
-    def __init__(self,initval):
-        self.val = initval
-        
-    def __str__(self):
-        return str(self.val)
 
 def _getFromOneOfDicts(dicttolook,dicttolook2,key):
     found = dicttolook.get(key)

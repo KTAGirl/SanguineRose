@@ -5,9 +5,9 @@ import json
 import traceback
 from types import SimpleNamespace
 
+from mo2git.debug import *
+from mo2git.common import *
 import mo2git.binaryreader as binaryreader
-from mo2git.debug import DEBUG
-from mo2git.debug import dbgWait
 
 class _Img:
     def __init__(self,br):
@@ -148,9 +148,6 @@ def loadVFS(allarchivehashes,dbgfile=None):
 
 def _wjTimestampToPythonTimestamp(wjftime):
     return (wjftime - 116444736000000000) / 10**7
-
-def escapeJSON(s):
-    return json.dumps(s)
 
 class Archive:
     def __init__(self,archive_hash,archive_modified,archive_path):

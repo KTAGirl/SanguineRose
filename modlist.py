@@ -1,8 +1,4 @@
-def openModTxtFile(fname):
-    return open(fname,'rt',encoding='cp1252',errors='replace')
-
-def openModTxtFileW(fname):
-    return open(fname,'wt',encoding='cp1252')
+from mo2git.common import *
 
 class ModList:
     def __init__(self,path):
