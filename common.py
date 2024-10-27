@@ -36,7 +36,11 @@ def folderSize(rootpath):
             assert(not os.path.islink(fp))
             total += os.path.getsize(fp)
     return total
-        
+
+def isEsx(path):
+    ext = os.path.splitext(path)[1].lower()
+    return ext == '.esl' or ext == '.esp' or ext == '.esm'
+
 def allEsxs(mod,mo2):
     esxs = glob.glob(mo2+'mods/' + mod + '/*.esl')
     esxs = esxs + glob.glob(mo2+'mods/' + mod + '/*.esp')

@@ -1,17 +1,57 @@
 import sys
 import time
+import os
 
 from mo2git.common import isEslFlagged, escapeJSON, openModTxtFile, openModTxtFileW, allEsxs
-from mo2git.installfile import installfileModidManualUrlAndPrompt
-from mo2git.mo2git import _mo2git as mo2git, _writeTxtFromTemplate as writeTxtFromTemplate
-from mo2git.mo2git import _loadFromCompilerSettings as loadFromCompilerSettings, _statsFolderSize as statsFolderSize
-from mo2git.mo2git import _writeManualDownloads as writeManualDownloads, _fillCompiledStats as fillCompiledStats
+# from mo2git.installfile import installfileModidManualUrlAndPrompt
+# from mo2git.mo2git import _mo2git as mo2git, _writeTxtFromTemplate as writeTxtFromTemplate
+# from mo2git.mo2git import _loadFromCompilerSettings as loadFromCompilerSettings, _statsFolderSize as statsFolderSize
+# from mo2git.mo2git import _writeManualDownloads as writeManualDownloads, _fillCompiledStats as fillCompiledStats
+import mo2git.mo2git as mo2git
 
 if not sys.version_info >= (3, 10):
     print('Sorry, mo2git needs at least Python 3.10')
     sys.exit(4) # why not?
     
-_mo2gitLoadedAt = time.perf_counter()
+def run(config):
+    argv = sys.argv
+    argc = len(argv)
+    # print(argv)
+    ok = False
+    started = time.perf_counter()    
+    if argc >= 2:
+        match argv[1].lower():
+            case 'mo2git':
+                if argc == 2:
+                    mo2 = config['mo2']
+                    compiler_settings,modlist,todl,stats = mo2git._mo2git(config)
+                    mo2git._loadFromCompilerSettings(config,stats,compiler_settings)
 
-def elapsedTime():
-    return round(time.perf_counter()-_mo2gitLoadedAt,2)
+                    stats['ACTIVEMODS'] = sum(1 for i in modlist.allEnabled())
+
+                    mo2git._writeManualDownloads('manualdl.md',modlist,todl,config)
+                        
+                    # more stats
+                    mo2git._fillCompiledStats(stats,'../../KTA/Kick Their Ass.wabbajack.meta.json')
+                    stats['BODYSLIDESZ'] = mo2git._statsFolderSize(mo2+'mods/BodySlide Output')
+
+                    # generating README.md
+                    mo2git._writeTxtFromTemplate('README-template.md','README.md',stats)
+
+                    ok = True
+            case 'debug.modsizes':
+                if argc == 2:
+                    mo2,modlist = mo2git.mo2AndMasterModList(config)
+                    sizes = mo2git.enabledModSizes(modlist,mo2)
+                    print(sizes)
+                    ok = True
+
+    exe = os.path.split(argv[0])[1]
+    if ok:
+        elapsed = round(time.perf_counter()-started,2)
+        print(exe+' took '+str(elapsed)+' sec')
+    else:
+        print('Usage:\n\t'
+               +exe+' mo2git\n\t'
+               +exe+' debug.modsizes\n'
+             )      

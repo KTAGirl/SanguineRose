@@ -10,6 +10,25 @@ from mo2git.installfile import installfileModidManualUrlAndPrompt
 from mo2git.installfile import manualUrlAndPrompt
 from mo2git.common import *
 
+def mo2AndMasterModList(config):
+    mo2,compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _mo2AndCSAndMasterModList(config)
+    return mo2,mastermodlist
+
+def _mo2AndCSAndMasterModList(config):
+    mo2=config['mo2']
+    compiler_settings_fname=config['compiler_settings']
+    with openModTxtFile(mo2+compiler_settings_fname) as rfile:
+        compiler_settings = json.load(rfile)
+    masterprofilename=compiler_settings['Profile']
+    return mo2,compiler_settings_fname,compiler_settings,masterprofilename,ModList(mo2+'profiles\\'+masterprofilename+'\\')
+
+def enabledModSizes(modlist,mo2):
+    sizes=[]
+    for mod in modlist.allEnabled():
+        sizes.append([mod,round(folderSize(mo2+'mods/'+mod)/1000000,2)])
+    sizes.sort(key=lambda x: x[1])
+    return sizes
+    
 def _writeManualDownloads(md,modlist,todl0,config):
     mo2 = config['mo2']
     toolinstallfiles = config['toolinstallfiles']
@@ -65,42 +84,29 @@ def _writeTxtFromTemplate(template,target,stats):
 def _statsFolderSize(folder):
     return f"{folderSize(folder)/1e9:.1f}G"    
 
-def _enabledModSizes(modlist,mo2):
-    sizes=[]
-    for mod in modlist.allEnabled():
-        sizes.append([mod,round(folderSize(mo2+'mods/'+mod)/1000000,2)])
-    sizes.sort(key=lambda x: x[1])
-    return sizes
-
 def _copyRestOfProfile(mo2,fulltargetdir,profilename):
     srcfdir = mo2+'profiles\\'+profilename+'\\'
     targetfdir = fulltargetdir + 'profiles\\'+profilename+'\\'
     shutil.copyfile(srcfdir+'loadorder.txt',targetfdir+'loadorder.txt')
-    
+
 def _mo2git(config):
-    mo2=config['mo2']
-    compiler_settings_fname=config['compiler_settings']
+    mo2,compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _mo2AndCSAndMasterModList(config)
     targetgithub=config['targetgithub']
     ownmods=config['ownmods']
     
     targetdir = 'MO2\\'
     stats = {}
-
-    with openModTxtFile(mo2+compiler_settings_fname) as rfile:
-        compiler_settings = json.load(rfile)
     
     # writing beautified compiler settings
     target_settings = targetgithub + targetdir + compiler_settings_fname
     makeDirsForFile(target_settings)
     with openModTxtFileW(target_settings) as wfile:
         json.dump(compiler_settings, wfile, sort_keys=True, indent=4)
-    
-    masterprofilename=compiler_settings['Profile']
+
     altprofilenames=compiler_settings['AdditionalProfiles']
     print("Processing profiles: "+masterprofilename+","+str(altprofilenames))
 
     allmods = {}
-    mastermodlist = ModList(mo2+'profiles\\'+masterprofilename+'\\')
     for mod in mastermodlist.allEnabled():
         allmods[mod]=1
     altmodlists = {}
@@ -171,6 +177,7 @@ def _mo2git(config):
         shutil.rmtree(modsdir)
     # dbgWait()
 
+    nesx = 0
     with open(targetgithub+'master.json','wt',encoding="utf-8") as wfile:
         wfile.write('{ "archives": [\n')
         na = 0
@@ -199,6 +206,9 @@ def _mo2git(config):
             if nf:
                 wfile.write(",\n")
             nf += 1
+            
+            if isEsx(fpath):
+                nesx += 1
             
             isown = False
             # print(fpath)
@@ -255,6 +265,7 @@ def _mo2git(config):
         wfile.write('\n]}\n')
                 
     print("nn="+str(nn)+" nwarn="+str(nwarn))
+    stats['ESXS'] = nesx
 
     #validating json
     if DEBUG:
