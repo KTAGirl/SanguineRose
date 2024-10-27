@@ -23,21 +23,7 @@ def run(config):
         match argv[1].lower():
             case 'mo2git':
                 if argc == 2:
-                    mo2 = config['mo2']
-                    compiler_settings,modlist,todl,stats = mo2git._mo2git(config)
-                    mo2git._loadFromCompilerSettings(config,stats,compiler_settings)
-
-                    stats['ACTIVEMODS'] = sum(1 for i in modlist.allEnabled())
-
-                    mo2git._writeManualDownloads('manualdl.md',modlist,todl,config)
-                        
-                    # more stats
-                    mo2git._fillCompiledStats(stats,'../../KTA/Kick Their Ass.wabbajack.meta.json')
-                    stats['BODYSLIDESZ'] = mo2git._statsFolderSize(mo2+'mods/BodySlide Output')
-
-                    # generating README.md
-                    mo2git._writeTxtFromTemplate('README-template.md','README.md',stats)
-
+                    mo2git._mo2git(config)
                     ok = True
             case 'debug.modsizes':
                 if argc == 2:

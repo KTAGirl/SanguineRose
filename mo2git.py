@@ -348,4 +348,22 @@ def _mo2git(config):
             ml.writeDisablingIf(targetgithub+targetdir+'profiles\\'+profile+'\\', lambda mod: optionalmods_dict.get(mod))
             _copyRestOfProfile(mo2,targetgithub + targetdir,profile)
 
-    return compiler_settings,mastermodlist,todl,stats
+    _loadFromCompilerSettings(config,stats,compiler_settings)
+
+    stats['ACTIVEMODS'] = sum(1 for i in mastermodlist.allEnabled())
+
+    _writeManualDownloads(targetgithub+'manualdl.md',mastermodlist,todl,config)
+        
+    # more stats
+    wjcompiled = config.get('wjcompiled')
+    if wjcompiled:
+        _fillCompiledStats(stats,wjcompiled)
+    statsmods = config.get('statsmods')
+    if statsmods:
+        for stmod in statsmods:
+            stats[stmod+'.SIZE']=_statsFolderSize(mo2+'mods/'+stmod)
+
+    # generating README.md
+    _writeTxtFromTemplate('README-template.md','README.md',stats)
+
+    # return compiler_settings,mastermodlist,todl,stats
