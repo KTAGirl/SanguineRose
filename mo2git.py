@@ -189,7 +189,9 @@ def _mo2git(config):
                     break
             if isown:
                 targetpath0 = targetdir + fpath
-                wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "source":'+cache.escapeJSON(targetpath0)+' }')
+                fpath1 = mo2+fpath
+                hash = cache._wjHash(fpath1)
+                wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "hash":'+str(hash)+', "source":'+cache.escapeJSON(targetpath0)+' }')
                 # dbgWait()
                 continue
             

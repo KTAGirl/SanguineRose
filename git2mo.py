@@ -26,8 +26,6 @@ def _git2mo(config):
         if incachear is None:
             nwarn += 1
         else:
-            if fentry.get('source') is not None:
-                continue
             #print(fentry)
             if incachearentry.file_hash != fentry['hash']:
                 print('WARNING: master.json hash '+str(fentry['hash'])+' != cache hash '+str(incachearentry.file_hash)
