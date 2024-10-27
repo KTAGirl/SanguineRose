@@ -4,11 +4,11 @@ import shutil
 
 from mo2git.debug import *
 from mo2git.common import *
-import mo2git.cache as cache
 from mo2git.modlist import ModList
-from mo2git.installfile import installfileModidManualUrlAndPrompt
 from mo2git.installfile import manualUrlAndPrompt
 from mo2git.common import *
+from mo2git.common2 import _openCache
+import mo2git.cache as cache
 
 def mo2AndMasterModList(config):
     mo2,compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _mo2AndCSAndMasterModList(config)
@@ -93,6 +93,7 @@ def _mo2git(config,dbgdumpwjdb):
     mo2,compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _mo2AndCSAndMasterModList(config)
     targetgithub=config['targetgithub']
     ownmods=config['ownmods']
+    downloadsdir = config['downloads']
     
     targetdir = 'MO2\\'
     stats = {}
@@ -116,32 +117,7 @@ def _mo2git(config,dbgdumpwjdb):
             allmods[mod]=1
         altmodlists[profile] = aml
 
-    downloadsdir = config['downloads']
-    allarchivenames = []
-    todl = {}
-    for mod in mastermodlist.allEnabled():
-        if mod in ownmods:
-            continue
-        installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,mo2)
-        if installfile:
-            fpath = downloadsdir+installfile
-            allarchivenames.append(cache.normalizePath(fpath))
-        if manualurl:
-            addToDictOfLists(todl,manualurl,prompt)
-
-    mo2excludefolders = [absDir(mo2+'downloads\\'), # even if downloadsdirs is different
-                         absDir(downloadsdir), # even if different from mo2+'downloads\\'
-                         absDir(mo2+'mods\\')]
-    mo2reincludefolders = []
-    cachedir = config['cache']
-    tmpbasepath = config.get('tmp')
-    if not tmpbasepath:
-        tmpbasepath = cachedir
-    os.makedirs(cachedir,exist_ok=True)
-    for mod in mastermodlist.allEnabled():
-        mo2reincludefolders.append(absDir(mo2+'mods\\'+mod+'\\'))
-        #print('reincluded:'+mod)
-    filecache = cache.Cache(allarchivenames,absDir(cachedir),absDir(downloadsdir),absDir(mo2),mo2excludefolders,mo2reincludefolders,tmpbasepath,dbgdumpwjdb)
+    todl,allarchivenames,filecache = _openCache(config,mastermodlist,dbgdumpwjdb)
 
     allinstallfiles = {}
     for arname in allarchivenames:

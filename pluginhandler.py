@@ -56,11 +56,11 @@ def _foundArchivePlugin(archiveplugins,plugin):
 archiveplugins = {} # file_extension -> ArchivePluginBase
 archiveexts = []
 _loadPlugins('plugins/archives/',ArchivePluginBase,lambda plugin: _foundArchivePlugin(archiveplugins,plugin))
-print(archiveplugins)
+#print(archiveplugins)
 for ext in archiveplugins:
     assert(ext not in archiveexts)
     archiveexts.append(ext)
-print(archiveexts)
+#print(archiveexts)
 # dbgWait()
 
 def archivePluginFor(path):
