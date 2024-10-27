@@ -2,7 +2,8 @@ import sys
 import time
 import os
 
-from mo2git.common import isEslFlagged, escapeJSON, openModTxtFile, openModTxtFileW, allEsxs
+# from mo2git.common import isEslFlagged, escapeJSON, openModTxtFile, openModTxtFileW, allEsxs
+from mo2git.common import isEslFlagged, scriptDirFrom__file__
 import mo2git.mo2git as mo2git
 
 if not sys.version_info >= (3, 10):

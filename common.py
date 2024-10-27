@@ -76,3 +76,6 @@ class Val:
         
     def __str__(self):
         return str(self.val)
+        
+def scriptDirFrom__file__(file):
+    return os.path.split(os.path.abspath(file))[0] + '\\'
