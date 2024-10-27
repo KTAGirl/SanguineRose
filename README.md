@@ -1,16 +1,16 @@
 # mo2git
 
-Hey there! **mo2git** is a bunch of Python scripts to help you collaborate on MO2 modlists using GitHub. It’s made to work with Wabbajack, but I’m hoping it’ll eventually run on its own (still figuring out the speed).
+**mo2git** is a collection of Python scripts designed to help you work together on Mod Organizer 2 (MO2) modlists using GitHub. It currently works with Wabbajack, but I hope it will eventually run on its own (I’m still working on improving the speed).
 
-## Just a heads-up: This project is a Work In Progress! Not ready for action yet. Check out the features I'm planning below.
+## This project is a Work In Progress! It’s not ready to use yet. Descriptiob below is about the features I'm planning.
 
 ## Philosophy
 
-**mo2git** is a companion to MO2, making it easy to team up on modlists using GitHub. Think of it like Wabbajack, but mo2git uses a text file format that's GitHub-friendly. Plus, it supports having the tools right in your modlist and running them on user's system. Why make user download all those BodySlide-generated meshes or DDSOot-optimized textures when you can just run BodySlide or DDSOpt locally on their box? (While it means you need Bodyslide included with the install, it’ll still save tons of space compared to downloading gigabytes of meshes!). And being smaller means being more GiuHub-friendly too!
+**mo2git** is a helpful tool for MO2 users that makes it easy to collaborate on modlists using GitHub. You can think of it like Wabbajack, but mo2git uses a text format that works well with GitHub. It also allows you to run tools directly on a user’s computer, instead of making them download lots of files, like BodySlide-generated meshes or DDSOpt-optimized textures. This way, users will run BodySlide or DDSOpt on their own systems, saving lots of download time since they won’t have to download those gigabytes of files! And the image being smaller makes it easier to share on GitHub too!
 
-In short, mo2git means that multiple people can work on different parts of the mod list without stepping on each other’s toes. You’ll get change tracking, pull requests, and all the other cool features that come with Git and GitHub! ❗😀
+In short, mo2git lets multiple people work on different parts of a mod list without interfering with each other. You’ll have features like change tracking and pull requests, which are great for teamwork! ❗😀
 
-Right now, mo2git relies on Wabbajack’s hashing and install image generation. I’m planning to keep this integration, but eventually, I want mo2git to stand on its own. **That’ll let you share modlists with paid mods, which isn’t allowed with Wabbajack’s license.** Just a heads-up, though: mo2git’s hashing and image generation are slower than Wabbajack’s, so we’ll definitely keep the integration going for a while.
+Currently, mo2git uses Wabbajack for hashing and creating end-user images. I plan to keep this connection for now, but I want mo2git to eventually work on its own. This will allow sharing modlists that include paid mods, which isn’t allowed by Wabbajack. Just so you know, mo2git’s hashing and image creation are currently much slower than Wabbajack’s, so we will keep using WJ for a while.
 
 ### Similarities with Wabbajack
 
@@ -25,8 +25,8 @@ Right now, mo2git relies on Wabbajack’s hashing and install image generation. 
 
 ### Downsides Compared to Wabbajack
 
-- No UI. If you or someone else wants to whip up a companion GitHub project with a UI for mo2git, that’d be awesome! I’m all in for supporting that (providing non-UI Python functions in mo2git) as long as your project is under a permissive license.
-- Slower performance when hashing and installing. I plan to speed things up by parallelizing some tasks, but, let’s be real, competing with C# in Python is tough.
+- No User Interface (UI): If you or someone else wants to create a GitHub project with a UI for mo2git, that would be great! I’m happy to support that by providing non-UI functions in mo2git, as long as your project uses a friendly license.
+- Slower Performance: Right now, mo2git is slower when hashing and installing. I plan to make it faster by running some tasks in parallel, but let’s be honest, it’s challenging to compete with C# when using Python.
 
 ## Prerequisites
 
