@@ -157,7 +157,7 @@ def _mo2git(config):
             if na:
                 wfile.write(",\n")
             na += 1
-            wfile.write('    { "name": "'+str(f[0])+'", "hash": "'+str(f[1])+'" }')
+            wfile.write('    { "name": "'+str(f[0])+'", "hash": '+str(f[1])+' }')
         wfile.write('\n], "files": [\n')
         nf = 0
         for fpath0 in files:            
