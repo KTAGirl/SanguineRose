@@ -1,6 +1,6 @@
 import zipfile
 
-from wj2git.pluginhandler import ArchivePluginBase
+from mo2git.pluginhandler import ArchivePluginBase
 
 class ZipArchivePlugin(ArchivePluginBase):
     def extensions(self):

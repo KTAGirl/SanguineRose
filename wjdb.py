@@ -5,9 +5,9 @@ import json
 import traceback
 from types import SimpleNamespace
 
-import wj2git.binaryreader as binaryreader
-from wj2git.debug import DEBUG
-from wj2git.debug import dbgWait
+import mo2git.binaryreader as binaryreader
+from mo2git.debug import DEBUG
+from mo2git.debug import dbgWait
 
 class _Img:
     def __init__(self,br):

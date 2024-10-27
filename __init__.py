@@ -10,23 +10,23 @@ import time
 # import xxhash
 
 # import wjdb
-import wj2git.cache as cache
-from wj2git.debug import DEBUG
-from wj2git.debug import dbgWait
-from wj2git.modlist import openModTxtFile
-from wj2git.modlist import openModTxtFileW
-from wj2git.modlist import ModList
-from wj2git.installfile import installfileModidManualUrlAndPrompt
-from wj2git.installfile import manualUrlAndPrompt
-import wj2git.pluginhandler
+import mo2git.cache as cache
+from mo2git.debug import DEBUG
+from mo2git.debug import dbgWait
+from mo2git.modlist import openModTxtFile
+from mo2git.modlist import openModTxtFileW
+from mo2git.modlist import ModList
+from mo2git.installfile import installfileModidManualUrlAndPrompt
+from mo2git.installfile import manualUrlAndPrompt
+import mo2git.pluginhandler
 
 ###
 
 if not sys.version_info >= (3, 10):
-    print('Sorry, wj2git needs at least Python 3.10')
+    print('Sorry, mo2git needs at least Python 3.10')
     sys.exit(42)
     
-wj2gitLoadedAt = time.perf_counter()
+mo2gitLoadedAt = time.perf_counter()
 
 ###
 
@@ -127,7 +127,7 @@ def _copyRestOfProfile(mo2,fulltargetdir,profilename):
     shutil.copyfile(srcfdir+'loadorder.txt',targetfdir+'loadorder.txt')
     
 def elapsedTime():
-    return round(time.perf_counter()-wj2gitLoadedAt,2)
+    return round(time.perf_counter()-mo2gitLoadedAt,2)
 
 def _absDir(dir):
     if DEBUG:
@@ -136,7 +136,7 @@ def _absDir(dir):
 
 ###
     
-def wj2git(config):
+def mo2git(config):
     mo2=config['mo2']
     compiler_settings_fname=config['compiler_settings']
     targetgithub=config['targetgithub']

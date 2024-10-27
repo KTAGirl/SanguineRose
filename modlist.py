@@ -19,14 +19,14 @@ class ModList:
     def write(self,path):
         fname = path + 'modlist.txt'
         with openModTxtFileW(fname) as wfile:
-            wfile.write("# This file was automatically modified by wj2git.\n")
+            wfile.write("# This file was automatically modified by mo2git.\n")
             for line in reversed(self.modlist):
                 wfile.write(line+'\n')
             
     def writeDisablingIf(self,path,f):
         fname = path + 'modlist.txt'
         with openModTxtFileW(fname) as wfile:
-            wfile.write("# This file was automatically modified by wj2git.\n")
+            wfile.write("# This file was automatically modified by mo2git.\n")
             for mod0 in reversed(self.modlist):
                 if mod0[0]=='+':
                     mod = mod0[1:]

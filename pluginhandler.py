@@ -3,8 +3,8 @@ import glob
 import importlib
 import inspect
 
-# import wj2git.plugins.archives
-from wj2git.debug import dbgWait
+# import mo2git.plugins.archives
+from mo2git.debug import dbgWait
 
 def _loadPlugins(plugindir,basecls,found):
     # plugindir is relative to the path of this very file
@@ -16,7 +16,7 @@ def _loadPlugins(plugindir,basecls,found):
         if modulename == '__init__' or modulename.startswith('_'):
             continue
         # print(modulename)
-        module = importlib.import_module('wj2git.'+plugindir.replace('/','.')+modulename)
+        module = importlib.import_module('mo2git.'+plugindir.replace('/','.')+modulename)
         ok = False
         for name, obj in inspect.getmembers(module):
             if inspect.isclass(obj):

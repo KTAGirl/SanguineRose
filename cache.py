@@ -7,13 +7,13 @@ import shutil
 
 import xxhash
 
-from wj2git.debug import DEBUG
-from wj2git.debug import dbgWait
-from wj2git.modlist import openModTxtFile
-from wj2git.modlist import openModTxtFileW
-import wj2git.wjdb as wjdb
-from wj2git.wjdb import escapeJSON 
-import wj2git.pluginhandler as pluginhandler
+from mo2git.debug import DEBUG
+from mo2git.debug import dbgWait
+from mo2git.modlist import openModTxtFile
+from mo2git.modlist import openModTxtFileW
+import mo2git.wjdb as wjdb
+from mo2git.wjdb import escapeJSON 
+import mo2git.pluginhandler as pluginhandler
 
 def normalizePath(path):
     path = os.path.abspath(path)
