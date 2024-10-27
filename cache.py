@@ -1,7 +1,7 @@
 import os
 import stat
 import pathlib
-import json
+#import json
 import shutil
 
 import xxhash
@@ -25,7 +25,21 @@ def _hcFoundDownload(archives,archivesbypath,ndup,ar):
         archives[ar.archive_hash] = ar
         archivesbypath[ar.archive_path] = ar
     
-def _hcFoundFile(filesbypath,ndup,ar):
+def _hcFoundFile(filesbypath,nex,ndup,ar,excludefolders,reincludefolders):
+    exclude = False
+    for ex in excludefolders:
+        if ar.archive_path.startswith(ex.lower()):
+            exclude = True
+            break
+    if exclude:
+        for inc in reincludefolders:
+            if ar.archive_path.startswith(inc.lower()):
+                exclude = False
+                break
+    if exclude:
+        nex.val += 1
+        return
+        
     olda = filesbypath.get(ar.archive_path)
     if olda!=None and not olda.eq(ar):
         # print("TODO: multiple archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(ar.__dict__))
@@ -103,7 +117,7 @@ def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plu
 def _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded):
     if ar.archive_path.endswith('.meta'):
         return
-    print('WARNING: '+ar.archive_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
+    print('NOTICE: archive '+ar.archive_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
     jsonarchives[ar.archive_hash]=ar
     jsonarchivesbypath[ar.archive_path]=ar
     
@@ -123,9 +137,13 @@ def _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,
     nmodified.val += 1
   
 def _diffFile(jsonfilesbypath,nmodified,ar,updatednotadded):
-    print('WARNING: '+ar.archive_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
+    print('NOTICE: file '+ar.archive_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
     jsonfilesbypath[ar.archive_path]=ar
     nmodified.val += 1
+
+def _scannedFoundFile(scannedfiles,fpath):
+    assert(normalizePath(fpath)==fpath)
+    scannedfiles[fpath.lower()] = 1
 
 ####
 
@@ -133,8 +151,17 @@ def _dictOfArsFromJsonFile(path):
     out = {}
     with openModTxtFile(path) as rfile:
         for line in rfile:
+            #try:
             ar = wjdb.Archive.fromJSON(line)
+            #except Exception as e:
+            #    print(e)
+            #    print(line)
+            #    #dbgWait()
             # print(ar.__dict__)
+            
+            #if ar.archive_hash is None:
+            #    print('NONE: '+ar.archive_path)
+            assert(out.get(ar.archive_path) is None)
             out[ar.archive_path] = ar
     return out
 
@@ -173,13 +200,14 @@ class Cache:
         ### Loading HashCache
         # Loading WJ HashCache
         ndupdl = Val(0) #passable by ref
+        nexf = Val(0)
         ndupf = Val(0)
         wjdb.loadHC([ 
                         (downloadsdir,lambda ar: _hcFoundDownload(self.archives, self.archivesbypath,ndupdl,ar)),
-                        (mo2,lambda ar: _hcFoundFile(self.filesbypath,ndupf,ar))
+                        (mo2,lambda ar: _hcFoundFile(self.filesbypath,nexf,ndupf,ar,mo2excludefolders,mo2reincludefolders))
                     ])
         assert(len(self.archives)==len(self.archivesbypath)) 
-        print(str(len(self.archives))+' archives ('+str(ndupdl)+' duplicates), '+str(len(self.filesbypath))+' files ('+str(ndupf)+' duplicates)')
+        print(str(len(self.archives))+' archives ('+str(ndupdl)+' duplicates), '+str(len(self.filesbypath))+' files ('+str(nexf)+' excluded, '+str(ndupf)+' duplicates)')
         timer.printAndReset('Loading WJ HashCache')
 
         # Loading NJSON HashCache
@@ -206,6 +234,7 @@ class Cache:
         print(str(len(self.jsonfilesbypath))+' JSON files')
         timer.printAndReset('Loading JSON HashCache')
 
+        #print('#1:'+str(self.jsonfilesbypath.get('c:\\modding\\mo2\\logs\\usvfs-2024-10-13_19-52-38.log')))
         ### Loading VFS Cache
         # Loading WJ VFS
         allarchivehashes = {}
@@ -241,7 +270,8 @@ class Cache:
         # Scanning downloads
         nmodified = Val(0)
         nscanned = Cache._loadDir(downloadsdir,self.jsonarchivesbypath,self.archivesbypath,[],[],
-                                  lambda ar,updatednotadded: _diffArchive(self.jsonarchives,self.jsonarchivesbypath,self.jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded)
+                                  lambda ar,updatednotadded: _diffArchive(self.jsonarchives,self.jsonarchivesbypath,self.jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded),
+                                  None
                                  )
         assert(len(self.jsonarchives)==len(self.jsonarchivesbypath)) 
         print('scanned/modified archives:'+str(nscanned)+'/'+str(nmodified)+', '+str(len(self.jsonarchives))+' JSON archives')
@@ -249,19 +279,40 @@ class Cache:
         
         # Scanning mo2
         nmodified.val = 0
+        scannedfiles = {}
         nscanned = Cache._loadDir(mo2,self.jsonfilesbypath,self.filesbypath,mo2excludefolders,mo2reincludefolders,
-                                  lambda ar,updatednotadded: _diffFile(self.jsonfilesbypath,nmodified,ar,updatednotadded)
+                                  lambda ar,updatednotadded: _diffFile(self.jsonfilesbypath,nmodified,ar,updatednotadded),
+                                  lambda fpath:_scannedFoundFile(scannedfiles,fpath)
                                  )
         print('scanned/modified files:'+str(nscanned)+'/'+str(nmodified)+', '+str(len(self.jsonfilesbypath))+' JSON files')
+        # print(len(scannedfiles))
+        # dbgWait()
         timer.printAndReset('Scanning MO2')
 
+        ### Reconciling
+        #print('#2:'+str(self.jsonfilesbypath.get('c:\\modding\\mo2\\logs\\usvfs-2024-10-13_19-52-38.log')))
+        ndel = 0
+        for dict in [self.jsonfilesbypath, self.filesbypath]:
+            for fpath in dict:
+                if scannedfiles.get(fpath) is None:
+                    injson = self.jsonfilesbypath.get(fpath.lower())
+                    #print(injson)
+                    if injson is not None and injson.archive_hash is None: #special record is already present
+                        continue
+                    print('NOTICE: '+fpath+' was deleted')
+                    self.jsonfilesbypath[fpath] = wjdb.Archive(None,None,fpath.lower())
+                    ndel += 1
+        print('Reconcile: '+str(ndel)+' files were deleted')
+        timer.printAndReset('Reconciling dicts with scannedfiles')
+        #dbgWait()
+        
         ### Writing JSON HashCache
         _dictOfArsToJsonFile(self.cachedir+'archives.njson',self.jsonarchivesbypath)
         _dictOfArsToJsonFile(self.cachedir+'files.njson',self.jsonfilesbypath)
         _dictOfArEntriesToJsonFile(self.cachedir+'archiveentries.njson',self.jsonarchiveentries)
         timer.printAndReset('Writing JSON HashCache')
         
-    def _loadDir(dir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar):
+    def _loadDir(dir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar,foundfile):
         # print(excludefolders)
         # print(reincludefolders)
         nscanned = 0
@@ -277,6 +328,8 @@ class Cache:
                 if DEBUG:
                     assert(normalizePath(fpath)==fpath)
                 nscanned += 1
+                if foundfile:
+                    foundfile(fpath)
                 tstamp = _getFileTimestampFromSt(st)
                 # print(fpath)
                 found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath.lower()) # dicttolook.get(fpath.lower())
@@ -299,9 +352,9 @@ class Cache:
                             # print(newdir2)
                             if newdir2 in reincludefolders:
                                 # print('Re-including '+newdir2)
-                                nscanned += Cache._loadDir(newdir2,dicttolook,dicttolook2,excludefolders,reincludefolders,addar)
+                                nscanned += Cache._loadDir(newdir2,dicttolook,dicttolook2,excludefolders,reincludefolders,addar,foundfile)
                 else:
-                    nscanned += Cache._loadDir(newdir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar)
+                    nscanned += Cache._loadDir(newdir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar,foundfile)
             else:
                 print(fpath)
                 assert(False)

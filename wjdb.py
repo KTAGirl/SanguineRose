@@ -20,7 +20,6 @@ class _Img:
         
     def dbgString(self):
         return '{ w='+str(self.w)+' h='+str(self.h)+' mip='+str(self.mip)+' fmt='+str(self.fmt)+' phash=['+str(len(self.phash))+']}'
-
  
 class _HashedFile:
     def __init__(self,br):
@@ -151,6 +150,7 @@ def _wjTimestampToPythonTimestamp(wjftime):
 
 class Archive:
     def __init__(self,archive_hash,archive_modified,archive_path):
+        assert(archive_path is not None)
         self.archive_hash=archive_hash
         self.archive_modified=archive_modified
         self.archive_path=archive_path
@@ -170,7 +170,10 @@ class Archive:
     def toJSON(ar):
         # works both for ar=Archive, and ar=SimpleNamespace
         # for SimpleNamespace cannot use return json.dumps(self,default=lambda o: o.__dict__)
-        return '{"archive_hash":'+str(ar.archive_hash)+', "archive_modified": '+str(ar.archive_modified)+', "archive_path": '+escapeJSON(ar.archive_path)+'}'
+        if ar.archive_hash is None:
+            return '{"archive_path": '+escapeJSON(ar.archive_path)+', "archive_hash":null}'
+        else:
+            return '{"archive_hash":'+str(ar.archive_hash)+', "archive_modified": '+str(ar.archive_modified)+', "archive_path": '+escapeJSON(ar.archive_path)+'}'
 
 def loadHC(dirs):
     lodirs = []
