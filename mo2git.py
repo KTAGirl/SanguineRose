@@ -4,23 +4,15 @@ import shutil
 
 from mo2git.debug import *
 from mo2git.common import *
-from mo2git.modlist import ModList
 from mo2git.installfile import manualUrlAndPrompt
+from mo2git.modlist import ModList
 from mo2git.common import *
-from mo2git.common2 import _openCache
+from mo2git.common2 import _openCache,_mo2AndCSAndMasterModList
 import mo2git.cache as cache
 
 def mo2AndMasterModList(config):
     mo2,compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _mo2AndCSAndMasterModList(config)
     return mo2,mastermodlist
-
-def _mo2AndCSAndMasterModList(config):
-    mo2=config['mo2']
-    compiler_settings_fname=config['compiler_settings']
-    with openModTxtFile(mo2+compiler_settings_fname) as rfile:
-        compiler_settings = json.load(rfile)
-    masterprofilename=compiler_settings['Profile']
-    return mo2,compiler_settings_fname,compiler_settings,masterprofilename,ModList(mo2+'profiles\\'+masterprofilename+'\\')
 
 def enabledModSizes(modlist,mo2):
     sizes=[]
@@ -93,7 +85,7 @@ def _mo2git(config):
     mo2,compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _mo2AndCSAndMasterModList(config)
     todl,allarchivenames,filecache = _openCache(config,mastermodlist)
 
-    targetgithub=config['targetgithub']
+    targetgithub=config['github']
     ownmods=config['ownmods']
     downloadsdir = config['downloads']
     
@@ -216,15 +208,16 @@ def _mo2git(config):
                         makeDirsForFile(targetpath)
                         srcpath = mo2 + fpath
                         shutil.copyfile(srcpath,targetpath)
+                        hash = cache._wjHash(srcpath)
                         processed = True
                         # dbgWait()
-                        wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "source":'+cache.escapeJSON(targetpath0)+' }')
+                        wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "hash":'+str(hash)+', "source":'+cache.escapeJSON(targetpath0)+' }')
                                 
                 if not processed:
                     wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" }')
                     nwarn += 1
             else:
-                wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "hash":"'+str(archiveEntry.file_hash)+'", "size":"'+str(archiveEntry.file_hash)+'", "archive_hash":"'+str(archiveEntry.archive_hash)+'", "in_archive_path":[')
+                wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "hash":'+str(archiveEntry.file_hash)+', "size":'+str(archiveEntry.file_size)+', "archive_hash":'+str(archiveEntry.archive_hash)+', "in_archive_path":[')
                 np = 0
                 for path in archiveEntry.intra_path:
                     if np:
@@ -246,7 +239,7 @@ def _mo2git(config):
     #validating json
     if DEBUG:
         with open(targetgithub+'master.json', 'rt',encoding="utf-8") as rfile:
-            dummy = json.load(rfile)
+            json.load(rfile)
 
     # copying own mods
     for mod in ownmods:

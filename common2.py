@@ -2,7 +2,16 @@ import os
 
 from mo2git.common import *
 from mo2git.installfile import installfileModidManualUrlAndPrompt
+from mo2git.modlist import ModList
 import mo2git.cache as cache
+
+def _mo2AndCSAndMasterModList(config):
+    mo2=config['mo2']
+    compiler_settings_fname=config['compiler_settings']
+    with openModTxtFile(mo2+compiler_settings_fname) as rfile:
+        compiler_settings = json.load(rfile)
+    masterprofilename=compiler_settings['Profile']
+    return mo2,compiler_settings_fname,compiler_settings,masterprofilename,ModList(mo2+'profiles\\'+masterprofilename+'\\')
 
 def _openCache(config,mastermodlist,dbgdumpwjdb=None):
     mo2 = config['mo2']

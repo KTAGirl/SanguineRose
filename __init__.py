@@ -4,8 +4,9 @@ import os
 
 # from mo2git.common import isEslFlagged, escapeJSON, openModTxtFile, openModTxtFileW, allEsxs
 from mo2git.common import isEslFlagged,scriptDirFrom__file__,normalizeDirPath
-import mo2git.mo2git as mo2git
 from mo2git.common2 import _openCache
+import mo2git.mo2git as mo2git
+import mo2git.git2mo as git2mo
 
 if not sys.version_info >= (3, 10):
     print('Sorry, mo2git needs at least Python 3.10')
@@ -43,6 +44,10 @@ def run(config):
                         mo2git._mo2git(config,dbgdumpwjdb)
                         ok = True
                 '''
+            case 'git2mo':
+                if argc == 2:
+                   git2mo._git2mo(config)
+                   ok = True
             case 'debug.dumpwjdb':
                 if argc == 3:
                     mo2,mastermodlist = mo2git.mo2AndMasterModList(config)
