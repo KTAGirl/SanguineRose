@@ -20,6 +20,7 @@ Currently, mo2git uses Wabbajack for hashing and creating end-user images. I pla
 ### Extra Features Compared to Wabbajack
 - image is not a monolithic binary. Instead, it is a text file, with all the changes visible and understandable.
 - **multiple ppl can now work on the same modlist. Yahoo!**
+- derived modlists. Now you can take other's mo2git-based modlist and build your own on top of it
 - change tracking. It is clear what has changed since previous version, and it can be rolled back easily. 
 - pull requests from ppl outside of your immediate team. And you decide whethe4r to accept them or not. 
 
