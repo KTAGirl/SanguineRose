@@ -2,7 +2,7 @@
 
 **mo2git** is a collection of Python scripts designed to help you work together on Mod Organizer 2 (MO2) modlists using GitHub. It currently works with Wabbajack, but I hope it will eventually run on its own (I’m still working on improving the speed).
 
-## This project is a Work In Progress! It’s not ready to use yet. Descriptiob below is about the features I'm planning.
+## This project is a Work In Progress! It’s not ready to use yet. Description below is about the features I'm planning.
 
 ## Philosophy
 
@@ -61,17 +61,17 @@ Currently, mo2git uses Wabbajack for hashing and creating end-user images. I pla
         + Skyrim Special Edition
           + Data
   + Modding
-    + [OPTIONAL] 3.7.3.0 # or something, it is where Wabbajack itself (but not modlists) is installed
-    + [OPTIONAL] COLLAB-WJ # folder where Wabbajack builds *your* new and shiny version of the WJ image
-    + [OPTIONAL] COLLAB-WJ2 # folder where you install updated Wabbajack build.
+    + 3.7.3.0 # [OPTIONAL] may have different name, it is where Wabbajack itself (but not modlists) is installed
     + COLLAB-TEST # folder where you will install *your* version of WJ image to test it. It is a stripped-down copy of \Modding\MO2, and another portable instance of MO2
       + *no 'downloads' here*
       + mods # stripped down
       + profiles
       + overwrite
       + ...
-    + [OPTIONAL] ANOTHER-COLLAB-WJ # why not?
-    + ANOTHER-COLLAB-TEST
+    + COLLAB-WJ # [OPTIONAL] folder where Wabbajack builds *your* new and shiny version of the WJ image
+    + COLLAB-WJ2 # [OPTIONAL] folder where you install updated Wabbajack build.
+    + ANOTHER-COLLAB-TEST # why not?
+    + ANOTHER-COLLAB-WJ # [OPTIONAL] 
     + GitHub
       + COLLAB # as it comes from GitHub, just scripts and .json config files
       + ANOTHER-COLLAB # why not?
@@ -82,11 +82,11 @@ Currently, mo2git uses Wabbajack for hashing and creating end-user images. I pla
       + profiles
       + overwrite
       + ...
-    + wabbajack.exe
-
+    + wabbajack.exe # [OPTIONAL]
+    
 ## Workflow Using GitHub
 
-So, let’s assume you’ve got your hands at a mo2git-based GitHub project. We’ll call it COLLAB. An example of this kind of project is [KTA](https://github.com/KTAGirl/KTA). Here’s how to work with it:
+So, let’s assume you’ve got your hands on a mo2git-based GitHub modlist. We’ll call it COLLAB. An example of such a project is [KTA](https://github.com/KTAGirl/KTA). Here’s how to work with it:
 
 1. Install the Wabbajack image using the link from the COLLAB project or build it straight from COLLAB’s GitHub.
    - Make sure to follow all the usual Wabbajack steps (like having a pristine Skyrim folder).
