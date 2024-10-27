@@ -89,8 +89,10 @@ def _copyRestOfProfile(mo2,fulltargetdir,profilename):
     targetfdir = fulltargetdir + 'profiles\\'+profilename+'\\'
     shutil.copyfile(srcfdir+'loadorder.txt',targetfdir+'loadorder.txt')
 
-def _mo2git(config,dbgdumpwjdb):
+def _mo2git(config):
     mo2,compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _mo2AndCSAndMasterModList(config)
+    todl,allarchivenames,filecache = _openCache(config,mastermodlist)
+
     targetgithub=config['targetgithub']
     ownmods=config['ownmods']
     downloadsdir = config['downloads']
@@ -116,8 +118,6 @@ def _mo2git(config,dbgdumpwjdb):
         for mod in aml.allEnabled():
             allmods[mod]=1
         altmodlists[profile] = aml
-
-    todl,allarchivenames,filecache = _openCache(config,mastermodlist,dbgdumpwjdb)
 
     allinstallfiles = {}
     for arname in allarchivenames:

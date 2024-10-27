@@ -52,6 +52,12 @@ def absDir(dir):
         assert(dir.endswith('\\') or dir.endswith('/'))
     return os.path.abspath(dir)+'\\'
 
+def normalizeDirPath(path):
+    path = os.path.abspath(path)
+    assert(path.find('/')<0)
+    assert(not path.endswith('\\'))
+    return path+'\\'
+
 def normalizePath(path):
     path = os.path.abspath(path)
     assert(path.find('/')<0)

@@ -4,7 +4,7 @@ from mo2git.common import *
 from mo2git.installfile import installfileModidManualUrlAndPrompt
 import mo2git.cache as cache
 
-def _openCache(config,mastermodlist,dbgdumpwjdb):
+def _openCache(config,mastermodlist,dbgdumpwjdb=None):
     mo2 = config['mo2']
     downloadsdir = config['downloads']
     ownmods=config['ownmods']
