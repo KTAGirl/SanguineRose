@@ -282,19 +282,19 @@ def _mo2git(config,dbgdumpwjdb):
     mastermodlist.write(targetfdir)
     # shutil.copyfile(mo2+'profiles\\'+masterprofilename+'\\loadorder.txt',targetfdir+'loadorder.txt')
     _copyRestOfProfile(mo2,targetgithub + targetdir,masterprofilename)
-    cfgaltprof = config.get('altprofiles')
+    genprofiles = config.get('genprofiles')
     # print(altmodlists)
-    for profile in altmodlists:
+    for profile in altmodlists: 
         # print(profile)
         ml = altmodlists[profile]
         fname = mo2+'profiles\\'+profile+'\\modlist.txt'
         targetfdir = targetgithub + targetdir + 'profiles\\'+profile+'\\'
         makeDirsForFile(targetfdir+'modlist.txt')
-        filterout = None
-        if cfgaltprof:
-            filterout = cfgaltprof.get(profile)
-        if filterout is None:
-            print('WARNING: no filterout lambda in config for profile'+profile)
+        filteroutpattern = None
+        if genprofiles:
+            filteroutpattern = genprofiles.get(profile)
+        if filteroutpattern is None:
+            print("WARNING: profile "+profile+"is not found in config['genprofiles']")
         else:
             optionalmods=0
             optionalesxs=0
@@ -308,7 +308,7 @@ def _mo2git(config,dbgdumpwjdb):
                 # print(separ)
                 if separ:
                     # section = separ
-                    filteredout = bool(filterout(separ))
+                    filteredout = re.search(filteroutpattern, separ, re.IGNORECASE) != None
                     # print(separ+':'+str(filteredout))
                 else:
                     if mod[0] != '+':
