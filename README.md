@@ -1,56 +1,57 @@
 # mo2git
-A set of Python scripts to enable github-centered collaboration on MO2-based modlists. Designed to integrate with Wabbajack, but eventually should be able to work standalone (how fast is yet to see). 
 
-## This project is WIP! - NOT ready to be used yet. Below are PLANNED features
+Hey there! **mo2git** is a bunch of Python scripts to help you collaborate on MO2 modlists using GitHub. It’s made to work with Wabbajack, but I’m hoping it’ll eventually run on its own (still figuring out the speed).
+
+## Just a heads-up: This project is a Work In Progress! Not ready for action yet. Check out the features I'm planning below.
 
 ## Philosophy
-mo2git is a companion to MO2, allowing collaborating on MO2 modlists in GitHub. mo2git's idea is about the same as that of Wabbajack, but mo2git file is text-based, and much more granular. mo2git also embraces the idea of having tools installed within modlist, and running them on end-user box. Why downloading Bodyslide-generated meshes or DDSOot-optimized textures rather than running Bodyslide or DDSOpt locally (of course, it should be well-defined Bodyslide, coming with the install, but it will still be much smaller than all those meshes)? 
 
-This, in turn, will enable teams working on different parts of the mod list. In plain English - **now several people can work on a MO2 project.** And that's without risks of overwriting each other work, with change tracking, and so on - in short, using all the bells and whistles provided by git and github ❗😀
+**mo2git** is a companion to MO2, making it easy to team up on modlists using GitHub. Think of it like Wabbajack, but mo2git uses a text file format that's GitHub-friendly. Plus, it supports having the tools right in your modlist and running them on user's system. Why make user download all those BodySlide-generated meshes or DDSOot-optimized textures when you can just run BodySlide or DDSOpt locally on their box? (While it means you need Bodyslide included with the install, it’ll still save tons of space compared to downloading gigabytes of meshes!). And being smaller means being more GiuHub-friendly too!
 
-Currently, mo2git is relying on Wabbajack's hashing, and image generation to be distributed. I am planning to keep this integration, but eventually mo2git should be able to work standalone. **This, in turn, will allow to distribute modlists with paid mods - something not allowed by WJ's license**. Most likely, however, mo2git's hashing and image generation are going to stay slower than that of WJ (currently it is MUCH slower), so integration with WJ is going to be important. 
+In short, mo2git means that multiple people can work on different parts of the mod list without stepping on each other’s toes. You’ll get change tracking, pull requests, and all the other cool features that come with Git and GitHub! ❗😀
+
+Right now, mo2git relies on Wabbajack’s hashing and install image generation. I’m planning to keep this integration, but eventually, I want mo2git to stand on its own. **That’ll let you share modlists with paid mods, which isn’t allowed with Wabbajack’s license.** Just a heads-up, though: mo2git’s hashing and image generation are slower than Wabbajack’s, so we’ll definitely keep the integration going for a while.
 
 ### Similarities with Wabbajack
-- Pristine Skyrim install. Even SKSE and ENB can be kept out of Skyrim folder, using Root Builder plugin to MO2.
-- Building MO2 portabke instance from user's 'Downloads' folder. 
 
-### Addditional features compared to Wabbajack
+- You absoulutely must have a pristine Skyrim install. You should even keep SKSE and ENB out of your Skyrim folder by using the Root Builder plugin for MO2.
+- You build a portable MO2 setup from "image" and files from your Downloads folder.
 
-### Disadvantages compared to Wabbajack
-- no UI. Any companion GitHub projects providing UI over mo2git's functionality are extremely welcome. I will happily support them (providing non-UI Python functions in mo2git) as long as the project is under permissive (and not copyleft) license.
-- Slower operation when hashing and installing. It will become MUCH faster than it is now (I am planning to parallelize these), but competing with C# in Python is, well, difficult.
+### Extra Features Compared to Wabbajack
+- image is not a monolithic binary. Instead, it is a text file, with all the changes visible and understandable.
+- **multiple ppl can now work on the same modlist. Yahoo!**
+- change tracking. It is clear what has changed since previous version, and it can be rolled back easily. 
+- pull requests from ppl outside of your immediate team. And you decide whethe4r to accept them or not. 
+
+### Downsides Compared to Wabbajack
+
+- No UI. If you or someone else wants to whip up a companion GitHub project with a UI for mo2git, that’d be awesome! I’m all in for supporting that (providing non-UI Python functions in mo2git) as long as your project is under a permissive license.
+- Slower performance when hashing and installing. I plan to speed things up by parallelizing some tasks, but, let’s be real, competing with C# in Python is tough.
 
 ## Prerequisites
+
 ### Hardware
-*whatever is necessary to run your modlist*
-
-*16G RAM*, 32G strongly recommended
-
-*additional size for your modlist, and some more* (we need to test install from the generated MO2 portable instance, don't we?)
+- *Whatever you need to run your modlist.*
+- *16GB RAM is a must; 32GB is super recommended.*
+- *You’ll also need 2x of extra space for your modlist, plus some more.*
 
 ### Accounts
-*Steam* - to get Skyrim
+- *Steam* - You’ll need this for Skyrim.
+- *[NexusMods](https://www.nexusmods.com/)* (preferably premium) - You’ll use this for downloads.
 
-*[NexusMods](https://www.nexusmods.com/)* (preferably premium) - for downloads.
-
-### Installed
-*Steam*
-
-*Skyrim* (PRISTINE install folder is required for all WJ installs)
-
-*Wabbajack* from [wabbajack.org](https://www.wabbajack.org/). *Make sure to go to WJ Settings and to login to Nexus!*. At some point, this will become optional. I am still going to keep integration with WJ (using their hash DB, and generating WJ image from mo2git's image). 
-
-*You don't really need MO2, or most of the tools such as LOOT or xEdit - with a properly configured COLLABWJ project they will be installed into \Modding\MO2\ from Wabbajack image*
-
-*MSVC* Can be downloaded from [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/). Make sure to check `Desktop Development with C++` checkbox. Necessary to install `py7zr` and `bethesda-structs` Python modules.
-
-*Python v3.10+*. Can be downloaded from [Python Releases for Windows](https://www.python.org/downloads/windows/). Latest greatest will do. And no, there won't be a Python2 version. Make sure to put `py` into PATH too. And wj2git also needs the following modules:
-- xxhash: use `py -m pip install xxhash` to install
-- py7zr: use `py -m pip install py7zr` to install
-- bethesda-structs: use `py -m pip install bethesda-structs` to install
+### Installed Stuff
+- *Steam*
+- *Skyrim* (Make sure it’s a PRISTINE install folder)
+- *Wabbajack* from [wabbajack.org](https://www.wabbajack.org/). *Don’t forget to log in to Nexus in WJ Settings! Eventually, this will be optional, but I’m keeping the integration with WJ (using their hash DB and generating WJ images from mo2git's images).*
+- *You don’t necessarily need MO2 or tools like LOOT or xEdit—if you set up a COLLABWJ project right, those will get installed into \Modding\MO2 from the Wabbajack image.*
+- *MSVC* can be grabbed from [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/). Just check the `Desktop Development with C++` box. You’ll need this to install the `py7zr` and `bethesda-structs` Python modules.
+- *Python v3.10+*. Grab it from [Python Releases for Windows](https://www.python.org/downloads/windows/). The latest version is perfect, and no, I'm not going to support Python 2. Make sure to add `py` to your PATH. You’ll also need these modules:
+  - xxhash: Install with `py -m pip install xxhash`
+  - py7zr: Install with `py -m pip install py7zr`
+  - bethesda-structs: Install with `py -m pip install bethesda-structs`
 
 ### Recommended
-*GitHub Desktop* [Download GitHub Desktop](https://desktop.github.com/download/)
+- *GitHub Desktop* [Download GitHub Desktop](https://desktop.github.com/download/)
 
 ## Typical folder structure
 + C:\
@@ -83,30 +84,38 @@ Currently, mo2git is relying on Wabbajack's hashing, and image generation to be 
       + ...
     + wabbajack.exe
 
-## Workflow using github
-We assume that the mo2git-based github project is already setup to use mo2git. Let's name it COLLAB. One example of such a project is [KTA](https://github.com/KTAGirl/KTA). Now, to collaborate, you need to:
-- install Wabbajack image using the link from the COLLAB project, OR build it from COLLAB's GitHub directly.
-  + all the usual Wabbajack stuff (pristine Skyrim folder, etc.) has to be followed
-  + in a properly setup COLLAB project, you'll get an MO2 installation, with most of the tools (Bodyslide, FNIS, etc. etc.) already installed as a part of it.
-  + as a part of this process, you will setup Downloads folder - and download your archives there (of course, you may use your existing Downloads folder, you do have one, don't you? :wink:)
-- you modify this installed MO2 (using MO2 etc.), making that small change you want to contribute (everything goes in small changes, this is the way we're eating elefants)
-  + in a collaborative environment, changes should be as small as possible, and merged as quickly as possible. Otherwise, lots of the benefits of github will be lost. Not to mention that if you sit in your repo without merging for a while - merging will run into conflicts, and resolving them will become a nightmare.
-- clone github repo of the COLLAB project, and mo2git.
-- config your folders
-   + by default, it is customarily configured that you have C:\Modding\, with WJ project installed within as C:\Modding\<COLLAB-WJ>, with C:\Modding\Github\mo2git, and C:\Modding\Github\<COLLAB> folders. In theory, it should work with other setups too (as long as no Windows-specific folders are involved), if not - please report an issue. 
-- run `COLLAB.py -mo2git` from within the repo
-   + it will update your C:\Modding\Github\<COLLAB> to reflect your changes. This is where the magic happens.
-   + even though it is written in single-threaded Python - it usually finishes within a few minutes. 
-- now, you have your modified C:\Modding\Github\<COLLAB>. From here, you can see the differences, and commit directly to the project (if you have permissions), or submit a pull request.
-   + to merge:
-      + EVERY TIME you pull into \Modding\Github\COLLAB, you MUST run `COLLAB.py -git2mo` (it is DIFFERENT from the one above 🤯). It will try to update your \Modding\COLLAB project with the new changes from the Github.
-      + if a new COLLAB Wabbajack was released while you were working, you may need to install this new Wabbajack file. Make sure to install it to a SEPARATE folder - like C:\\Modding\COLLAB-WJ2\ ❗, while using THE SAME Downloads folder. mo2git doesn't use this install as such - but while making it, WJ will download new files, and update its databases - and these ARE used by mo2git.
-      * After doing it - continue your merge efforts. As long as your changes don't modify the same files in COLLAB as the changes coming from Github - you're fine. In case of conflicts over the same files - for text files, usual Github merge logic applies, for binary ones (such as esps) mo2git tries to keep changes as separate as possible, so it might be possible to merge anyway. However, with binary files, there is always a risk that the conflict will be not easily resolvable. Actually, it may happen in any kind of Github development, and not only with binary files. Fortunately, IRL it happens quite rarely. 
-   + ([Github Desktop](https://desktop.github.com/download/) is HIGHLY recommended here, but if you're a fan of command-line git, it will also do).
-- you're done with your change. 
-- to pull new version - in addition to usual pulling github, and similar to the merge described above, you need to:
-   + pull new version of \Modding\Github\COLLAB
-   + if available, install new Wabbajack to \Modding\COLLAB-WJ2
-   + run `COLLAB.py -git2mo`
+## Workflow Using GitHub
 
-I know it is quite complicated, especially for ppl coming from traditionally non-collaborative modding scene, but the benefits of collaborative development of modlists, where one person can deal with NPCs, another with environment, another with ENB, another with scripting, and so on - are truly enormous. 
+So, let’s assume you’ve got your hands at a mo2git-based GitHub project. We’ll call it COLLAB. An example of this kind of project is [KTA](https://github.com/KTAGirl/KTA). Here’s how to work with it:
+
+1. Install the Wabbajack image using the link from the COLLAB project or build it straight from COLLAB’s GitHub.
+   - Make sure to follow all the usual Wabbajack steps (like having a pristine Skyrim folder).
+   - In a well-set-up COLLAB project, you’ll get an MO2 installation with most tools (like Bodyslide, FNIS, etc.) already set up.
+   - You’ll also set up your Downloads folder to download your archives (feel free to use your existing Downloads folder, I'm sure you’ve got one, right? 😜).
+   
+2. Modify your installed modlist in MO2 portable instance (using Mod Organizer and included tools) to make that small change you want to make (think small changes—it’s like eating an elephant one bite at a time).
+   - In a collaborative setup, keep changes small and merge them quickly. Otherwise, you’ll lose a lot of the GitHub benefits. And if you let your copy sit too long without merging, resolving merge conflicts can get messy.
+   
+3. Clone the GitHub repo for the COLLAB project and mo2git.
+4. Set up your folders:
+   - By default, you’d set up C:\Modding\, with the WJ project in C:\Modding\<COLLAB-WJ>, and the GitHub stuff in C:\Modding\Github\mo2git and C:\Modding\Github\<COLLAB>. It should work with other setups too, but let me know if you hit any issues.
+   
+5. Run `COLLAB.py -mo2git` from inside the COLLAB folder.
+   - This is where the magic happens. It will update your C:\Modding\Github\<COLLAB> to show your changes. 
+   - Even though it’s written in single-threaded Python, it usually wraps up in just a few minutes.
+   
+6. Now you’ve got your modified C:\Modding\Github\COLLAB. Now you can see the differences and commit directly to the project (if you’ve got permissions) or submit a pull request.
+   - To merge:
+     - Every time you pull into \Modding\Github\COLLAB, you *have to* run `COLLAB.py -git2mo` (yep, that’s different from the one above 🤯). This updates your \Modding\COLLAB project with new changes from GitHub.
+     - If a new COLLAB Wabbajack was released while you were working, you’ll need to install that new Wabbajack file to a SEPARATE folder—like C:\\Modding\COLLAB-WJ2\ ❗—but still use the same Downloads folder. mo2git doesn’t use this COLLAB-WJ2 install as is, but WJ will download new files and update its databases, which mo2git will use.
+     - After that, keep merging your changes. As long as your edits don’t mess with the same files as the new GitHub changes, you’re golden. If there are conflicts, the usual GitHub merge rules apply for text files, and mo2git tries to keep binary file changes separate, so sometimes it’ll still work out. Just know that conflicts can still happen, but it’s pretty rare IRL.
+     - ([Github Desktop](https://desktop.github.com/download/) is super recommended, but if you love the command line, that works too!)
+   
+7. You’re all done with your change!
+   
+8. To pull the new version, you’ll need to:
+   - Pull the new version of \Modding\Github\COLLAB
+   - If available, install the new Wabbajack to \Modding\COLLAB-WJ2
+   - Run `COLLAB.py -git2mo`
+
+I know it sounds complicated, especially if you’re used to solo modding, but the perks of working together on modlists, like one person handling NPCs, another tweaking the environment, and someone else working on ENB or scripting—are huge!
