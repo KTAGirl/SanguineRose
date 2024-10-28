@@ -3,6 +3,8 @@ import stat
 import pathlib
 #import json
 import shutil
+from threading import Thread
+from queue import Queue
 
 import xxhash
 
@@ -81,11 +83,11 @@ def _getFromOneOfDicts(dicttolook,dicttolook2,key):
         return found
     return dicttolook2.get(key)
 
-def _diffFound(fpath,tstamp,addar,updatednotadded):
+def _diffFound(outqitem,fpath,tstamp,addar,updatednotadded):
     # print(fpath)
     hash = _wjHash(fpath)
     newa = wjdb.Archive(hash,tstamp,fpath.lower())
-    addar(newa,updatednotadded)
+    addar(outqitem,newa,updatednotadded)
 
 def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plugin,archivepath):
     if not os.path.isdir(tmppath):
@@ -188,6 +190,23 @@ def _dictOfArEntriesToJsonFile(path,aes):
 
 #############
 
+class _LoadDirQueueItem:
+    def __init__(self):
+        self.jsonfilesbypath = {}
+        self.scannedfiles = {}
+
+def _loadDirProcessFunc(procnum,inq,outq):
+    outqitem = _LoadDirQueueItem()
+    while True:
+        request = inq.get()
+        if request is None:
+            outq.put(outqitem)
+            return        
+        #print('process #'+str(procnum)+' received item: '+str(request[0]))
+        #print(request)
+        #dbgWait()
+        Cache._loadDir(None,outqitem,request[0],request[1],request[2],request[3],request[4],request[5],request[6])
+
 class Cache:
     def __init__(self,allarchivenames,cachedir,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders,tmppathbase,dbgfolder):
         self.cachedir = cachedir
@@ -269,8 +288,8 @@ class Cache:
         ### Scanning
         # Scanning downloads
         nmodified = Val(0)
-        nscanned = Cache._loadDir(downloadsdir,self.jsonarchivesbypath,self.archivesbypath,[],[],
-                                  lambda ar,updatednotadded: _diffArchive(self.jsonarchives,self.jsonarchivesbypath,self.jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded),
+        nscanned = Cache._loadDir(None,None,downloadsdir,self.jsonarchivesbypath,self.archivesbypath,[],[],
+                                  lambda unused,ar,updatednotadded: _diffArchive(self.jsonarchives,self.jsonarchivesbypath,self.jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded),
                                   None
                                  )
         assert(len(self.jsonarchives)==len(self.jsonarchivesbypath)) 
@@ -280,17 +299,44 @@ class Cache:
         # Scanning mo2
         nmodified.val = 0
         scannedfiles = {}
-        nscanned = Cache._loadDir(mo2,self.jsonfilesbypath,self.filesbypath,mo2excludefolders,mo2reincludefolders,
-                                  lambda ar,updatednotadded: _diffFile(self.jsonfilesbypath,nmodified,ar,updatednotadded),
-                                  lambda fpath:_scannedFoundFile(scannedfiles,fpath)
+        inq = Queue()
+        outq = Queue()
+        outqitem = _LoadDirQueueItem()
+        processes = [] #actually, threads for now because of problems with lambdas
+        NPROC = min(os.cpu_count(),8)-1 #we're disk bound, but apparently up to 8 threads still get improvement, at least on my box ;)
+        assert(NPROC>=0)
+        print('Using '+str(NPROC)+' extra threads...')
+        for i in range(0,NPROC):
+            th = Thread(target=_loadDirProcessFunc,args=(i,inq,outq))
+            th.start()
+            processes.append(th)
+        nscanned = Cache._loadDir(inq if NPROC > 0 else None,outqitem,mo2,self.jsonfilesbypath,self.filesbypath,mo2excludefolders,mo2reincludefolders,
+                                  lambda outqitem,ar,updatednotadded: _diffFile(outqitem.jsonfilesbypath,nmodified,ar,updatednotadded),
+                                  lambda outqitem,fpath:_scannedFoundFile(outqitem.scannedfiles,fpath)
                                  )
+        for i in range(0,NPROC):
+            inq.put(None) # to terminate
+        self.jsonfilesbypath |= outqitem.jsonfilesbypath
+        scannedfiles |= outqitem.scannedfiles
+        for i in range(0,NPROC):
+            processes[i].join()
+        while True:
+            if outq.empty(): # after all processes joined, nothing can be added
+                break
+            procoutqitem = outq.get(False)
+            #print(len(procoutqitem.jsonfilesbypath))
+            #print(len(procoutqitem.scannedfiles))
+            self.jsonfilesbypath |= procoutqitem.jsonfilesbypath
+            scannedfiles |= procoutqitem.scannedfiles
+            #dbgWait()
         print('scanned/modified files:'+str(nscanned)+'/'+str(nmodified)+', '+str(len(self.jsonfilesbypath))+' JSON files')
         # print(len(scannedfiles))
         # dbgWait()
         timer.printAndReset('Scanning MO2')
+        #dbgWait()
 
         ### Reconciling
-        #print('#2:'+str(self.jsonfilesbypath.get('c:\\modding\\mo2\\logs\\usvfs-2024-10-13_19-52-38.log')))
+        #print('#2:'+str(self.jsonfilesbypath.get('c:\\\\mo2modding\\logs\\usvfs-2024-10-13_19-52-38.log')))
         ndel = 0
         for dict in [self.jsonfilesbypath, self.filesbypath]:
             for fpath in dict:
@@ -312,7 +358,7 @@ class Cache:
         _dictOfArEntriesToJsonFile(self.cachedir+'archiveentries.njson',self.jsonarchiveentries)
         timer.printAndReset('Writing JSON HashCache')
         
-    def _loadDir(dir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar,foundfile):
+    def _loadDir(inq,outqitem,dir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar,foundfile):
         # print(excludefolders)
         # print(reincludefolders)
         nscanned = 0
@@ -329,17 +375,21 @@ class Cache:
                     assert(normalizePath(fpath)==fpath)
                 nscanned += 1
                 if foundfile:
-                    foundfile(fpath)
+                    foundfile(outqitem,fpath)
                 tstamp = _getFileTimestampFromSt(st)
                 # print(fpath)
-                found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath.lower()) # dicttolook.get(fpath.lower())
+                found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath.lower())
                 if found:
-                    tstamp2 = found.archive_modified
+                    try:
+                        tstamp2 = found.archive_modified
+                    except:
+                        print(found)
+                        dbgWait()
                     # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
                     if _compareTimestamps(tstamp,tstamp2)!=0:
-                        _diffFound(fpath,tstamp,addar,True)
+                        _diffFound(outqitem,fpath,tstamp,addar,True)
                 else:
-                    _diffFound(fpath,tstamp,addar,False)
+                    _diffFound(outqitem,fpath,tstamp,addar,False)
             elif stat.S_ISDIR(fmode):
                 newdir=fpath+'\\'
                 exclude = newdir in excludefolders
@@ -352,9 +402,13 @@ class Cache:
                             # print(newdir2)
                             if newdir2 in reincludefolders:
                                 # print('Re-including '+newdir2)
-                                nscanned += Cache._loadDir(newdir2,dicttolook,dicttolook2,excludefolders,reincludefolders,addar,foundfile)
+                                if inq is not None:
+                                    inqitem = (newdir2,dicttolook,dicttolook2,excludefolders,reincludefolders,addar,foundfile)
+                                    inq.put(inqitem)
+                                else:
+                                    nscanned += Cache._loadDir(inq,outqitem,newdir2,dicttolook,dicttolook2,excludefolders,reincludefolders,addar,foundfile)
                 else:
-                    nscanned += Cache._loadDir(newdir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar,foundfile)
+                    nscanned += Cache._loadDir(inq,outqitem,newdir,dicttolook,dicttolook2,excludefolders,reincludefolders,addar,foundfile)
             else:
                 print(fpath)
                 assert(False)
