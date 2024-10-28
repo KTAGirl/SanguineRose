@@ -247,7 +247,7 @@ class Cache:
         unfilteredarchiveentries = outpq.get()
         assert(outpq.empty())
         timer.printAndReset('Remaining loading of WJ VFSCache')
-        dbgWait()
+        #dbgWait()
 
         # Loading NJSON HashCache
         self.jsonarchivesbypath = {}
