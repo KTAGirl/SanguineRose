@@ -196,7 +196,7 @@ class _LoadDirQueueItem:
         self.jsonfilesbypath = {}
         self.scannedfiles = {}
 
-def _loadDirProcessFunc(procnum,inq,outq):
+def _loadDirThreadFunc(procnum,inq,outq):
     outqitem = _LoadDirQueueItem()
     while True:
         request = inq.get()
@@ -208,7 +208,7 @@ def _loadDirProcessFunc(procnum,inq,outq):
         #dbgWait()
         Cache._loadDir(None,outqitem,request[0],request[1],request[2],request[3],request[4],request[5],request[6])
 
-def _loadVFSThreadFunc(outq,dbgfolder):
+def _loadVFSProcessFunc(outq,dbgfolder):
     if dbgfolder:
         with open(dbgfolder+'loadvfs.txt','wt',encoding='utf-8') as dbgfile:
             unfilteredarchiveentries = wjdb.loadVFS(dbgfile) 
@@ -228,8 +228,8 @@ class Cache:
         ### Loading HashCache
         # Start loading VFS Cache
         outpq = PQueue()
-        vfsthread = Process(target=_loadVFSThreadFunc,args=(outpq,dbgfolder))
-        vfsthread.start()
+        vfsprocess = Process(target=_loadVFSProcessFunc,args=(outpq,dbgfolder))
+        vfsprocess.start()
         
         # Loading WJ HashCache
         ndupdl = Val(0) #passable by ref
@@ -243,7 +243,7 @@ class Cache:
         print(str(len(self.archives))+' archives ('+str(ndupdl)+' duplicates), '+str(len(self.filesbypath))+' files ('+str(nexf)+' excluded, '+str(ndupf)+' duplicates)')
         timer.printAndReset('Loading WJ HashCache')
 
-        #vfsthread.start()
+        #vfsprocess.start()
         unfilteredarchiveentries = outpq.get()
         assert(outpq.empty())
         timer.printAndReset('Remaining loading of WJ VFSCache')
@@ -287,7 +287,7 @@ class Cache:
         for ae in unfilteredarchiveentries:
             if allarchivehashes.get(ae.archive_hash) is not None:
                 self.archiveentries[ae.file_hash] = ae
-        vfsthread.join() #just in case
+        vfsprocess.join() #just in case
         timer.printAndReset('Filtering WJ VFS')
         
         # Loading NJSON VFS Cache
@@ -321,14 +321,14 @@ class Cache:
         inq = Queue()
         outq = Queue() 
         outqitem = _LoadDirQueueItem()
-        processes = [] #actually, threads for now because of problems with lambdas
+        threads = [] #actually, threads for now because of problems with lambdas
         NPROC = min(os.cpu_count(),8)-1 #we're disk bound, but apparently up to 8 threads still get improvement, at least on my box ;)
         assert(NPROC>=0)
         print('Using '+str(NPROC)+' extra threads...')
         for i in range(0,NPROC):
-            th = Thread(target=_loadDirProcessFunc,args=(i,inq,outq))
+            th = Thread(target=_loadDirThreadFunc,args=(i,inq,outq))
             th.start()
-            processes.append(th)
+            threads.append(th)
         nscanned = Cache._loadDir(inq if NPROC > 0 else None,outqitem,mo2,self.jsonfilesbypath,self.filesbypath,mo2excludefolders,mo2reincludefolders,
                                   lambda outqitem,ar,updatednotadded: _diffFile(outqitem.jsonfilesbypath,nmodified,ar,updatednotadded),
                                   lambda outqitem,fpath:_scannedFoundFile(outqitem.scannedfiles,fpath)
@@ -338,9 +338,9 @@ class Cache:
         self.jsonfilesbypath |= outqitem.jsonfilesbypath
         scannedfiles |= outqitem.scannedfiles
         for i in range(0,NPROC):
-            processes[i].join()
+            threads[i].join()
         while True:
-            if outq.empty(): # after all processes joined, nothing can be added
+            if outq.empty(): # after all threads joined, nothing can be added
                 break
             procoutqitem = outq.get(False)
             #print(len(procoutqitem.jsonfilesbypath))
