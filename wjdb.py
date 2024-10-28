@@ -112,14 +112,14 @@ def _aEntries(paths,hf,root_archive_hash):
             #dbgWait()
     return aes
 
-def loadVFS(allarchivehashes,dbgfile=None):
+def loadVFS(dbgfile=None):
     home_dir = os.path.expanduser("~")
     con = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalVFSCache5.sqlite')
     cur = con.cursor()
     # rowi = -1
     nn = 0
     nx = 0
-    archiveentries = {}
+    archiveentries = []
     for row in cur.execute('SELECT Hash,Contents FROM VFSCache'): 
         contents = row[1]
 
@@ -136,8 +136,8 @@ def loadVFS(allarchivehashes,dbgfile=None):
             for ae in aes:
                 #if archiveentries.get(ae.file_hash) is None or allarchivehashes.get(ae.archive_hash):
                 #    archiveentries[ae.file_hash]=ae
-                if allarchivehashes.get(ae.archive_hash) is not None:
-                    archiveentries[ae.file_hash]=ae
+                #if allarchivehashes.get(ae.archive_hash) is not None:
+                archiveentries.append(ae)
                 #else:
                 #    print('WARNING/loadVFS(): archive with hash='+str(ae.archive_hash)+' is not found')
                 

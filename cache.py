@@ -5,6 +5,7 @@ import pathlib
 import shutil
 from threading import Thread
 from queue import Queue
+from multiprocessing import Process, Queue as PQueue
 
 import xxhash
 
@@ -207,6 +208,14 @@ def _loadDirProcessFunc(procnum,inq,outq):
         #dbgWait()
         Cache._loadDir(None,outqitem,request[0],request[1],request[2],request[3],request[4],request[5],request[6])
 
+def _loadVFSThreadFunc(outq,dbgfolder):
+    if dbgfolder:
+        with open(dbgfolder+'loadvfs.txt','wt',encoding='utf-8') as dbgfile:
+            unfilteredarchiveentries = wjdb.loadVFS(dbgfile) 
+    else:
+        unfilteredarchiveentries = wjdb.loadVFS()
+    outq.put(unfilteredarchiveentries)
+
 class Cache:
     def __init__(self,allarchivenames,cachedir,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders,tmppathbase,dbgfolder):
         self.cachedir = cachedir
@@ -215,8 +224,13 @@ class Cache:
         self.archivesbypath = {}
         self.filesbypath = {}
         timer = Elapsed()
-        
+ 
         ### Loading HashCache
+        # Start loading VFS Cache
+        outpq = PQueue()
+        vfsthread = Process(target=_loadVFSThreadFunc,args=(outpq,dbgfolder))
+        vfsthread.start()
+        
         # Loading WJ HashCache
         ndupdl = Val(0) #passable by ref
         nexf = Val(0)
@@ -228,6 +242,12 @@ class Cache:
         assert(len(self.archives)==len(self.archivesbypath)) 
         print(str(len(self.archives))+' archives ('+str(ndupdl)+' duplicates), '+str(len(self.filesbypath))+' files ('+str(nexf)+' excluded, '+str(ndupf)+' duplicates)')
         timer.printAndReset('Loading WJ HashCache')
+
+        #vfsthread.start()
+        unfilteredarchiveentries = outpq.get()
+        assert(outpq.empty())
+        timer.printAndReset('Remaining loading of WJ VFSCache')
+        dbgWait()
 
         # Loading NJSON HashCache
         self.jsonarchivesbypath = {}
@@ -253,7 +273,6 @@ class Cache:
         print(str(len(self.jsonfilesbypath))+' JSON files')
         timer.printAndReset('Loading JSON HashCache')
 
-        #print('#1:'+str(self.jsonfilesbypath.get('c:\\modding\\mo2\\logs\\usvfs-2024-10-13_19-52-38.log')))
         ### Loading VFS Cache
         # Loading WJ VFS
         allarchivehashes = {}
@@ -263,13 +282,13 @@ class Cache:
                 allarchivehashes[ar.archive_hash] = 1
             else:
                 print('WARNING: no archive hash found for '+arname)
-                
-        if dbgfolder:
-            with open(dbgfolder+'loadvfs.txt','wt',encoding='utf-8') as dbgfile:
-                self.archiveentries = wjdb.loadVFS(allarchivehashes,dbgfile) 
-        else:
-            self.archiveentries = wjdb.loadVFS(allarchivehashes)            
-        timer.printAndReset('Loading WJ VFS')
+        
+        self.archiveentries = {}
+        for ae in unfilteredarchiveentries:
+            if allarchivehashes.get(ae.archive_hash) is not None:
+                self.archiveentries[ae.file_hash] = ae
+        vfsthread.join() #just in case
+        timer.printAndReset('Filtering WJ VFS')
         
         # Loading NJSON VFS Cache
         self.jsonarchiveentries = {}
@@ -300,7 +319,7 @@ class Cache:
         nmodified.val = 0
         scannedfiles = {}
         inq = Queue()
-        outq = Queue()
+        outq = Queue() 
         outqitem = _LoadDirQueueItem()
         processes = [] #actually, threads for now because of problems with lambdas
         NPROC = min(os.cpu_count(),8)-1 #we're disk bound, but apparently up to 8 threads still get improvement, at least on my box ;)
