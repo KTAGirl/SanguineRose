@@ -208,13 +208,34 @@ def _loadDirThreadFunc(procnum,inq,outq):
         #dbgWait()
         Cache._loadDir(None,outqitem,request[0],request[1],request[2],request[3],request[4],request[5],request[6])
 
-def _loadVFSProcessFunc(outq,dbgfolder):
+def _loadVFS(dbgfolder):
     if dbgfolder:
         with open(dbgfolder+'loadvfs.txt','wt',encoding='utf-8') as dbgfile:
             unfilteredarchiveentries = wjdb.loadVFS(dbgfile) 
     else:
         unfilteredarchiveentries = wjdb.loadVFS()
+    return unfilteredarchiveentries
+    
+def _loadVFSProcessFunc(outq,dbgfolder):
+    unfilteredarchiveentries = _loadVFS(dbgfolder)
     outq.put(unfilteredarchiveentries)
+
+def _loadHC(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders):
+    ndupdl = Val(0) #passable by ref
+    nexf = Val(0)
+    ndupf = Val(0)
+    archives = {}
+    archivesbypath = {}
+    filesbypath = {}
+    wjdb.loadHC([ 
+                    (downloadsdir,lambda ar: _hcFoundDownload(archives, archivesbypath,ndupdl,ar)),
+                    (mo2,lambda ar: _hcFoundFile(filesbypath,nexf,ndupf,ar,mo2excludefolders,mo2reincludefolders))
+                ])
+    return archives,archivesbypath,filesbypath,ndupdl.val,nexf.val,ndupf.val
+
+def _loadHCProcessFunc(outq,mo2,downloadsdir,mo2excludefolders,mo2reincludefolders):
+    archives,archivesbypath,filesbypath,ndupdl,nexf,ndupf = _loadHC(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders)
+    outq.put( (archives,archivesbypath,filesbypath,ndupdl,nexf,ndupf) )
 
 class Cache:
     def __init__(self,allarchivenames,cachedir,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders,tmppathbase,dbgfolder):
@@ -225,20 +246,17 @@ class Cache:
         self.filesbypath = {}
         timer = Elapsed()
  
-        ### Loading HashCache
-        # Start loading VFS Cache
         outpq = PQueue()
+        ### Loading HashCache
+        hcprocess = Process(target=_loadHCProcessFunc,args=(outpq,mo2,downloadsdir,mo2excludefolders,mo2reincludefolders))
+        hcprocess.start()
+        '''
+        # Start loading VFS Cache
         vfsprocess = Process(target=_loadVFSProcessFunc,args=(outpq,dbgfolder))
         vfsprocess.start()
         
         # Loading WJ HashCache
-        ndupdl = Val(0) #passable by ref
-        nexf = Val(0)
-        ndupf = Val(0)
-        wjdb.loadHC([ 
-                        (downloadsdir,lambda ar: _hcFoundDownload(self.archives, self.archivesbypath,ndupdl,ar)),
-                        (mo2,lambda ar: _hcFoundFile(self.filesbypath,nexf,ndupf,ar,mo2excludefolders,mo2reincludefolders))
-                    ])
+        self.archives,self.archivesbypath,self.filesbypath,ndupdl,nexf,ndupf = _loadHC(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders)
         assert(len(self.archives)==len(self.archivesbypath)) 
         print(str(len(self.archives))+' archives ('+str(ndupdl)+' duplicates), '+str(len(self.filesbypath))+' files ('+str(nexf)+' excluded, '+str(ndupf)+' duplicates)')
         timer.printAndReset('Loading WJ HashCache')
@@ -247,6 +265,16 @@ class Cache:
         unfilteredarchiveentries = outpq.get()
         assert(outpq.empty())
         timer.printAndReset('Remaining loading of WJ VFSCache')
+        #dbgWait()
+        '''
+        unfilteredarchiveentries = _loadVFS(dbgfolder)
+        timer.printAndReset('Loading WJ VFSCache')
+        tpl = outpq.get()
+        assert(outpq.empty())
+        (self.archives,self.archivesbypath,self.filesbypath,ndupdl,nexf,ndupf) = tpl        
+        assert(len(self.archives)==len(self.archivesbypath)) 
+        print(str(len(self.archives))+' archives ('+str(ndupdl)+' duplicates), '+str(len(self.filesbypath))+' files ('+str(nexf)+' excluded, '+str(ndupf)+' duplicates)')
+        timer.printAndReset('Remaining loading of WJ HashCache')
         #dbgWait()
 
         # Loading NJSON HashCache
@@ -287,7 +315,7 @@ class Cache:
         for ae in unfilteredarchiveentries:
             if allarchivehashes.get(ae.archive_hash) is not None:
                 self.archiveentries[ae.file_hash] = ae
-        vfsprocess.join() #just in case
+        hcprocess.join() #just in case
         timer.printAndReset('Filtering WJ VFS')
         
         # Loading NJSON VFS Cache
