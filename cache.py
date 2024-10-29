@@ -130,8 +130,6 @@ def _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,
         shutil.rmtree(tmproot)
     os.makedirs(tmproot,exist_ok=True)
     plugin = pluginhandler.archivePluginFor(ar.archive_path)
-    #print(plugin)
-    #dbgWait()
     if plugin == None:
         print('WARNING: no archive plugin found for '+ar.archive_path)
     else:
@@ -155,16 +153,7 @@ def _dictOfArsFromJsonFile(path):
     out = {}
     with openModTxtFile(path) as rfile:
         for line in rfile:
-            #try:
             ar = wjdb.Archive.fromJSON(line)
-            #except Exception as e:
-            #    print(e)
-            #    print(line)
-            #    #dbgWait()
-            # print(ar.__dict__)
-            
-            #if ar.archive_hash is None:
-            #    print('NONE: '+ar.archive_path)
             assert(out.get(ar.archive_path) is None)
             out[ar.archive_path] = ar
     return out
@@ -204,9 +193,6 @@ def _loadDirThreadFunc(procnum,inq,outq):
         if request is None:
             outq.put(outqitem)
             return        
-        #print('process #'+str(procnum)+' received item: '+str(request[0]))
-        #print(request)
-        #dbgWait()
         Cache._loadDir(None,outqitem,request[0],request[1],request[2],request[3],request[4],request[5],request[6])
 
 def _loadVFS(dbgfolder):
@@ -216,10 +202,6 @@ def _loadVFS(dbgfolder):
     else:
         unfilteredarchiveentries = wjdb.loadVFS()
     return unfilteredarchiveentries
-    
-#def _loadVFSProcessFunc(outq,dbgfolder):
-#    unfilteredarchiveentries = _loadVFS(dbgfolder)
-#    outq.put(unfilteredarchiveentries)
 
 def _loadHC(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders):
     ndupdl = Val(0) #passable by ref
