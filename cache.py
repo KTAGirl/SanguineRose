@@ -256,6 +256,22 @@ def _loadJsonArchives2SelfTaskFunc(cache,out):
     assert(len(cache.jsonarchives)==len(cache.jsonarchivesbypath)) 
     print(str(len(cache.jsonarchives))+' JSON archives')
 
+def _loadJsonFilesTaskFunc(param):
+    (cachedir,) = param
+    jsonfilesbypath = {}
+    try:
+        jsonfilesbypath = _dictOfArsFromJsonFile(cachedir+'files.njson')
+    except Exception as e:
+        print('WARNING: error loading JSON cache files.njson: '+str(e)+'. Will continue w/o file JSON cache')
+        jsonfilesbypath = {} # just in case            
+
+    print(str(len(jsonfilesbypath))+' JSON files')
+    return (jsonfilesbypath,)
+    
+def _loadJsonFiles2SelfTaskFunc(cache,out):
+    (jsonfilesbypath,) = out
+    cache.jsonfilesbypath = jsonfilesbypath
+    
 class Cache:
     def __init__(self,allarchivenames,cachedir,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders,tmppathbase,dbgfolder):
         self.cachedir = cachedir
@@ -269,29 +285,17 @@ class Cache:
             hctask = tasks.Task('loadhc',_loadHCTaskFunc,(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders),[])
             vfstask = tasks.Task('loadvfs',_loadVFSTaskFunc,(dbgfolder,),[])
             jsonarchivestask = tasks.Task('jsonarchives',_loadJsonArchivesTaskFunc,(self.cachedir,),[])
-            unfilteredarchiveentriesval = Val(None)
+            jsonfilestask = tasks.Task('jsonfiles',_loadJsonFilesTaskFunc,(self.cachedir,),[])
+            unfilteredarchiveentriesval = Val(None)            
             owntaskhc2self = tasks.Task('loadhc2self',lambda param,out: _loadHC2SelfTaskFunc(self,out),None,['loadhc'])
             owntaskvfs2val = tasks.Task('loadvfs2val',lambda param,out: _loadVFS2ValTaskFunc(unfilteredarchiveentriesval,out),None,['loadvfs'])
             owntaskjsonarchives2self = tasks.Task('loadjsonarchives2self',lambda param,out: _loadJsonArchives2SelfTaskFunc(self,out),None,['jsonarchives'])
-            parallel.run([hctask,jsonarchivestask],[vfstask,owntaskhc2self,owntaskvfs2val,owntaskjsonarchives2self])
-            timer.printAndReset('Loading HC and VFS WJ caches')
-            #dbgWait()
+            owntaskjsonfiles2self = tasks.Task('loadjsonfiles2self',lambda param,out: _loadJsonFiles2SelfTaskFunc(self,out),None,['jsonfiles'])
+            parallel.run([hctask,jsonarchivestask,jsonfilestask],[vfstask,owntaskhc2self,owntaskvfs2val,owntaskjsonarchives2self,owntaskjsonfiles2self])
+        timer.printAndReset('Parallel tasks')
         unfilteredarchiveentries = unfilteredarchiveentriesval.val
         #dbgWait()
 
-        # Loading NJSON HashCache
-        self.jsonfilesbypath = {}
-        try:
-            self.jsonfilesbypath = _dictOfArsFromJsonFile(self.cachedir+'files.njson')
-        except Exception as e:
-            print('WARNING: error loading JSON cache files.njson: '+str(e)+'. Will continue w/o file JSON cache')
-            self.jsonfilesbypath = {} # just in case            
-
-        print(str(len(self.jsonfilesbypath))+' JSON files')
-        timer.printAndReset('Loading JSON HashCache')
-
-        ### Loading VFS Cache
-        # Loading WJ VFS
         allarchivehashes = {}
         for arname in allarchivenames:
             ar = _getFromOneOfDicts(self.archivesbypath,self.jsonarchivesbypath,arname.lower())
