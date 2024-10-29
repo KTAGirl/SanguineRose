@@ -3,7 +3,10 @@
 import os
 import time
 import json
+import traceback
 from multiprocessing import Process, Queue as PQueue
+
+#from mo2git.debug import *
 
 class Task:
     def __init__(self,name,f,param,dependencies):
@@ -22,6 +25,8 @@ def _procFunc(num,inq,outq):
         task = taskplus[0]
         ndep = len(task.dependencies)
         assert(len(taskplus)==1+ndep)
+        t0 = time.perf_counter()
+        tp0 = time.process_time()
         print('Process #'+str(num)+': starting task '+task.name)
         assert(ndep<=3)
         match ndep:
@@ -33,8 +38,10 @@ def _procFunc(num,inq,outq):
                 out = task.f(task.param,taskplus[1],taskplus[2])
             case 3:
                 out = task.f(task.param,taskplus[1],taskplus[2],taskplus[3])
-        print('Process #'+str(num)+': done task '+task.name)
-        outq.put((num,task.name,out))
+        elapsed = time.perf_counter() - t0
+        cpu = time.process_time() - tp0
+        print('Process #'+str(num)+': done task '+task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
+        outq.put((num,task.name,(cpu,elapsed),out))
 
 class _TaskGraphNode:
     def __init__(self,task,parents,weight):
@@ -44,10 +51,10 @@ class _TaskGraphNode:
         self.ownweight = weight # expected time in seconds
         self.maxleafweight = 0
         for parent in self.parents:
-            parent.appendLeaf(self) 
+            parent._appendLeaf(self) 
             
     def _appendLeaf(self,leaf):
-        children.append(leaf)
+        self.children.append(leaf)
         self._adjustLeafWeight(leaf.ownweight)
             
     def _adjustLeafWeight(self,w):
@@ -70,7 +77,7 @@ class Parallel:
         print('Using '+str(NPROC)+' processes...')
         self.jsonfname = jsonfname
         self.jsonweights = {}
-        if jsonfname is non None:
+        if jsonfname is not None:
             try:
                 with open(jsonfname, 'rt',encoding='utf-8') as rf:
                     self.jsonweights = json.load(rf)
@@ -87,14 +94,14 @@ class Parallel:
         for i in range(0,self.NPROC):
             inq = PQueue()
             self.inqueues.append(inq)
-            p = Process(target=_procFunc,args=(i,inq,outq))
+            p = Process(target=_procFunc,args=(i,inq,self.outq))
             self.processes.append(p)
             p.start()
             self.processesload.append(0)
         self.shuttingdown = False
         self.joined = False
-        assert(len(processesload)==len(processes))
-        assert(len(inqueues)==len(processes))
+        assert(len(self.processesload)==len(self.processes))
+        assert(len(self.inqueues)==len(self.processes))
         return self
         
     def _internalAddTaskIf(self,t):
@@ -117,9 +124,10 @@ class Parallel:
         return True
 
     def _internalAddOwnTask(self,ot):
-        assert(task.param is None) # for owntasks
-        assert(task.name not in self.graphnodesbyname)
-        assert(task.name not in self.ownnodesbyname)
+        #print(task.name)
+        assert(ot.param is None) # for owntasks
+        assert(ot.name not in self.graphnodesbyname)
+        assert(ot.name not in self.ownnodesbyname)
         taskparents = []
         for d in ot.dependencies:
             assert(d in self.graphnodesbyname)
@@ -134,10 +142,10 @@ class Parallel:
         self.alltasknames = {}
         # building task graph
         
-        self.taskgraph = None
+        self.taskgraph = [] #it is a forest
         self.graphnodesbyname = {}
         self.alltasknodes = []
-        while True:
+        while len(tasks) > 0:
             okone = None
             for t in tasks:
                 ok = self._internalAddTaskIf(t)
@@ -155,11 +163,11 @@ class Parallel:
         self.owntasks = []
         self.ownnodesbyname = {} # name->node
         self.doneowntasks = {}
-        for ot in self.owntasks:
+        for ot in owntasks:
             self._internalAddOwnTask(ot)
                 
-        # graph ok, running the 
-        assert(len(taskgraph))
+        # graph ok, running the initial tasks
+        assert(len(self.taskgraph))
         self.runningtasks = {} # name->(procnum,started,node)
         self.donetasks = {} # name->(node,out)        
         while True:
@@ -172,12 +180,14 @@ class Parallel:
                 break # while True
 
             # waiting for other processes to finish
-            (procnum,taskname,out) = self.outq.get()
+            (procnum,taskname,times,out) = self.outq.get()
             assert(taskname in self.runningtasks)
-            print('Parallel: received results of task '+taskname)
             (expectedprocnum,started,node) = self.runningtasks[taskname]
+            (cput,taskt) = times
             assert(procnum==expectedprocnum)
             dt = time.perf_counter() - started
+            print('Parallel: received results of task '+taskname+' elapsed/task/cpu='
+                  +str(round(dt,2))+'/'+str(round(taskt,2))+'/'+str(round(cput,2))+'s')
             self._updateWeight(taskname,dt)
             del self.runningtasks[taskname]
             assert(taskname not in self.donetasks)
@@ -190,7 +200,7 @@ class Parallel:
     def _scheduleBestTask(self):
         node = self._findBestCandidate()
         if node is not None:
-            pidx = self.findBestProcess()
+            pidx = self._findBestProcess()
             if pidx >= 0:
                 taskplus = [node.task]
                 assert(len(node.task.dependencies)==len(node.parents))
@@ -200,20 +210,24 @@ class Parallel:
                     assert(donetask[0]==parent)
                     taskplus.append(donetask[1])
                 assert(len(taskplus)==1+len(node.task.dependencies))
-                self.inqueues[i].put(taskplus)
-                print('Parallel: assigned task '+node.task.name+' to process #'+str(i))
-                self.runningtasks[node.task.name] = (i,time.perf_counter(),node)
+                self.inqueues[pidx].put(taskplus)
+                print('Parallel: assigned task '+node.task.name+' to process #'+str(pidx))
+                self.runningtasks[node.task.name] = (pidx,time.perf_counter(),node)
+                self.processesload[pidx] += 1
                 return True
         return False
         
     def _runOwnTasks(self): # returns overall status: 1: work to do, 2: all running, 3: all done
+        #print(len(self.owntasks))
         for ot in self.owntasks:
+            #print('task: '+ot.task.name)
             if ot.task.name in self.doneowntasks:
                 continue
             parentsok = True
             params = []
             assert(len(ot.parents)==len(ot.task.dependencies))
             for p in ot.parents:
+                #print('parent: '+p.task.name)
                 if p.task.name not in self.donetasks:
                     parentsok = False
                     break
@@ -222,7 +236,7 @@ class Parallel:
             if not parentsok:
                 continue # for ot
 
-            assert(len(params)==len(ot.task.dependenies))
+            assert(len(params)==len(ot.task.dependencies))
             assert(len(params)<=3)
 
             print('Parallel: running own task '+ot.task.name)
@@ -297,7 +311,7 @@ class Parallel:
             bestcandidate = node
         return bestcandidate
  
-    def _updateWeight(taskname,dt):
+    def _updateWeight(self,taskname,dt):
         oldw = self.jsonweights.get(taskname)
         if oldw is None:
             self.jsonweights[taskname] = dt
@@ -321,15 +335,17 @@ class Parallel:
         self.joined = True        
         
     def __exit__(self,exceptiontype,exceptionval,exceptiontraceback):
-        print('Parallel: exception '+str(exceptiontype)+' :'+str(exceptionval))
-        print(exceptiontraceback)
+        if exceptiontype is not None:
+            print('Parallel: exception '+str(exceptiontype)+' :'+str(exceptionval))
+            traceback.print_tb(exceptiontraceback)
+        #dbgWait()
         if not self.shuttingdown:
             self.shutdown()
         if not self.joined:
             self.joinAll()
             
         if exceptiontype is None:
-            if jsonfname is not None:
-                with open(jsonfname, 'wt',encoding='utf-8') as wf:
-                    json.dump(self.jsonweights,wf)
+            if self.jsonfname is not None:
+                with open(self.jsonfname, 'wt',encoding='utf-8') as wf:
+                    json.dump(self.jsonweights,wf,indent=2)
             

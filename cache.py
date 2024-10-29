@@ -5,7 +5,7 @@ import pathlib
 import shutil
 from threading import Thread
 from queue import Queue
-from multiprocessing import Process, Queue as PQueue
+#from multiprocessing import Process, Queue as PQueue
 
 import xxhash
 
@@ -13,6 +13,7 @@ from mo2git.debug import *
 from mo2git.common import *
 import mo2git.wjdb as wjdb
 import mo2git.pluginhandler as pluginhandler
+import mo2git.tasks as tasks
 
 def _hcFoundDownload(archives,archivesbypath,ndup,ar):
     if ar.archive_path.endswith('.meta'):
@@ -216,9 +217,9 @@ def _loadVFS(dbgfolder):
         unfilteredarchiveentries = wjdb.loadVFS()
     return unfilteredarchiveentries
     
-def _loadVFSProcessFunc(outq,dbgfolder):
-    unfilteredarchiveentries = _loadVFS(dbgfolder)
-    outq.put(unfilteredarchiveentries)
+#def _loadVFSProcessFunc(outq,dbgfolder):
+#    unfilteredarchiveentries = _loadVFS(dbgfolder)
+#    outq.put(unfilteredarchiveentries)
 
 def _loadHC(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders):
     ndupdl = Val(0) #passable by ref
@@ -233,9 +234,25 @@ def _loadHC(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders):
                 ])
     return archives,archivesbypath,filesbypath,ndupdl.val,nexf.val,ndupf.val
 
-def _loadHCProcessFunc(outq,mo2,downloadsdir,mo2excludefolders,mo2reincludefolders):
+def _loadHCTaskFunc(param):
+    (mo2,downloadsdir,mo2excludefolders,mo2reincludefolders) = param
     archives,archivesbypath,filesbypath,ndupdl,nexf,ndupf = _loadHC(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders)
-    outq.put( (archives,archivesbypath,filesbypath,ndupdl,nexf,ndupf) )
+    return (archives,archivesbypath,filesbypath,ndupdl,nexf,ndupf)
+
+def _loadVFSTaskFunc(param):
+    (dbgfolder,) = param
+    unfilteredarchiveentries = _loadVFS(dbgfolder)
+    return (unfilteredarchiveentries,)
+    
+def _afterLoadHCTaskFunc(cache,out):
+    (cache.archives,cache.archivesbypath,cache.filesbypath,ndupdl,nexf,ndupf) = out        
+    assert(len(cache.archives)==len(cache.archivesbypath)) 
+    print(str(len(cache.archives))+' archives ('+str(ndupdl)+' duplicates), '
+         +str(len(cache.filesbypath))+' files ('+str(nexf)+' excluded, '+str(ndupf)+' duplicates)')
+
+def _afterLoadVFSTaskFunc(val,out):
+    (unfilteredarchiveentries,) = out
+    val.val = unfilteredarchiveentries
 
 class Cache:
     def __init__(self,allarchivenames,cachedir,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders,tmppathbase,dbgfolder):
@@ -245,37 +262,17 @@ class Cache:
         self.archivesbypath = {}
         self.filesbypath = {}
         timer = Elapsed()
- 
-        outpq = PQueue()
-        ### Loading HashCache
-        hcprocess = Process(target=_loadHCProcessFunc,args=(outpq,mo2,downloadsdir,mo2excludefolders,mo2reincludefolders))
-        hcprocess.start()
-        '''
-        # Start loading VFS Cache
-        vfsprocess = Process(target=_loadVFSProcessFunc,args=(outpq,dbgfolder))
-        vfsprocess.start()
-        
-        # Loading WJ HashCache
-        self.archives,self.archivesbypath,self.filesbypath,ndupdl,nexf,ndupf = _loadHC(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders)
-        assert(len(self.archives)==len(self.archivesbypath)) 
-        print(str(len(self.archives))+' archives ('+str(ndupdl)+' duplicates), '+str(len(self.filesbypath))+' files ('+str(nexf)+' excluded, '+str(ndupf)+' duplicates)')
-        timer.printAndReset('Loading WJ HashCache')
 
-        #vfsprocess.start()
-        unfilteredarchiveentries = outpq.get()
-        assert(outpq.empty())
-        timer.printAndReset('Remaining loading of WJ VFSCache')
-        #dbgWait()
-        '''
-        unfilteredarchiveentries = _loadVFS(dbgfolder)
-        timer.printAndReset('Loading WJ VFSCache')
-        tpl = outpq.get()
-        assert(outpq.empty())
-        (self.archives,self.archivesbypath,self.filesbypath,ndupdl,nexf,ndupf) = tpl        
-        assert(len(self.archives)==len(self.archivesbypath)) 
-        print(str(len(self.archives))+' archives ('+str(ndupdl)+' duplicates), '+str(len(self.filesbypath))+' files ('+str(nexf)+' excluded, '+str(ndupf)+' duplicates)')
-        timer.printAndReset('Remaining loading of WJ HashCache')
-        #dbgWait()
+        with tasks.Parallel(self.cachedir+'parallel.json',3) as parallel:
+            hctask = tasks.Task('loadhc',_loadHCTaskFunc,(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders),[])
+            vfstask = tasks.Task('loadvfs',_loadVFSTaskFunc,(dbgfolder,),[])
+            unfilteredarchiveentriesval = Val(None)
+            owntaskafterhc = tasks.Task('afterloadhc',lambda out: _afterLoadHCTaskFunc(self,out),None,['loadhc'])
+            owntaskaftervfs = tasks.Task('afterloadvfs',lambda out: _afterLoadVFSTaskFunc(unfilteredarchiveentriesval,out),None,['loadvfs'])
+            parallel.run([hctask,vfstask],[owntaskafterhc,owntaskaftervfs])
+            timer.printAndReset('Loading HC and VFS WJ caches')
+            #dbgWait()
+        unfilteredarchiveentries = unfilteredarchiveentriesval.val
 
         # Loading NJSON HashCache
         self.jsonarchivesbypath = {}
@@ -315,7 +312,6 @@ class Cache:
         for ae in unfilteredarchiveentries:
             if allarchivehashes.get(ae.archive_hash) is not None:
                 self.archiveentries[ae.file_hash] = ae
-        hcprocess.join() #just in case
         timer.printAndReset('Filtering WJ VFS')
         
         # Loading NJSON VFS Cache
