@@ -62,11 +62,9 @@ BTW, with mo2git (and unlike with WJ), you can easily see it on GitHub. master.j
 - *Skyrim* (Make sure it’s a PRISTINE install folder)
 - *Wabbajack* from [wabbajack.org](https://www.wabbajack.org/). *Don’t forget to log in to Nexus in WJ Settings! Eventually, this will be optional, but I’m keeping the integration with WJ (using their hash DB and generating WJ images from mo2git's images).*
 - *You don’t necessarily need MO2 or tools like LOOT or xEdit—if you set up a COLLABWJ project right, those will get installed into \Modding\MO2 from the Wabbajack image.*
-- *MSVC* can be grabbed from [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/). Just check the `Desktop Development with C++` box. You’ll need this to install the `py7zr` and `bethesda-structs` Python modules.
-- *Python v3.10+*. Grab it from [Python Releases for Windows](https://www.python.org/downloads/windows/). The latest version is perfect, and no, I'm not going to support Python 2. Make sure to add `py` to your PATH. You’ll also need these modules:
-  - xxhash: Install with `py -m pip install xxhash`
-  - py7zr: Install with `py -m pip install py7zr`
-  - bethesda-structs: Install with `py -m pip install bethesda-structs`
+- *MSVC* can be downloaded from [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/). Just check the `Desktop Development with C++` box. You’ll need this to install the `py7zr` and `bethesda-structs` Python modules.
+- *Python v3.10+*. Grab it from [Python Releases for Windows](https://www.python.org/downloads/windows/). The latest version is perfect, and no, I'm not going to support Python 2. Make sure to add `py` to your PATH environment variable.
+- You’ll also need the following Python modules: xxhash, psutil, py7zr, and bethesda-structs. To install all of them, simply run `mo2git-pip.bat` from mo2git project. **Prerequisite: MSVC (see above)**
 
 ### Recommended
 - *GitHub Desktop* [Download GitHub Desktop](https://desktop.github.com/download/)
