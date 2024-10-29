@@ -15,6 +15,20 @@ class Task:
         self.param = param
         self.dependencies = dependencies
         
+def _runTask(task,depparams):
+    ndep = len(depparams)
+    assert(ndep<=3)
+    match ndep:
+        case 0:
+            out = task.f(task.param)
+        case 1:
+            out = task.f(task.param,depparams[0])
+        case 2:
+            out = task.f(task.param,depparams[0],depparams[1])
+        case 3:
+            out = task.f(task.param,depparams[0],depparams[1],depparams[2]) 
+    return out
+        
 def _procFunc(num,inq,outq):
     print('Process #'+str(num)+' started')
     while True:
@@ -28,16 +42,7 @@ def _procFunc(num,inq,outq):
         t0 = time.perf_counter()
         tp0 = time.process_time()
         print('Process #'+str(num)+': starting task '+task.name)
-        assert(ndep<=3)
-        match ndep:
-            case 0:
-                out = task.f(task.param)
-            case 1:
-                out = task.f(task.param,taskplus[1])
-            case 2:
-                out = task.f(task.param,taskplus[1],taskplus[2])
-            case 3:
-                out = task.f(task.param,taskplus[1],taskplus[2],taskplus[3])
+        out = _runTask(task,taskplus[1:])
         elapsed = time.perf_counter() - t0
         cpu = time.process_time() - tp0
         print('Process #'+str(num)+': done task '+task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
@@ -125,13 +130,15 @@ class Parallel:
 
     def _internalAddOwnTask(self,ot):
         #print(task.name)
-        assert(ot.param is None) # for owntasks
+        #assert(ot.param is None) # for owntasks
         assert(ot.name not in self.graphnodesbyname)
         assert(ot.name not in self.ownnodesbyname)
         taskparents = []
         for d in ot.dependencies:
-            assert(d in self.graphnodesbyname)
-            pnode = self.graphnodesbyname[d]
+            pnode = self.graphnodesbyname.get(d)
+            if pnode is None:
+                pnode = self.ownnodesbyname.get(d)
+            assert(pnode is not None)
             taskparents.append(pnode)
         node = _TaskGraphNode(ot,taskparents,self.jsonweights.get(ot.name,0.1)) # assuming that own tasks are shorter (they should be)
         self.owntasks.append(node) 
@@ -162,7 +169,7 @@ class Parallel:
             
         self.owntasks = []
         self.ownnodesbyname = {} # name->node
-        self.doneowntasks = {}
+        self.doneowntasks = {} # name->(node,out)
         for ot in owntasks:
             self._internalAddOwnTask(ot)
                 
@@ -206,7 +213,7 @@ class Parallel:
                 assert(len(node.task.dependencies)==len(node.parents))
                 for parent in node.parents:
                     assert(parent.task.name in self.donetasks)
-                    donetask = self.donetasks[parent.task.name]
+                    donetask = self._doneTask(parent.task.name)
                     assert(donetask[0]==parent)
                     taskplus.append(donetask[1])
                 assert(len(taskplus)==1+len(node.task.dependencies))
@@ -216,6 +223,14 @@ class Parallel:
                 self.processesload[pidx] += 1
                 return True
         return False
+        
+    def _doneTask(self,name):
+        done = self.donetasks.get(name)
+        if done is None:
+            done = self.doneowntasks.get(name)
+        else:
+            assert(name not in self.doneowntasks)
+        return done
         
     def _runOwnTasks(self): # returns overall status: 1: work to do, 2: all running, 3: all done
         #print(len(self.owntasks))
@@ -228,10 +243,10 @@ class Parallel:
             assert(len(ot.parents)==len(ot.task.dependencies))
             for p in ot.parents:
                 #print('parent: '+p.task.name)
-                if p.task.name not in self.donetasks:
+                done = self._doneTask(p.task.name)
+                if done is None:
                     parentsok = False
                     break
-                done = self.donetasks[p.task.name]
                 params.append(done[1])
             if not parentsok:
                 continue # for ot
@@ -242,19 +257,11 @@ class Parallel:
             print('Parallel: running own task '+ot.task.name)
             started = time.perf_counter()
             #ATTENTION: ot.task.f(...) may call addLateTask() within
-            match len(params):
-                case 0:
-                    ot.task.f()
-                case 1:
-                    ot.task.f(params[0])
-                case 2:
-                    ot.task.f(params[0],params[1],params[2])
-                case 3:
-                    ot.task.f(params[0],params[1],params[2],params[3])
+            out = _runTask(ot.task,params)
             print('Parallel: done own task '+ot.task.name)
             dt = time.perf_counter() - started
             self._updateWeight(ot.task.name,dt)
-            self.doneowntasks[ot.task.name] = 1
+            self.doneowntasks[ot.task.name] = (ot,out)
         
         # status must run after own tasks, because they may call addLateTask() and addLateOwnTask()
         allrunningordone = True
@@ -303,7 +310,8 @@ class Parallel:
                 continue
             parentsok = True
             for p in node.parents:
-                if p.task.name not in self.donetasks:
+                done = self._doneTask(p.task.name)
+                if done is None:
                     parentsok = False
                     break
             if not parentsok:

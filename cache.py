@@ -244,13 +244,13 @@ def _loadVFSTaskFunc(param):
     unfilteredarchiveentries = _loadVFS(dbgfolder)
     return (unfilteredarchiveentries,)
     
-def _afterLoadHCTaskFunc(cache,out):
+def _loadHC2SelfTaskFunc(cache,out):
     (cache.archives,cache.archivesbypath,cache.filesbypath,ndupdl,nexf,ndupf) = out        
     assert(len(cache.archives)==len(cache.archivesbypath)) 
     print(str(len(cache.archives))+' archives ('+str(ndupdl)+' duplicates), '
          +str(len(cache.filesbypath))+' files ('+str(nexf)+' excluded, '+str(ndupf)+' duplicates)')
 
-def _afterLoadVFSTaskFunc(val,out):
+def _loadVFS2ValTaskFunc(val,out):
     (unfilteredarchiveentries,) = out
     val.val = unfilteredarchiveentries
 
@@ -267,9 +267,9 @@ class Cache:
             hctask = tasks.Task('loadhc',_loadHCTaskFunc,(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders),[])
             vfstask = tasks.Task('loadvfs',_loadVFSTaskFunc,(dbgfolder,),[])
             unfilteredarchiveentriesval = Val(None)
-            owntaskafterhc = tasks.Task('afterloadhc',lambda out: _afterLoadHCTaskFunc(self,out),None,['loadhc'])
-            owntaskaftervfs = tasks.Task('afterloadvfs',lambda out: _afterLoadVFSTaskFunc(unfilteredarchiveentriesval,out),None,['loadvfs'])
-            parallel.run([hctask,vfstask],[owntaskafterhc,owntaskaftervfs])
+            owntaskafterhc = tasks.Task('loadhc2self',lambda param,out: _loadHC2SelfTaskFunc(self,out),None,['loadhc'])
+            owntaskaftervfs = tasks.Task('loadvfs2val',lambda param,out: _loadVFS2ValTaskFunc(unfilteredarchiveentriesval,out),None,['loadvfs'])
+            parallel.run([hctask],[vfstask,owntaskafterhc,owntaskaftervfs])
             timer.printAndReset('Loading HC and VFS WJ caches')
             #dbgWait()
         unfilteredarchiveentries = unfilteredarchiveentriesval.val
