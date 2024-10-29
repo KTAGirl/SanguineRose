@@ -18,16 +18,19 @@ Currently, mo2git uses Wabbajack for hashing and creating end-user images. I pla
 - You build a portable MO2 setup from "image" and files from your Downloads folder.
 
 ### Extra Features Compared to Wabbajack
-- image is not a monolithic binary. Instead, it is a text file, with all the changes visible and understandable.
-- **multiple ppl can now work on the same modlist. Yahoo!**
-- derived modlists. Now you can take other's mo2git-based modlist and build your own on top of it
+
+- 📄 image is not a monolithic binary. Instead, it is a text file, with all the changes visible and most of them even understandable.
+- 👫 **multiple ppl can now work on the same modlist.** 👏👏👏
+- 💰 modlists with paid mods are perfectly fine. Modders also deserve to get paid, you know. Keep in mind that if you're using WJ, you're still bound by their license. 
+- ➡️ derived modlists. Now you can take other's mo2git-based modlist and build your own one on top of it, And when they update, re-merging is easy. 
 - change tracking. It is clear what has changed since previous version, and it can be rolled back easily. 
 - pull requests from ppl outside of your immediate team. And you decide whethe4r to accept them or not. 
 
 ### Downsides Compared to Wabbajack
 
-- No User Interface (UI): If you or someone else wants to create a GitHub project with a UI for mo2git, that would be great! I’m happy to support that by providing non-UI functions in mo2git, as long as your project uses a friendly license.
-- Slower Performance: Right now, mo2git is slower when hashing and installing. I plan to make it faster by running some tasks in parallel, but let’s be honest, it’s challenging to compete with C# when using Python.
+- ❌ No User Interface (UI): If you or someone else wants to create a GitHub project with a UI for mo2git, that would be great! I’m happy to support that by providing non-UI functions in mo2git, as long as your project uses a permissive license
+  - no copyleft or other restrictions, please. This also means no stuff such as "Any quid-pro-quo payment structure in connection with... is strictly prohibited." either :angry: :rage: :scream: .
+- 🐌 Slower Performance: Right now, mo2git is slower than WJ when hashing and installing. I plan to make it faster by running some tasks in parallel, but let’s be honest, it’s challenging to compete with C# when using Python.
 
 ## Prerequisites
 
