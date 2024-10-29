@@ -195,7 +195,7 @@ class Parallel:
             dt = time.perf_counter() - started
             print('Parallel: received results of task '+taskname+' elapsed/task/cpu='
                   +str(round(dt,2))+'/'+str(round(taskt,2))+'/'+str(round(cput,2))+'s')
-            self._updateWeight(taskname,dt)
+            self._updateWeight(taskname,taskt)
             del self.runningtasks[taskname]
             assert(taskname not in self.donetasks)
             self.donetasks[taskname] = (node,out)
