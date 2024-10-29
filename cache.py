@@ -271,6 +271,21 @@ def _loadJsonFilesTaskFunc(param):
 def _loadJsonFiles2SelfTaskFunc(cache,out):
     (jsonfilesbypath,) = out
     cache.jsonfilesbypath = jsonfilesbypath
+
+def _loadJsonArchiveEntriesTaskFunc(param):
+    (cachedir,) = param
+    jsonarchiveentries = {}
+    try:
+        jsonarchiveentries = _dictOfArEntriesFromJsonFile(cachedir+'archiveentries.njson')
+    except Exception as e:
+        print('WARNING: error loading JSON cache archiveentries.njson: '+str(e)+'. Will continue w/o archiveentries JSON cache')
+        jsonarchiveentries = {} # just in case            
+    print(str(len(jsonarchiveentries))+' JSON archiveentries')
+    return (jsonarchiveentries,)
+    
+def _loadJsonArchiveEntries2SelfTaskFunc(cache,out):
+    (jsonarchiveentries,) = out
+    cache.jsonarchiveentries = jsonarchiveentries
     
 class Cache:
     def __init__(self,allarchivenames,cachedir,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders,tmppathbase,dbgfolder):
@@ -281,19 +296,21 @@ class Cache:
         self.filesbypath = {}
         timer = Elapsed()
 
-        with tasks.Parallel(self.cachedir+'parallel.json',3) as parallel:
+        with tasks.Parallel(self.cachedir+'parallel.json') as parallel:
             hctask = tasks.Task('loadhc',_loadHCTaskFunc,(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders),[])
             vfstask = tasks.Task('loadvfs',_loadVFSTaskFunc,(dbgfolder,),[])
             jsonarchivestask = tasks.Task('jsonarchives',_loadJsonArchivesTaskFunc,(self.cachedir,),[])
             jsonfilestask = tasks.Task('jsonfiles',_loadJsonFilesTaskFunc,(self.cachedir,),[])
-            unfilteredarchiveentriesval = Val(None)            
+            jsonarchiveentriestask = tasks.Task('jsonarchiveentries',_loadJsonArchiveEntriesTaskFunc,(self.cachedir,),[])
+            unfilteredarchiveentries = Val(None)            
             owntaskhc2self = tasks.Task('loadhc2self',lambda param,out: _loadHC2SelfTaskFunc(self,out),None,['loadhc'])
-            owntaskvfs2val = tasks.Task('loadvfs2val',lambda param,out: _loadVFS2ValTaskFunc(unfilteredarchiveentriesval,out),None,['loadvfs'])
+            owntaskvfs2val = tasks.Task('loadvfs2val',lambda param,out: _loadVFS2ValTaskFunc(unfilteredarchiveentries,out),None,['loadvfs'])
             owntaskjsonarchives2self = tasks.Task('loadjsonarchives2self',lambda param,out: _loadJsonArchives2SelfTaskFunc(self,out),None,['jsonarchives'])
             owntaskjsonfiles2self = tasks.Task('loadjsonfiles2self',lambda param,out: _loadJsonFiles2SelfTaskFunc(self,out),None,['jsonfiles'])
-            parallel.run([hctask,jsonarchivestask,jsonfilestask],[vfstask,owntaskhc2self,owntaskvfs2val,owntaskjsonarchives2self,owntaskjsonfiles2self])
+            owntaskjsonarchiveentries2self = tasks.Task('loadjsonarchiveentries2self',lambda param,out: _loadJsonArchiveEntries2SelfTaskFunc(self,out),None,['jsonarchiveentries'])
+            parallel.run([hctask,jsonarchivestask,jsonfilestask,jsonarchiveentriestask],
+                         [vfstask,owntaskhc2self,owntaskvfs2val,owntaskjsonarchives2self,owntaskjsonfiles2self,owntaskjsonarchiveentries2self])
         timer.printAndReset('Parallel tasks')
-        unfilteredarchiveentries = unfilteredarchiveentriesval.val
         #dbgWait()
 
         allarchivehashes = {}
@@ -305,20 +322,10 @@ class Cache:
                 print('WARNING: no archive hash found for '+arname)
         
         self.archiveentries = {}
-        for ae in unfilteredarchiveentries:
+        for ae in unfilteredarchiveentries.val:
             if allarchivehashes.get(ae.archive_hash) is not None:
                 self.archiveentries[ae.file_hash] = ae
         timer.printAndReset('Filtering WJ VFS')
-        
-        # Loading NJSON VFS Cache
-        self.jsonarchiveentries = {}
-        try:
-            self.jsonarchiveentries = _dictOfArEntriesFromJsonFile(self.cachedir+'archiveentries.njson')
-        except Exception as e:
-            print('WARNING: error loading JSON cache archiveentries.njson: '+str(e)+'. Will continue w/o archiveentries JSON cache')
-            self.jsonarchiveentries = {} # just in case            
-        print(str(len(self.jsonarchiveentries))+' JSON archiveentries')
-        timer.printAndReset('Loading JSON archiveentries')
 
         if dbgfolder:
             self.dbgDump(dbgfolder)

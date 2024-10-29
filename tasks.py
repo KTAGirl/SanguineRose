@@ -30,11 +30,11 @@ def _runTask(task,depparams):
     return out
         
 def _procFunc(num,inq,outq):
-    print('Process #'+str(num)+' started')
+    #print('Process #'+str(num)+' started')
     while True:
         taskplus = inq.get()
         if taskplus is None:
-            print('Process #'+str(num)+': exiting')
+            #print('Process #'+str(num)+': exiting')
             return
         task = taskplus[0]
         ndep = len(task.dependencies)
