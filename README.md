@@ -12,13 +12,20 @@ In short, mo2git lets multiple people work on different parts of a mod list with
 
 Currently, mo2git uses Wabbajack for hashing and creating end-user images. I plan to keep this connection for now, but I want mo2git to eventually work on its own. This will allow sharing modlists that include paid mods, which isn’t allowed by Wabbajack. Just so you know, mo2git’s hashing and image creation are currently much slower than Wabbajack’s, so we will keep using WJ for a while.
 
-### A Word to Modders
-- :❗**mo2git and Wabbajack modlists are NOT intended to rob you from your fame, or your money!**
-  - ❗**with WJ and mo2git modlists, users still need to get your mods wherever you want them to go (and pay for the mods if it is your choice).**
-  - besides, mo2git aims to improve your bottom line (whether measured in likes or in bitcoins) by enabling Joe Average user to make complicated setups, and by taking honest users away from those swindling folks who publish those whole downloadable half-terabyte folders. WJ is based on the same concepts, but they dislike money-based mods 😱. 
-- mo2git-based project is essentially just a (machine-executable) *instruction on 'how to build the MO2 folder' from Downloads folder". As in "go to such and such URL, get a file there, unpack it, and copy file X from the archive to this place within MO2 folder". Rinse and repeat 10'000 times.
-  - with mo2git (and unlike with WJ), you can easily see it on GitHub. master.json is this instruction I'm speaking about. 
+## A Word to Modders
 
+### No intent to rob you - and competing with robbers
+First of all.❗**mo2git and Wabbajack modlists are NOT intended to rob you from your fame, or your money!**❗**with WJ and mo2git modlists, users still need to get your mods wherever you want them to go (and pay for the mods if it is your choice).** ❗
+
+Besides, mo2git aims to improve your bottom line (whether measured in likes or in bitcoins) by enabling Joe Average user to make complicated setups, and by taking honest users away from those swindling folks who publish those whole downloadable half-terabyte folders. WJ is based on the same concepts, but they dislike money-based mods 😱. 
+
+### 'how to build' instruction 
+
+mo2git-based project is essentially just a (machine-executable) *instruction on 'how to build the MO2 folder' from Downloads folder". As in "go to such and such URL, get a file there, unpack it, and copy file X from the archive to this place within MO2 folder". Rinse and repeat 10'000 times.
+
+BTW, with mo2git (and unlike with WJ), you can easily see it on GitHub. master.json is this instruction I'm speaking about. 
+
+## Comparison with Wabbajack
 ### Similarities with Wabbajack
 
 - You absoulutely must have a pristine Skyrim install. You should even keep SKSE and ENB out of your Skyrim folder by using the Root Builder plugin for MO2.
