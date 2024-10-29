@@ -164,7 +164,7 @@ class Parallel:
         self.donetasks = {} # name->(node,out)        
         while True:
             # place items in process queues, until each has 2 tasks, or until there are no tasks
-            while self._runBestTask():
+            while self._scheduleBestTask():
                 pass
 
             overallstatus = self._runOwnTasks() #ATTENTION: own tasks may call addLateTask() within
@@ -174,6 +174,7 @@ class Parallel:
             # waiting for other processes to finish
             (procnum,taskname,out) = self.outq.get()
             assert(taskname in self.runningtasks)
+            print('Parallel: received results of task '+taskname)
             (expectedprocnum,started,node) = self.runningtasks[taskname]
             assert(procnum==expectedprocnum)
             dt = time.perf_counter() - started
@@ -181,11 +182,12 @@ class Parallel:
             del self.runningtasks[taskname]
             assert(taskname not in self.donetasks)
             self.donetasks[taskname] = (node,out)
+            assert(self.processesload[procnum] > 0)
             self.processesload[procnum] -= 1
             
         self.isrunning = False 
 
-    def _runBestTask(self):
+    def _scheduleBestTask(self):
         node = self._findBestCandidate()
         if node is not None:
             pidx = self.findBestProcess()
@@ -199,7 +201,7 @@ class Parallel:
                     taskplus.append(donetask[1])
                 assert(len(taskplus)==1+len(node.task.dependencies))
                 self.inqueues[i].put(taskplus)
-                print('Parallel: added task '+node.task.name+' to process #'+str(i))
+                print('Parallel: assigned task '+node.task.name+' to process #'+str(i))
                 self.runningtasks[node.task.name] = (i,time.perf_counter(),node)
                 return True
         return False
