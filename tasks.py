@@ -5,27 +5,46 @@ import time
 import json
 import traceback
 import pickle
-from multiprocessing import Process, Queue as PQueue
-from multiprocessing.managers import SharedMemoryManager
+from multiprocessing import Process, Queue as PQueue, shared_memory
+#from multiprocessing.managers import SharedMemoryManager
 
-class GrowableSharedList:
-    def __init__(self,parallel,name):
-        self.name = name
-        self.smm = parallel.smm
-        self.listofblocks = []
+'''
+class PoolOfShared:
+    def __init__(self):
+        self.shareds = {}
+        
+    def register(self,shared):
+        self.shareds[shared.name()] = shared
+        
+    def doneWith(self,name):
+        shared = self.shareds[name]
+        shared.close()
+        del self.shareds[num]
+        
+    def destroy(self):
+        for name in self.shareds:
+            shared = self.shareds[name]
+            shared.close()
+'''
+
+class SharedForSender:
+    def __init__(self,item):
+        data = pickle.dumps(item)
+        self.shm = shared_memory.SharedMemory(create=True,size=len(data))
+        shared = self.shm.buf
+        shared[:]=data
+        #parallel.register(self)
                     
-    def appendBlock(self,list):
-        packed = [pickle.dumps(item) for item in list]
-        self.listofblocks.append(self.smm.ShareableList(packed,name=self.name+'.'+str(len(self.listofblocks))))
-
-    def allItems(self):
-        for block in self.listofblocks:
-            for item in block:
-                yield pickle.loads(item)
+    def name(self):
+        return self.shm.name
+        
+    def close(self):
+        self.shm.close()
+        
+def receivedShared(name):
+    shm = shared_memory.SharedMemory(name)
+    return pickle.loads(shm.buf)
                 
-    def id():
-        return (self.name,len(self.listofblocks))
-
 #from mo2git.debug import *
 
 class Task:
@@ -50,22 +69,22 @@ def _runTask(task,depparams):
     return out
         
 def _procFunc(num,inq,outq):
-    #print('Process #'+str(num)+' started')
+    #print('Process #'+str(num+1)+' started')
     while True:
         taskplus = inq.get()
         if taskplus is None:
-            #print('Process #'+str(num)+': exiting')
+            #print('Process #'+str(num+1)+': exiting')
             return
         task = taskplus[0]
         ndep = len(task.dependencies)
         assert(len(taskplus)==1+ndep)
         t0 = time.perf_counter()
         tp0 = time.process_time()
-        print('Process #'+str(num)+': starting task '+task.name)
+        print('Process #'+str(num+1)+': starting task '+task.name)
         out = _runTask(task,taskplus[1:])
         elapsed = time.perf_counter() - t0
         cpu = time.process_time() - tp0
-        print('Process #'+str(num)+': done task '+task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
+        print('Process #'+str(num+1)+': done task '+task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
         outq.put((num,task.name,(cpu,elapsed),out))
 
 class _TaskGraphNode:
@@ -94,7 +113,7 @@ class _TaskGraphNode:
 class Parallel:
     def __init__(self,jsonfname,NPROC=0):
         assert(NPROC>=0)
-        self.smm = SharedMemoryManager()
+        #self.smm = SharedMemoryManager()
         if NPROC:
             self.NPROC = NPROC
         else:
@@ -113,7 +132,7 @@ class Parallel:
         self.isrunning = False
 
     def __enter__(self):
-        self.smm.start()
+        #self.smm.start()
         self.processes = []
         self.processesload = [] # we'll aim to have it at 2
         self.inqueues = []
@@ -374,7 +393,7 @@ class Parallel:
         if not self.joined:
             self.joinAll()
             
-        self.smm.shutdown()
+        #self.smm.shutdown()
             
         if exceptiontype is None:
             if self.jsonfname is not None:

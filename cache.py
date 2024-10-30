@@ -195,32 +195,26 @@ def _loadDirThreadFunc(procnum,inq,outq):
             return        
         Cache._loadDir(None,outqitem,request[0],request[1],request[2],request[3],request[4],request[5],request[6])
 
+'''
 def _loadVFS0(unfilteredarchiveentries,dbgfile):
     for ae in wjdb.loadVFS(dbgfile):
         unfilteredarchiveentries.append(ae)
-
 '''
-BLOCKSIZE = 65536
-def _loadVFS0(unfilteredarchiveentries,dbgfile):
-    buf = []
-    nleft = BLOCKSIZE
+glb = []
+def _loadVFS0(dbgfile):
+    unfilteredarchiveentries = []
     for ae in wjdb.loadVFS(dbgfile):
-        buf.append(ae)
-        nleft -= 1
-        if nleft <= 0:
-            unfilteredarchiveentries.appendBlock(buf)
-            buf = []
-            nleft = BLOCKSIZE
-    if len(buf):
-        unfilteredarchiveentries.appendBlock(buf)
-'''
+        unfilteredarchiveentries.append(ae)
+    shared = tasks.SharedForSender(unfilteredarchiveentries)
+    glb.append(shared)
+    return (shared.name(),)
 
-def _loadVFS(unfilteredarchiveentries,dbgfolder):
+def _loadVFS(dbgfolder):
     if dbgfolder:
         with open(dbgfolder+'loadvfs.txt','wt',encoding='utf-8') as dbgfile:
-            _loadVFS0(unfilteredarchiveentries,dbgfile)
+            return _loadVFS0(dbgfile)
     else:
-        _loadVFS0(unfilteredarchiveentries,None)
+        return _loadVFS0(None)
 
 def _loadHC(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders):
     ndupdl = Val(0) #passable by ref
@@ -247,12 +241,12 @@ def _loadHC2SelfTaskFunc(cache,out):
          +str(len(cache.filesbypath))+' files ('+str(nexf)+' excluded, '+str(ndupf)+' duplicates)')
 
 def _loadVFSTaskFunc(param):
-    (unfilteredarchiveentries,dbgfolder) = param
-    _loadVFS(unfilteredarchiveentries,dbgfolder)
+    (dbgfolder,) = param
+    return _loadVFS(dbgfolder)
 
-#def _loadVFS2ValTaskFunc(val,out):
-#    (unfilteredarchiveentries,) = out
-#    val.val = unfilteredarchiveentries
+def _loadVFS2ValTaskFunc(val,out):
+    (sharedname,) = out
+    val.val = tasks.receivedShared(sharedname)
 
 def _loadJsonArchivesTaskFunc(param):
     (cachedir,) = param
@@ -304,7 +298,7 @@ def _loadJsonArchiveEntriesTaskFunc(param):
 def _loadJsonArchiveEntries2SelfTaskFunc(cache,out):
     (jsonarchiveentries,) = out
     cache.jsonarchiveentries = jsonarchiveentries
-    
+
 class Cache:
     def __init__(self,allarchivenames,cachedir,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders,tmppathbase,dbgfolder):
         self.cachedir = cachedir
@@ -315,22 +309,22 @@ class Cache:
         timer = Elapsed()
 
         with tasks.Parallel(self.cachedir+'parallel.json') as parallel:
-            unfilteredarchiveentries = []#tasks.GrowableSharedList(parallel)
+            unfilteredarchiveentries = Val(None)
             
             hctask = tasks.Task('loadhc',_loadHCTaskFunc,(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders),[])
-            vfstask = tasks.Task('loadvfs',_loadVFSTaskFunc,(unfilteredarchiveentries,dbgfolder),[])
+            vfstask = tasks.Task('loadvfs',_loadVFSTaskFunc,(dbgfolder,),[])
             jsonarchivestask = tasks.Task('jsonarchives',_loadJsonArchivesTaskFunc,(self.cachedir,),[])
             jsonfilestask = tasks.Task('jsonfiles',_loadJsonFilesTaskFunc,(self.cachedir,),[])
             jsonarchiveentriestask = tasks.Task('jsonarchiveentries',_loadJsonArchiveEntriesTaskFunc,(self.cachedir,),[])
             #unfilteredarchiveentries = Val(None)            
             owntaskhc2self = tasks.Task('ownhc2self',lambda param,out: _loadHC2SelfTaskFunc(self,out),None,['loadhc'])
-            #owntaskvfs2val = tasks.Task('ownvfs2val',lambda param,out: _loadVFS2ValTaskFunc(unfilteredarchiveentries,out),None,['loadvfs'])
+            owntaskvfs2val = tasks.Task('ownvfs2val',lambda param,out: _loadVFS2ValTaskFunc(unfilteredarchiveentries,out),None,['loadvfs'])
             owntaskjsonarchives2self = tasks.Task('ownjsonarchives2self',lambda param,out: _loadJsonArchives2SelfTaskFunc(self,out),None,['jsonarchives'])
             owntaskjsonfiles2self = tasks.Task('ownjsonfiles2self',lambda param,out: _loadJsonFiles2SelfTaskFunc(self,out),None,['jsonfiles'])
             owntaskjsonarchiveentries2self = tasks.Task('ownjsonarchiveentries2self',lambda param,out: _loadJsonArchiveEntries2SelfTaskFunc(self,out),None,['jsonarchiveentries'])
-            parallel.run([hctask,jsonarchivestask,jsonfilestask,jsonarchiveentriestask],
-                         [vfstask,owntaskhc2self,
-#                         owntaskvfs2val,
+            parallel.run([hctask,vfstask,jsonarchivestask,jsonfilestask,jsonarchiveentriestask],
+                         [owntaskhc2self,
+                         owntaskvfs2val,
                          owntaskjsonarchives2self,owntaskjsonfiles2self,owntaskjsonarchiveentries2self])
         timer.printAndReset('Parallel tasks')
         #dbgWait()
@@ -347,8 +341,8 @@ class Cache:
  #       for ae in unfilteredarchiveentries.val:
  #           if allarchivehashes.get(ae.archive_hash) is not None:
  #               self.archiveentries[ae.file_hash] = ae
-        print(len(unfilteredarchiveentries))
-        for ae in unfilteredarchiveentries:
+        print(len(unfilteredarchiveentries.val))
+        for ae in unfilteredarchiveentries.val:
             ahash = ae.archive_hash
             assert(ahash>=0)
             if allarchivehashes.get(ahash) is not None:
@@ -357,7 +351,7 @@ class Cache:
                 self.archiveentries[ae.file_hash] = ae
         print('Filtered: '+str(len(self.archiveentries)))
         timer.printAndReset('Filtering WJ VFS')
-        dbgWait()
+        #dbgWait()
 
         if dbgfolder:
             self.dbgDump(dbgfolder)
