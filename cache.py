@@ -195,10 +195,10 @@ def _loadDirThreadFunc(procnum,inq,outq):
             return        
         Cache._loadDir(None,outqitem,request[0],request[1],request[2],request[3],request[4],request[5],request[6])
 
-'''
 def _loadVFS0(unfilteredarchiveentries,dbgfile):
     for ae in wjdb.loadVFS(dbgfile):
         unfilteredarchiveentries.append(ae)
+
 '''
 BLOCKSIZE = 65536
 def _loadVFS0(unfilteredarchiveentries,dbgfile):
@@ -213,6 +213,7 @@ def _loadVFS0(unfilteredarchiveentries,dbgfile):
             nleft = BLOCKSIZE
     if len(buf):
         unfilteredarchiveentries.appendBlock(buf)
+'''
 
 def _loadVFS(unfilteredarchiveentries,dbgfolder):
     if dbgfolder:
@@ -314,7 +315,7 @@ class Cache:
         timer = Elapsed()
 
         with tasks.Parallel(self.cachedir+'parallel.json') as parallel:
-            unfilteredarchiveentries = tasks.GrowableSharedList(parallel)
+            unfilteredarchiveentries = []#tasks.GrowableSharedList(parallel)
             
             hctask = tasks.Task('loadhc',_loadHCTaskFunc,(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders),[])
             vfstask = tasks.Task('loadvfs',_loadVFSTaskFunc,(unfilteredarchiveentries,dbgfolder),[])
@@ -346,7 +347,8 @@ class Cache:
  #       for ae in unfilteredarchiveentries.val:
  #           if allarchivehashes.get(ae.archive_hash) is not None:
  #               self.archiveentries[ae.file_hash] = ae
-        for ae in unfilteredarchiveentries.allItems():
+        print(len(unfilteredarchiveentries))
+        for ae in unfilteredarchiveentries:
             ahash = ae.archive_hash
             assert(ahash>=0)
             if allarchivehashes.get(ahash) is not None:

@@ -9,18 +9,22 @@ from multiprocessing import Process, Queue as PQueue
 from multiprocessing.managers import SharedMemoryManager
 
 class GrowableSharedList:
-    def __init__(self,parallel):
+    def __init__(self,parallel,name):
+        self.name = name
         self.smm = parallel.smm
         self.listofblocks = []
-                
+                    
     def appendBlock(self,list):
         packed = [pickle.dumps(item) for item in list]
-        self.listofblocks.append(self.smm.ShareableList(packed))
+        self.listofblocks.append(self.smm.ShareableList(packed,name=self.name+'.'+str(len(self.listofblocks))))
 
     def allItems(self):
         for block in self.listofblocks:
             for item in block:
                 yield pickle.loads(item)
+                
+    def id():
+        return (self.name,len(self.listofblocks))
 
 #from mo2git.debug import *
 
