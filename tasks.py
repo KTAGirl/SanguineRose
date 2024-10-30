@@ -4,7 +4,23 @@ import os
 import time
 import json
 import traceback
+import pickle
 from multiprocessing import Process, Queue as PQueue
+from multiprocessing.managers import SharedMemoryManager
+
+class GrowableSharedList:
+    def __init__(self,parallel):
+        self.smm = parallel.smm
+        self.listofblocks = []
+                
+    def appendBlock(self,list):
+        packed = [pickle.dumps(item) for item in list]
+        self.listofblocks.append(self.smm.ShareableList(packed))
+
+    def allItems(self):
+        for block in self.listofblocks:
+            for item in block:
+                yield pickle.loads(item)
 
 #from mo2git.debug import *
 
@@ -74,12 +90,13 @@ class _TaskGraphNode:
 class Parallel:
     def __init__(self,jsonfname,NPROC=0):
         assert(NPROC>=0)
+        self.smm = SharedMemoryManager()
         if NPROC:
             self.NPROC = NPROC
         else:
             self.NPROC = os.cpu_count() - 1 # -1 for the process which will run self.run()
         assert(self.NPROC>=0)
-        print('Using '+str(NPROC)+' processes...')
+        print('Using '+str(self.NPROC)+' processes...')
         self.jsonfname = jsonfname
         self.jsonweights = {}
         if jsonfname is not None:
@@ -92,6 +109,7 @@ class Parallel:
         self.isrunning = False
 
     def __enter__(self):
+        self.smm.start()
         self.processes = []
         self.processesload = [] # we'll aim to have it at 2
         self.inqueues = []
@@ -351,6 +369,8 @@ class Parallel:
             self.shutdown()
         if not self.joined:
             self.joinAll()
+            
+        self.smm.shutdown()
             
         if exceptiontype is None:
             if self.jsonfname is not None:

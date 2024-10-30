@@ -119,7 +119,6 @@ def loadVFS(dbgfile=None):
     # rowi = -1
     nn = 0
     nx = 0
-    archiveentries = []
     for row in cur.execute('SELECT Hash,Contents FROM VFSCache'): 
         contents = row[1]
 
@@ -137,13 +136,12 @@ def loadVFS(dbgfile=None):
                 #if archiveentries.get(ae.file_hash) is None or allarchivehashes.get(ae.archive_hash):
                 #    archiveentries[ae.file_hash]=ae
                 #if allarchivehashes.get(ae.archive_hash) is not None:
-                archiveentries.append(ae)
+                yield ae
                 #else:
                 #    print('WARNING/loadVFS(): archive with hash='+str(ae.archive_hash)+' is not found')
                 
     con.close()
     print('loadVFS: nn='+str(nn)+' nx='+str(nx))
-    return archiveentries
 
 def _wjTimestampToPythonTimestamp(wjftime):
     return (wjftime - 116444736000000000) / 10**7
