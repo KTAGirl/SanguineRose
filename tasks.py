@@ -8,8 +8,7 @@ import pickle
 from multiprocessing import Process, Queue as PQueue, shared_memory
 #from multiprocessing.managers import SharedMemoryManager
 
-'''
-class PoolOfShared:
+class _PoolOfShared:
     def __init__(self):
         self.shareds = {}
         
@@ -19,13 +18,14 @@ class PoolOfShared:
     def doneWith(self,name):
         shared = self.shareds[name]
         shared.close()
-        del self.shareds[num]
+        del self.shareds[name]
         
-    def destroy(self):
+    def __del__(self):
         for name in self.shareds:
             shared = self.shareds[name]
             shared.close()
-'''
+
+_poolofshared = _PoolOfShared()
 
 class SharedForSender:
     def __init__(self,item):
@@ -33,18 +33,14 @@ class SharedForSender:
         self.shm = shared_memory.SharedMemory(create=True,size=len(data))
         shared = self.shm.buf
         shared[:]=data
-        #parallel.register(self)
+        _poolofshared.register(self)
                     
     def name(self):
         return self.shm.name
         
     def close(self):
         self.shm.close()
-        
-def receivedShared(name):
-    shm = shared_memory.SharedMemory(name)
-    return pickle.loads(shm.buf)
-                
+                        
 #from mo2git.debug import *
 
 class Task:
@@ -67,8 +63,23 @@ def _runTask(task,depparams):
         case 3:
             out = task.f(task.param,depparams[0],depparams[1],depparams[2]) 
     return out
-        
+    
+_procnum = -1 # number of child process
+def makeSharedParam(shared):
+    assert(_procnum>=0)
+    return (shared.name(),_procnum)
+
+def receivedShared(parallel,sharedparam):
+    (name,sender) = sharedparam
+    shm = shared_memory.SharedMemory(name)
+    out = pickle.loads(shm.buf)
+    parallel._notifySenderShmDone(sender,name)
+    return out
+
 def _procFunc(num,inq,outq):
+    global _procnum
+    assert(_procnum==-1)
+    _procnum = num
     #print('Process #'+str(num+1)+' started')
     while True:
         taskplus = inq.get()
@@ -76,12 +87,21 @@ def _procFunc(num,inq,outq):
             #print('Process #'+str(num+1)+': exiting')
             return
         task = taskplus[0]
+        processedshm = taskplus[1]
+        assert(task is None or processedshm is None)
+        assert(task is not None or processedshm is not None)
+        if processedshm is not None:
+            assert(task is None)
+            print('Process #'+str(num+1)+': releasing shm='+processedshm)
+            _poolofshared.doneWith(processedshm)
+            continue #while True
+            
         ndep = len(task.dependencies)
-        assert(len(taskplus)==1+ndep)
+        assert(len(taskplus)==2+ndep)
         t0 = time.perf_counter()
         tp0 = time.process_time()
         print('Process #'+str(num+1)+': starting task '+task.name)
-        out = _runTask(task,taskplus[1:])
+        out = _runTask(task,taskplus[2:])
         elapsed = time.perf_counter() - t0
         cpu = time.process_time() - tp0
         print('Process #'+str(num+1)+': done task '+task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
@@ -250,20 +270,23 @@ class Parallel:
         if node is not None:
             pidx = self._findBestProcess()
             if pidx >= 0:
-                taskplus = [node.task]
+                taskplus = [node.task,None]
                 assert(len(node.task.dependencies)==len(node.parents))
                 for parent in node.parents:
                     assert(parent.task.name in self.donetasks)
                     donetask = self._doneTask(parent.task.name)
                     assert(donetask[0]==parent)
                     taskplus.append(donetask[1])
-                assert(len(taskplus)==1+len(node.task.dependencies))
+                assert(len(taskplus)==2+len(node.task.dependencies))
                 self.inqueues[pidx].put(taskplus)
                 print('Parallel: assigned task '+node.task.name+' to process #'+str(pidx))
                 self.runningtasks[node.task.name] = (pidx,time.perf_counter(),node)
                 self.processesload[pidx] += 1
                 return True
         return False
+        
+    def _notifySenderShmDone(self,pidx,name):
+        self.inqueues[pidx].put( (None,name) )
         
     def _doneTask(self,name):
         done = self.donetasks.get(name)

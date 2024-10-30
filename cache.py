@@ -200,14 +200,12 @@ def _loadVFS0(unfilteredarchiveentries,dbgfile):
     for ae in wjdb.loadVFS(dbgfile):
         unfilteredarchiveentries.append(ae)
 '''
-glb = []
 def _loadVFS0(dbgfile):
     unfilteredarchiveentries = []
     for ae in wjdb.loadVFS(dbgfile):
         unfilteredarchiveentries.append(ae)
     shared = tasks.SharedForSender(unfilteredarchiveentries)
-    glb.append(shared)
-    return (shared.name(),)
+    return (tasks.makeSharedParam(shared),)
 
 def _loadVFS(dbgfolder):
     if dbgfolder:
@@ -215,6 +213,14 @@ def _loadVFS(dbgfolder):
             return _loadVFS0(dbgfile)
     else:
         return _loadVFS0(None)
+
+def _loadVFSTaskFunc(param):
+    (dbgfolder,) = param
+    return _loadVFS(dbgfolder)
+
+def _loadVFS2ValTaskFunc(parallel,val,out):
+    (sharedparam,) = out
+    val.val = tasks.receivedShared(parallel,sharedparam)
 
 def _loadHC(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders):
     ndupdl = Val(0) #passable by ref
@@ -239,14 +245,6 @@ def _loadHC2SelfTaskFunc(cache,out):
     assert(len(cache.archives)==len(cache.archivesbypath)) 
     print(str(len(cache.archives))+' archives ('+str(ndupdl)+' duplicates), '
          +str(len(cache.filesbypath))+' files ('+str(nexf)+' excluded, '+str(ndupf)+' duplicates)')
-
-def _loadVFSTaskFunc(param):
-    (dbgfolder,) = param
-    return _loadVFS(dbgfolder)
-
-def _loadVFS2ValTaskFunc(val,out):
-    (sharedname,) = out
-    val.val = tasks.receivedShared(sharedname)
 
 def _loadJsonArchivesTaskFunc(param):
     (cachedir,) = param
@@ -317,11 +315,11 @@ class Cache:
             jsonfilestask = tasks.Task('jsonfiles',_loadJsonFilesTaskFunc,(self.cachedir,),[])
             jsonarchiveentriestask = tasks.Task('jsonarchiveentries',_loadJsonArchiveEntriesTaskFunc,(self.cachedir,),[])
             #unfilteredarchiveentries = Val(None)            
-            owntaskhc2self = tasks.Task('ownhc2self',lambda param,out: _loadHC2SelfTaskFunc(self,out),None,['loadhc'])
-            owntaskvfs2val = tasks.Task('ownvfs2val',lambda param,out: _loadVFS2ValTaskFunc(unfilteredarchiveentries,out),None,['loadvfs'])
-            owntaskjsonarchives2self = tasks.Task('ownjsonarchives2self',lambda param,out: _loadJsonArchives2SelfTaskFunc(self,out),None,['jsonarchives'])
-            owntaskjsonfiles2self = tasks.Task('ownjsonfiles2self',lambda param,out: _loadJsonFiles2SelfTaskFunc(self,out),None,['jsonfiles'])
-            owntaskjsonarchiveentries2self = tasks.Task('ownjsonarchiveentries2self',lambda param,out: _loadJsonArchiveEntries2SelfTaskFunc(self,out),None,['jsonarchiveentries'])
+            owntaskhc2self = tasks.Task('ownhc2self',lambda _,out: _loadHC2SelfTaskFunc(self,out),None,['loadhc'])
+            owntaskvfs2val = tasks.Task('ownvfs2val',lambda _,out: _loadVFS2ValTaskFunc(parallel,unfilteredarchiveentries,out),None,['loadvfs'])
+            owntaskjsonarchives2self = tasks.Task('ownjsonarchives2self',lambda _,out: _loadJsonArchives2SelfTaskFunc(self,out),None,['jsonarchives'])
+            owntaskjsonfiles2self = tasks.Task('ownjsonfiles2self',lambda _,out: _loadJsonFiles2SelfTaskFunc(self,out),None,['jsonfiles'])
+            owntaskjsonarchiveentries2self = tasks.Task('ownjsonarchiveentries2self',lambda _,out: _loadJsonArchiveEntries2SelfTaskFunc(self,out),None,['jsonarchiveentries'])
             parallel.run([hctask,vfstask,jsonarchivestask,jsonfilestask,jsonarchiveentriestask],
                          [owntaskhc2self,
                          owntaskvfs2val,
