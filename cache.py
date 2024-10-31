@@ -317,32 +317,31 @@ def _ownJsonArchiveEntries2SelfTaskFunc(cache,out):
     
 # filtering and scanning
 
-def _ownFilterTaskFunc(cache,allarchivenames,fromloadlvs):
+def _ownFilterTaskFunc(cache,parallel,allarchivenames,fromloadlvs):
     (sharedparam,) = fromloadlvs
     unfilteredarchiveentries = tasks.receivedSharedReturn(parallel,sharedparam)
 
     allarchivehashes = {}
     for arname in allarchivenames:
-        ar = _getFromOneOfDicts(self.archivesbypath,self.jsonarchivesbypath,arname.lower())
+        ar = _getFromOneOfDicts(cache.archivesbypath,cache.jsonarchivesbypath,arname.lower())
         if ar:
             allarchivehashes[ar.archive_hash] = 1
         else:
             print('WARNING: no archive hash found for '+arname)
     
-    self.archiveentries = {}
+    cache.archiveentries = {}
 #       for ae in unfilteredarchiveentries.val:
 #           if allarchivehashes.get(ae.archive_hash) is not None:
-#               self.archiveentries[ae.file_hash] = ae
-    print(len(unfilteredarchiveentries))
+#               cache.archiveentries[ae.file_hash] = ae
     for ae in unfilteredarchiveentries:
         ahash = ae.archive_hash
         assert(ahash>=0)
         if allarchivehashes.get(ahash) is not None:
             #print(ae.toJSON())
             #dbgWait()
-            self.archiveentries[ae.file_hash] = ae
-    self.publishedarchiveentries = tasks.SharedPublication(parallel,self.archiveentries)
-    print('Filtered: '+str(len(self.archiveentries)))
+            cache.archiveentries[ae.file_hash] = ae
+    cache.publishedarchiveentries = tasks.SharedPublication(parallel,cache.archiveentries)
+    print('Filtered: '+str(len(cache.archiveentries))+' out of '+str(len(unfilteredarchiveentries)))
 
 def _notALambda0(capture,param):
   (_,ar,updatednotadded) = param
@@ -438,7 +437,7 @@ class Cache:
                                         None,['jsonarchiveentries'])
                         
             ownfiltertask = tasks.Task('filteraes',
-                                        lambda _,fromlvs,_2,_3: _ownFilterTaskFunc(self,allarchivenames,fromlvs),
+                                        lambda _,fromlvs,_2,_3: _ownFilterTaskFunc(self,parallel,allarchivenames,fromlvs),
                                         None,['loadvfs','loadhc','ownjsonarchives2self'])
             scandlstask = tasks.Task('scandls',_scanDownloadsTaskFunc,
                                      (downloadsdir,tmppathbase),

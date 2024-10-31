@@ -223,7 +223,9 @@ class Parallel:
         
     def _internalAddTaskIf(self,t):
         assert(t.name not in self.alltasknames)
-
+        assert(t.name not in self.graphnodesbyname)
+        assert(t.name not in self.ownnodesbyname)
+        
         taskparents = []
         for d in t.dependencies:
             pnode = self.graphnodesbyname.get(d)
@@ -285,21 +287,30 @@ class Parallel:
 
             if not megaok:
                 for ot in owntasks:
-                    print(ot.name+' added')
                     ok = self._internalAddOwnTask(ot)
-                    owntasks.remove(ot)
-                    megaok = True
-                    break # for ot
+                    if ok:
+                        print(ot.name+' added to own')
+                        owntasks.remove(ot)
+                        megaok = True
+                        break # for ot
             
             if megaok:
                 continue # while True
             else:
-                taskstr = '['
+                taskstr = '[\n'
                 for task in tasks:
-                    taskstr += str(task.__dict__)+','
-                taskstr += ']'
+                    taskstr += '    '+str(task.__dict__)+',\n'
+                taskstr += '\n]'
  
-                print('Parallel: probable typo in task name or circular dependency: cannot resolve tasks '+taskstr)
+                owntaskstr = '[\n'
+                for owntask in owntasks:
+                    owntaskstr += '    '+str(owntask.__dict__)+',\n'
+                owntaskstr += ']\n'
+
+                print('Parallel: probable typo in task name or circular dependency: cannot resolve tasks:\n'
+                      +taskstr+'\n'
+                      +'and own tasks:\n'
+                      +owntaskstr)
                 assert(False)
                             
         # graph ok, running the initial tasks
@@ -378,6 +389,11 @@ class Parallel:
         
     def _runOwnTasks(self): # returns overall status: 1: work to do, 2: all running, 3: all done
         #print(len(self.owntasks))
+        for ot in self.owntasks:
+            print('owntask: '+ot.task.name)
+        for otname in self.doneowntasks:
+            print('doneowntask: '+otname)
+            
         for ot in self.owntasks:
             #print('task: '+ot.task.name)
             if ot.task.name in self.doneowntasks:
