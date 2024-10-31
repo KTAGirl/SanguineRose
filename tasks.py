@@ -26,6 +26,10 @@ class _PoolOfShared:
             shared.close()
 
 _poolofshared = _PoolOfShared()
+_started = time.perf_counter()
+
+def _printTime():
+    return str(round(time.perf_counter()-_started,2))+': '
 
 class SharedReturn:
     def __init__(self,item):
@@ -100,7 +104,7 @@ def _runTask(task,depparams):
     
 _procnum = -1 # number of child process
 def makeSharedReturnParam(shared):
-    assert(_procnum>=0)
+    #assert(_procnum>=0)
     return (shared.name(),_procnum)
     
 def makeSharedPublicationParam(shared):
@@ -118,36 +122,41 @@ def fromPublication(sharedparam):
     return pickle.loads(shm.buf)
 
 def _procFunc(num,inq,outq):
-    global _procnum
-    assert(_procnum==-1)
-    _procnum = num
-    #print('Process #'+str(num+1)+' started')
-    while True:
-        taskplus = inq.get()
-        if taskplus is None:
-            #print('Process #'+str(num+1)+': exiting')
-            return
-        task = taskplus[0]
-        processedshm = taskplus[1]
-        assert(task is None or processedshm is None)
-        assert(task is not None or processedshm is not None)
-        if processedshm is not None:
-            assert(task is None)
-            print('Process #'+str(num+1)+': releasing shm='+processedshm)
-            _poolofshared.doneWith(processedshm)
-            continue #while True
-            
-        ndep = len(task.dependencies)
-        assert(len(taskplus)==2+ndep)
-        t0 = time.perf_counter()
-        tp0 = time.process_time()
-        print('Process #'+str(num+1)+': starting task '+task.name)
-        out = _runTask(task,taskplus[2:])
-        elapsed = time.perf_counter() - t0
-        cpu = time.process_time() - tp0
-        print('Process #'+str(num+1)+': done task '+task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
-        outq.put((num,task.name,(cpu,elapsed),out))
-
+    try:
+        global _procnum
+        assert(_procnum==-1)
+        _procnum = num
+        #print('Process #'+str(num+1)+' started')
+        while True:
+            taskplus = inq.get()
+            if taskplus is None:
+                #print('Process #'+str(num+1)+': exiting')
+                return
+            task = taskplus[0]
+            processedshm = taskplus[1]
+            assert(task is None or processedshm is None)
+            assert(task is not None or processedshm is not None)
+            if processedshm is not None:
+                assert(task is None)
+                print('Process #'+str(num+1)+': releasing shm='+processedshm)
+                _poolofshared.doneWith(processedshm)
+                continue #while True
+                
+            ndep = len(task.dependencies)
+            assert(len(taskplus)==2+ndep)
+            t0 = time.perf_counter()
+            tp0 = time.process_time()
+            print('Process #'+str(num+1)+': starting task '+task.name)
+            out = _runTask(task,taskplus[2:])
+            elapsed = time.perf_counter() - t0
+            cpu = time.process_time() - tp0
+            print('Process #'+str(num+1)+': done task '+task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
+            outq.put((num,task.name,(cpu,elapsed),out))
+    except Exception as e:
+        print('Parallel: exception '+str(e))
+        traceback.print_tb(exceptiontraceback)
+        outq.put(None)
+        
 class _TaskGraphNode:
     def __init__(self,task,parents,weight):
         self.task = task
@@ -217,8 +226,11 @@ class Parallel:
 
         taskparents = []
         for d in t.dependencies:
-            pnode = graphnodesbyname.get(d)
+            pnode = self.graphnodesbyname.get(d)
             if pnode is None:
+                pnode = self.ownnodesbyname.get(d)
+            if pnode is None:
+                #print(d)
                 return False
             else:
                 taskparents.append(pnode)
@@ -241,11 +253,15 @@ class Parallel:
             pnode = self.graphnodesbyname.get(d)
             if pnode is None:
                 pnode = self.ownnodesbyname.get(d)
-            assert(pnode is not None)
-            taskparents.append(pnode)
+            if pnode is None:
+                print('Parallel: Dependency '+d+' is not found')
+                return False
+            else:
+                taskparents.append(pnode)
         node = _TaskGraphNode(ot,taskparents,self.jsonweights.get(ot.name,0.1)) # assuming that own tasks are shorter (they should be)
         self.owntasks.append(node) 
-        self.ownnodesbyname[ot.name] = node        
+        self.ownnodesbyname[ot.name] = node
+        return True
 
     def run(self,tasks,owntasks):
         self.isrunning = True
@@ -253,33 +269,44 @@ class Parallel:
         # building task graph
         
         self.taskgraph = [] #it is a forest
-        self.graphnodesbyname = {}
+        self.graphnodesbyname = {} # name->node
+        self.ownnodesbyname = {} # name->node        
         self.alltasknodes = []
-        while len(tasks) > 0:
-            okone = None
+        self.owntasks = []
+        while len(tasks) > 0 or len(owntasks) > 0:
+            megaok = False
             for t in tasks:
                 ok = self._internalAddTaskIf(t)
                 if ok:
-                    okone = t
+                    print(t.name+' added')
+                    tasks.remove(t)
+                    megaok = True
                     break #for t
+
+            if not megaok:
+                for ot in owntasks:
+                    print(ot.name+' added')
+                    ok = self._internalAddOwnTask(ot)
+                    owntasks.remove(ot)
+                    megaok = True
+                    break # for ot
             
-            if okone is not None:
-                tasks.remove(okone)
+            if megaok:
                 continue # while True
             else:
-                print('Parallel: probable typo in task name or circular dependency: cannot resolve tasks '+str(tasks))
+                taskstr = '['
+                for task in tasks:
+                    taskstr += str(task.__dict__)+','
+                taskstr += ']'
+ 
+                print('Parallel: probable typo in task name or circular dependency: cannot resolve tasks '+taskstr)
                 assert(False)
-            
-        self.owntasks = []
-        self.ownnodesbyname = {} # name->node
-        self.doneowntasks = {} # name->(node,out)
-        for ot in owntasks:
-            self._internalAddOwnTask(ot)
-                
+                            
         # graph ok, running the initial tasks
         assert(len(self.taskgraph))
         self.runningtasks = {} # name->(procnum,started,node)
         self.donetasks = {} # name->(node,out)        
+        self.doneowntasks = {} # name->(node,out)
         while True:
             # place items in process queues, until each has 2 tasks, or until there are no tasks
             while self._scheduleBestTask():
@@ -290,13 +317,18 @@ class Parallel:
                 break # while True
 
             # waiting for other processes to finish
-            (procnum,taskname,times,out) = self.outq.get()
+            got = self.outq.get()
+            if got is None:
+                print('Parallel: An exception within child process reported. Terminating')
+                raise Exception('Parallel: child process exception')
+                
+            (procnum,taskname,times,out) = got
             assert(taskname in self.runningtasks)
             (expectedprocnum,started,node) = self.runningtasks[taskname]
             (cput,taskt) = times
             assert(procnum==expectedprocnum)
             dt = time.perf_counter() - started
-            print('Parallel: received results of task '+taskname+' elapsed/task/cpu='
+            print(_printTime()+'Parallel: received results of task '+taskname+' elapsed/task/cpu='
                   +str(round(dt,2))+'/'+str(round(taskt,2))+'/'+str(round(cput,2))+'s')
             self._updateWeight(taskname,taskt)
             del self.runningtasks[taskname]
@@ -315,20 +347,26 @@ class Parallel:
                 taskplus = [node.task,None]
                 assert(len(node.task.dependencies)==len(node.parents))
                 for parent in node.parents:
-                    assert(parent.task.name in self.donetasks)
+                    #print(parent.task.name)
+                    #assert(parent.task.name in self.donetasks)
                     donetask = self._doneTask(parent.task.name)
                     assert(donetask[0]==parent)
                     taskplus.append(donetask[1])
                 assert(len(taskplus)==2+len(node.task.dependencies))
                 self.inqueues[pidx].put(taskplus)
-                print('Parallel: assigned task '+node.task.name+' to process #'+str(pidx))
+                print(_printTime()+'Parallel: assigned task '+node.task.name+' to process #'+str(pidx+1))
                 self.runningtasks[node.task.name] = (pidx,time.perf_counter(),node)
                 self.processesload[pidx] += 1
                 return True
         return False
         
     def _notifySenderShmDone(self,pidx,name):
-        self.inqueues[pidx].put( (None,name) )
+        if pidx < 0:
+            assert(pidx==-1)
+            print(_printTime()+'Releasing own shm='+name)
+            _poolofshared.doneWith(name)
+        else:
+            self.inqueues[pidx].put( (None,name) )
         
     def _doneTask(self,name):
         done = self.donetasks.get(name)
@@ -360,11 +398,11 @@ class Parallel:
             assert(len(params)==len(ot.task.dependencies))
             assert(len(params)<=3)
 
-            print('Parallel: running own task '+ot.task.name)
+            print(_printTime()+'Parallel: running own task '+ot.task.name)
             started = time.perf_counter()
             #ATTENTION: ot.task.f(...) may call addLateTask() within
             out = _runTask(ot.task,params)
-            print('Parallel: done own task '+ot.task.name)
+            print(_printTime()+'Parallel: done own task '+ot.task.name)
             dt = time.perf_counter() - started
             self._updateWeight(ot.task.name,dt)
             self.doneowntasks[ot.task.name] = (ot,out)
@@ -372,12 +410,17 @@ class Parallel:
         # status must run after own tasks, because they may call addLateTask() and addLateOwnTask()
         allrunningordone = True
         alldone = True
-        for node in self.alltasknodes:
-            if node.task.name not in self.donetasks:
+        for node in self.owntasks:
+            if node.task.name not in self.doneowntasks:
                 alldone = False
-                if node.task.name not in self.runningtasks:
-                    allrunningordone = False
-                    break
+                break
+        if alldone:
+            for node in self.alltasknodes:
+                if node.task.name not in self.donetasks:
+                    alldone = False
+                    if node.task.name not in self.runningtasks:
+                        allrunningordone = False
+                        break
         if not alldone:
             return 2 if allrunningordone else 1
         return 3
@@ -388,14 +431,15 @@ class Parallel:
         assert(task.name not in self.ownnodesbyname)
         added = self._internalAddTask(t)
         assert(added) #failure to add is ok only during original building of the tree
-        print('Parallel: late task '+task.name+' added')
+        print(_printTime()+'Parallel: late task '+task.name+' added')
     
     def addLateOwnTask(self,ot):
         assert(self.isrunning)
         assert(task.name not in self.alltasknames)
         assert(task.name not in self.ownnodesbyname)
-        self._internalAddOwnTask(self,ot)
-        print('Parallel: late own task '+task.name+' added')
+        added = self._internalAddOwnTask(self,ot)
+        assert(added) #failure to add is ok only during original building of the tree
+        print(_printTime()+'Parallel: late own task '+task.name+' added')
     
     def _findBestProcess(self):
         besti = -1
