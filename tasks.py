@@ -121,10 +121,10 @@ def fromPublication(sharedparam):
     shm = shared_memory.SharedMemory(sharedparam)
     return pickle.loads(shm.buf)
 
-def _procFunc(t0,num,inq,outq):
+def _procFunc(parentstarted,num,inq,outq):
     try:
         global _started
-        _started = t0+0.05 # experimental
+        _started = parentstarted
         global _procnum
         assert(_procnum==-1)
         _procnum = num
@@ -218,8 +218,7 @@ class Parallel:
         for i in range(0,self.NPROC):
             inq = PQueue()
             self.inqueues.append(inq)
-            p = Process(target=_procFunc,args=(time.perf_counter(), #don't move this out of the loop
-                                               i,inq,self.outq))
+            p = Process(target=_procFunc,args=(_started,i,inq,self.outq))
             self.processes.append(p)
             p.start()
             self.processesload.append(0)
@@ -342,6 +341,9 @@ class Parallel:
                 print('Parallel: An exception within child process reported. Terminating')
                 raise Exception('Parallel: child process exception')
             dwait = time.perf_counter() - waitt0
+            strwait=str(round(dwait,2))+'s'
+            if dwait < 0.01:
+                strwait += '[MAIN THREAD SERIALIZATION]'
             
             (procnum,taskname,times,out) = got
             assert(taskname in self.runningtasks)
@@ -349,8 +351,8 @@ class Parallel:
             (cput,taskt) = times
             assert(procnum==expectedprocnum)
             dt = time.perf_counter() - started
-            print(_printTime()+'Parallel: after waiting for '+str(round(dwait,2))+
-                  's, received results of task '+taskname+' elapsed/task/cpu='
+            print(_printTime()+'Parallel: after waiting for '+strwait+
+                  ', received results of task '+taskname+' elapsed/task/cpu='
                   +str(round(dt,2))+'/'+str(round(taskt,2))+'/'+str(round(cput,2))+'s')
             self._updateWeight(taskname,taskt)
             del self.runningtasks[taskname]
@@ -426,12 +428,14 @@ class Parallel:
             assert(len(params)<=3)
 
             print(_printTime()+'Parallel: running own task '+ot.task.name)
-            started = time.perf_counter()
+            t0 = time.perf_counter()
+            tp0 = time.process_time()
             #ATTENTION: ot.task.f(...) may call addLateTask() within
             out = _runTask(ot.task,params)
-            print(_printTime()+'Parallel: done own task '+ot.task.name)
-            dt = time.perf_counter() - started
-            self._updateWeight(ot.task.name,dt)
+            elapsed = time.perf_counter() - t0
+            cpu = time.process_time() - tp0
+            print(_printTime()+'Parallel: done own task '+ot.task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
+            self._updateWeight(ot.task.name,elapsed)
             self.doneowntasks[ot.task.name] = (ot,out)
         
         # status must run after own tasks, because they may call addLateTask() and addLateOwnTask()
