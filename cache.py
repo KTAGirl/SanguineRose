@@ -5,7 +5,7 @@ import pathlib
 import shutil
 #from threading import Thread
 #from queue import Queue
-from multiprocessing import Process as Thread, Queue as Queue
+#from multiprocessing import Process as Thread, Queue as Queue
 
 import xxhash
 
@@ -87,11 +87,11 @@ def _getFromOneOfDicts(dicttolook,dicttolook2,key):
 
 ##### Lambda parts
 
-def _diffFound(outqitem,fpath,tstamp,addar,updatednotadded):
+def _diffFound(ldout,fpath,tstamp,addar,updatednotadded):
     # print(fpath)
     hash = _wjHash(fpath)
     newa = wjdb.Archive(hash,tstamp,fpath.lower())
-    addar.call((outqitem,newa,updatednotadded))
+    addar.call((ldout,newa,updatednotadded))
 
 def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plugin,archivepath):
     if not os.path.isdir(tmppath):
@@ -183,17 +183,19 @@ def _dictOfArEntriesToJsonFile(path,aes):
 
 ############# Parallelizable Tasks
 
-class _LoadDirQueueItem:
+class _LoadDirOut:
     def __init__(self):
         self.jsonfilesbypath = {}
         self.scannedfiles = {}
+        self.requested = []
 
+'''
 def _loadDirThreadFunc(procnum,inq,outq):
-    outqitem = _LoadDirQueueItem()
+    ldout = _LoadDirOut()
     while True:
         request = inq.get()
         if request is None:
-            outq.put(outqitem)
+            outq.put(ldout)
             print('Proc#'+str(procnum)+': exiting')
             return
         #print('Proc#'+str(procnum)+': incoming '+request[0])
@@ -201,11 +203,11 @@ def _loadDirThreadFunc(procnum,inq,outq):
         try:
             dicttolook2 = tasks.fromPublication(pdicttolook2)
             #print('Proc#'+str(procnum)+': got fromPublication')
-            Cache._loadDir(None,outqitem,request[0],request[1],dicttolook2,pdicttolook2,request[3],request[4],request[5],request[6])
+            Cache._loadDir(None,ldout,request[0],request[1],dicttolook2,pdicttolook2,request[3],request[4],request[5],request[6])
             #print('Proc#'+str(procnum)+': end _loadDir()')
         except Exception as e:
             print('Proc#'+str(procnum)+': exception'+str(e))
-
+'''
 '''
 def _loadVFS0(unfilteredarchiveentries,dbgfile):
     for ae in wjdb.loadVFS(dbgfile):
@@ -260,7 +262,7 @@ def _ownHC2SelfTaskFunc(cache,parallel,out):
     cache.publishedarchives = tasks.SharedPublication(parallel,cache.archives)
     cache.publishedarchivesbypath = tasks.SharedPublication(parallel,cache.archivesbypath)
     cache.publishedfilesbypath = tasks.SharedPublication(parallel,cache.filesbypath)
-    return (tasks.makeSharedPublicationParam(cache.publishedarchivesbypath),)
+    return (tasks.makeSharedPublicationParam(cache.publishedarchivesbypath),tasks.makeSharedPublicationParam(cache.publishedfilesbypath))
 
 def _loadJsonArchivesTaskFunc(param):
     (cachedir,) = param
@@ -298,6 +300,7 @@ def _loadJsonFilesTaskFunc(param):
 def _ownJsonFiles2SelfTaskFunc(cache,out):
     (jsonfilesbypath,) = out
     cache.jsonfilesbypath = jsonfilesbypath
+    return (cache.jsonfilesbypath,)
 
 def _loadJsonArchiveEntriesTaskFunc(param):
     (cachedir,) = param
@@ -349,24 +352,24 @@ def _notALambda0(capture,param):
   _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded)
 
 def _notALambda1(capture,param):
-    (outqitem,ar,updatednotadded) = param
+    (ldout,ar,updatednotadded) = param
     (nmodified,) = capture
-    _diffFile(outqitem.jsonfilesbypath,nmodified,ar,updatednotadded)
+    _diffFile(ldout.jsonfilesbypath,nmodified,ar,updatednotadded)
     
 def _notALambda2(capture,param):
     assert(capture is None)
-    (outqitem,fpath) = param
-    _scannedFoundFile(outqitem.scannedfiles,fpath)
+    (ldout,fpath) = param
+    _scannedFoundFile(ldout.scannedfiles,fpath)
 
 def _scanDownloadsTaskFunc(param,fromhc2toself,fromjsonarchives2self,fromjsonarchiveentries2self):
     (downloadsdir,tmppathbase) = param
-    (pubarchivesbypath,) = fromhc2toself
+    (pubarchivesbypath,_) = fromhc2toself
     (jsonarchives,jsonarchivesbypath) = fromjsonarchives2self
     (jsonarchiveentries,) = fromjsonarchiveentries2self
     archivesbypath = tasks.fromPublication(pubarchivesbypath)
     nmodified = Val(0)
-    outqitem = _LoadDirQueueItem()
-    nscanned = Cache._loadDir(None,outqitem,downloadsdir,
+    #ldout = _LoadDirOut()
+    nscanned = Cache._loadDir(None,downloadsdir,
                               jsonarchivesbypath,
                               archivesbypath,pubarchivesbypath,
                               [],[],
@@ -375,8 +378,8 @@ def _scanDownloadsTaskFunc(param,fromhc2toself,fromjsonarchives2self,fromjsonarc
                                                        tmppathbase,nmodified)
                                                      ),
                               None
-                             )
-    return (nscanned,nmodified,jsonarchives,jsonarchivesbypath,jsonarchiveentries)
+                             )                             
+    return (nscanned,nmodified.val,jsonarchives,jsonarchivesbypath,jsonarchiveentries)
 
 def _ownScanDownloads2SelfTaskFunc(cache,out):
     (nscanned,nmodified,jsonarchives,jsonarchivesbypath,jsonarchiveentries) = out
@@ -387,19 +390,38 @@ def _ownScanDownloads2SelfTaskFunc(cache,out):
     print('scanned/modified archives:'+str(nscanned)+'/'+str(nmodified)+', '
           +str(len(cache.jsonarchives))+' JSON archives')
     
-def _scanMo2TaskFunc(param):
-    (dir,jsonfilesbypath,pubfilesbypath,mo2excludefolders,mo2reincludefolders) = param
+def _scanMo2TaskFunc(param,fromhc2toself,fromjsonfiles2self):
+    (dir,mo2excludefolders,mo2reincludefolders) = param
+    (_,pubfilesbypath) = fromhc2toself
+    (jsonfilesbypath,) = fromjsonfiles2self
     filesbypath = tasks.fromPublication(pubfilesbypath)
     nmodified = Val(0)
-    requested = []
-    nscanned = Cache._loadDir(requested,dir,
+    ldout = _LoadDirOut()
+    nscanned = Cache._loadDir(ldout,dir,
                               jsonfilesbypath,
                               filesbypath,pubfilesbypath,
                               mo2excludefolders,mo2reincludefolders,
                               tasks.LambdaReplacement(_notALambda1,(nmodified,)),
                               tasks.LambdaReplacement(_notALambda2,None)
                              )
-    return (nscanned,nmodified,requested)
+    return (nscanned,nmodified.val,ldout,pubfilesbypath,mo2excludefolders,mo2reincludefolders)
+
+def _ownScanMo22SelfTaskFunc(cache,parallel,scannedfiles,out):
+    (nscanned,nmodified,ldout,pubfilesbypath,mo2excludefolders,mo2reincludefolders) = out
+    cache.jsonfilesbypath |= ldout.jsonfilesbypath
+    scannedfiles |= ldout.scannedfiles
+    for requested in ldout.requested:
+        taskname = 'scanmo2.'+requested
+        # recursive task
+        task = tasks.Task(taskname,_scanMo2TaskFunc,
+                          (requested,mo2excludefolders,mo2reincludefolders),
+                          ['ownhc2self','ownjsonfiles2self'])
+        parallel.addLateTask(task)
+        owntaskname = 'ownscanmo22self.'+requested
+        owntask = tasks.Task(owntaskname,
+                             lambda _,out: _ownScanMo22SelfTaskFunc(cache,parallel,scannedfiles,out),
+                             None,[taskname])
+        parallel.addLateOwnTask(owntask)
 
 class Cache:
     def __init__(self,allarchivenames,cachedir,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders,tmppathbase,dbgfolder):
@@ -410,6 +432,7 @@ class Cache:
         self.filesbypath = {}
         timer = Elapsed()
 
+        scannedfiles = {}
         with tasks.Parallel(self.cachedir+'parallel.json') as parallel:
             unfilteredarchiveentries = Val(None)
             
@@ -445,10 +468,18 @@ class Cache:
             owntaskscansdl2self = tasks.Task('ownscandls2self',
                                         lambda _,out: _ownScanDownloads2SelfTaskFunc(self,out),
                                         None,['scandls'])
+
+            scanmo2task = tasks.Task('scanmo2',_scanMo2TaskFunc,
+                                     (mo2,mo2excludefolders,mo2reincludefolders),
+                                     ['ownhc2self','ownjsonfiles2self'])
+            ownscanmo22selftask = tasks.Task('ownscanmo22self',
+                                        lambda _,out: _ownScanMo22SelfTaskFunc(self,parallel,scannedfiles,out),
+                                        None,['scanmo2'])
+            
             parallel.run([hctask,vfstask,jsonarchivestask,jsonfilestask,
-                          jsonarchiveentriestask,scandlstask],
+                          jsonarchiveentriestask,scandlstask,scanmo2task],
                          [owntaskhc2self,ownfiltertask,owntaskjsonarchives2self,owntaskjsonfiles2self,
-                          owntaskjsonarchiveentries2self,owntaskscansdl2self])
+                          owntaskjsonarchiveentries2self,owntaskscansdl2self,ownscanmo22selftask])
         timer.printAndReset('Parallel tasks')
         #dbgWait()
 
@@ -456,50 +487,10 @@ class Cache:
             self.dbgDump(dbgfolder)
             timer.printAndReset('Dumping dbgfolder')
 
-        ### Scanning
-        # Scanning mo2
-        nmodified.val = 0
-        scannedfiles = {}
-        inq = Queue()
-        outq = Queue() 
-        outqitem = _LoadDirQueueItem()
-        threads = [] #actually, processes now
-        NPROC = min(os.cpu_count(),8)-1 #we're disk bound, but apparently up to 8 threads still get improvement, at least on my box ;)
-        assert(NPROC>=0)
-        print('Using '+str(NPROC)+' extra threads...')
-        for i in range(0,NPROC):
-            th = Thread(target=_loadDirThreadFunc,args=(i,inq,outq))
-            th.start()
-            threads.append(th)
-        #print('Entering _loadDir()...')
-        #dbgWait()
-
-        #print('Done with _loadDir()...')
+        #print('scanned/modified files:'+str(nscanned)+'/'+str(nmodified)+', '+str(len(self.jsonfilesbypath))+' JSON files')
+        print(len(scannedfiles))
         dbgWait()
-        for i in range(0,NPROC):
-            inq.put(None) # to terminate
-        self.jsonfilesbypath |= outqitem.jsonfilesbypath
-        scannedfiles |= outqitem.scannedfiles
-        print('Starting to join:' + str(len(threads)))
-        dbgWait()
-        for i in range(0,NPROC):
-            threads[i].join()
-            print('#'+str(i)+' joined')
-        print('All joined')
-        while True:
-            if outq.empty(): # after all threads joined, nothing can be added
-                break
-            print('Got item')
-            procoutqitem = outq.get(False)
-            #print(len(procoutqitem.jsonfilesbypath))
-            #print(len(procoutqitem.scannedfiles))
-            self.jsonfilesbypath |= procoutqitem.jsonfilesbypath
-            scannedfiles |= procoutqitem.scannedfiles
-            #dbgWait()
-        print('scanned/modified files:'+str(nscanned)+'/'+str(nmodified)+', '+str(len(self.jsonfilesbypath))+' JSON files')
-        # print(len(scannedfiles))
-        # dbgWait()
-        timer.printAndReset('Scanning MO2')
+        # timer.printAndReset('Scanning MO2')
         #dbgWait()
 
         ### Reconciling
@@ -526,7 +517,7 @@ class Cache:
         _dictOfArEntriesToJsonFile(self.cachedir+'archiveentries.njson',self.jsonarchiveentries)
         timer.printAndReset('Writing JSON HashCache')
         
-    def _loadDir(requested,outqitem,dir,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addar,foundfile):
+    def _loadDir(ldout,dir,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addar,foundfile):
         # print(excludefolders)
         # print(reincludefolders)
         nscanned = 0
@@ -543,7 +534,7 @@ class Cache:
                     assert(normalizePath(fpath)==fpath)
                 nscanned += 1
                 if foundfile:
-                    foundfile.call((outqitem,fpath))
+                    foundfile.call((ldout,fpath))
                 tstamp = _getFileTimestampFromSt(st)
                 # print(fpath)
                 found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath.lower())
@@ -555,9 +546,9 @@ class Cache:
                         dbgWait()
                     # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
                     if _compareTimestamps(tstamp,tstamp2)!=0:
-                        _diffFound(outqitem,fpath,tstamp,addar,True)
+                        _diffFound(ldout,fpath,tstamp,addar,True)
                 else:
-                    _diffFound(outqitem,fpath,tstamp,addar,False)
+                    _diffFound(ldout,fpath,tstamp,addar,False)
             elif stat.S_ISDIR(fmode):
                 newdir=fpath+'\\'
                 exclude = newdir in excludefolders
@@ -570,13 +561,12 @@ class Cache:
                             # print(newdir2)
                             if newdir2 in reincludefolders:
                                 # print('Re-including '+newdir2)
-                                if inq is not None:
-                                    inqitem = (newdir2,dicttolook,pdicttolook2,excludefolders,reincludefolders,addar,foundfile)
-                                    inq.put(inqitem)
+                                if ldout is not None:
+                                    ldout.requested.append(newdir2)
                                 else:
-                                    nscanned += Cache._loadDir(requested,outqitem,newdir2,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addar,foundfile)
+                                    nscanned += Cache._loadDir(None,newdir2,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addar,foundfile)
                 else:
-                    nscanned += Cache._loadDir(requested,outqitem,newdir,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addar,foundfile)
+                    nscanned += Cache._loadDir(ldout,newdir,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addar,foundfile)
             else:
                 print(fpath)
                 assert(False)
