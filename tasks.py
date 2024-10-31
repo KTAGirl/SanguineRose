@@ -43,6 +43,14 @@ class SharedForSender:
                         
 #from mo2git.debug import *
 
+class LambdaReplacement:
+    def __init__(self,f,capture):
+        self.f = f
+        self.capture = capture
+        
+    def call(self,param):
+        return self.f(self.capture,param)
+
 class Task:
     def __init__(self,name,f,param,dependencies):
         self.name = name

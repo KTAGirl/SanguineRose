@@ -89,7 +89,7 @@ def _diffFound(outqitem,fpath,tstamp,addar,updatednotadded):
     # print(fpath)
     hash = _wjHash(fpath)
     newa = wjdb.Archive(hash,tstamp,fpath.lower())
-    addar(outqitem,newa,updatednotadded)
+    addar.call((outqitem,newa,updatednotadded))
 
 def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plugin,archivepath):
     if not os.path.isdir(tmppath):
@@ -297,6 +297,21 @@ def _loadJsonArchiveEntries2SelfTaskFunc(cache,out):
     (jsonarchiveentries,) = out
     cache.jsonarchiveentries = jsonarchiveentries
 
+def _notALambda0(capture,param):
+  (_,ar,updatednotadded) = param
+  (jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,nmodified) = capture
+  _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded)
+
+def _notALambda1(capture,param):
+    (outqitem,ar,updatednotadded) = param
+    (nmodified,) = capture
+    _diffFile(outqitem.jsonfilesbypath,nmodified,ar,updatednotadded)
+    
+def _notALambda2(capture,param):
+    assert(capture is None)
+    (outqitem,fpath) = param
+    _scannedFoundFile(outqitem.scannedfiles,fpath)
+
 class Cache:
     def __init__(self,allarchivenames,cachedir,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders,tmppathbase,dbgfolder):
         self.cachedir = cachedir
@@ -359,7 +374,9 @@ class Cache:
         # Scanning downloads
         nmodified = Val(0)
         nscanned = Cache._loadDir(None,None,downloadsdir,self.jsonarchivesbypath,self.archivesbypath,[],[],
-                                  lambda unused,ar,updatednotadded: _diffArchive(self.jsonarchives,self.jsonarchivesbypath,self.jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded),
+                                  tasks.LambdaReplacement(_notALambda0,
+                                                          (self.jsonarchives,self.jsonarchivesbypath,
+                                                           self.jsonarchiveentries,tmppathbase,nmodified)),
                                   None
                                  )
         assert(len(self.jsonarchives)==len(self.jsonarchivesbypath)) 
@@ -380,9 +397,10 @@ class Cache:
             th = Thread(target=_loadDirThreadFunc,args=(i,inq,outq))
             th.start()
             threads.append(th)
-        nscanned = Cache._loadDir(inq if NPROC > 0 else None,outqitem,mo2,self.jsonfilesbypath,self.filesbypath,mo2excludefolders,mo2reincludefolders,
-                                  lambda outqitem,ar,updatednotadded: _diffFile(outqitem.jsonfilesbypath,nmodified,ar,updatednotadded),
-                                  lambda outqitem,fpath:_scannedFoundFile(outqitem.scannedfiles,fpath)
+        nscanned = Cache._loadDir(inq if NPROC > 0 else None,
+                                  outqitem,mo2,self.jsonfilesbypath,self.filesbypath,mo2excludefolders,mo2reincludefolders,
+                                  tasks.LambdaReplacement(_notALambda1,(nmodified,)),
+                                  tasks.LambdaReplacement(_notALambda2,None)
                                  )
         for i in range(0,NPROC):
             inq.put(None) # to terminate
@@ -445,7 +463,7 @@ class Cache:
                     assert(normalizePath(fpath)==fpath)
                 nscanned += 1
                 if foundfile:
-                    foundfile(outqitem,fpath)
+                    foundfile.call((outqitem,fpath))
                 tstamp = _getFileTimestampFromSt(st)
                 # print(fpath)
                 found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath.lower())
