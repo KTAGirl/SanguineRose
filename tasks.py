@@ -27,21 +27,47 @@ class _PoolOfShared:
 
 _poolofshared = _PoolOfShared()
 
-class SharedForSender:
+class SharedReturn:
     def __init__(self,item):
         data = pickle.dumps(item)
         self.shm = shared_memory.SharedMemory(create=True,size=len(data))
         shared = self.shm.buf
         shared[:]=data
         _poolofshared.register(self)
+        self.closed = False
                     
     def name(self):
         return self.shm.name
         
     def close(self):
-        self.shm.close()
+        if not self.closed:
+            self.shm.close()
+            self.closed = True
+        
+    def __del__(self):
+        self.close()
                         
-#from mo2git.debug import *
+class SharedPublication:
+    def __init__(self,parallel,item):
+        data = pickle.dumps(item)
+        self.shm = shared_memory.SharedMemory(create=True,size=len(data))
+        shared = self.shm.buf
+        shared[:]=data
+        name = self.shm.name
+        assert(name not in parallel.publications)
+        parallel.publications[name] = self.shm
+        self.closed = False
+                    
+    def name(self):
+        return self.shm.name
+        
+    def close(self):
+        if not self.closed:
+            self.shm.close()
+            self.closed = True
+        
+    def __del__(self):
+        self.close()
 
 class LambdaReplacement:
     def __init__(self,f,capture):
@@ -73,16 +99,23 @@ def _runTask(task,depparams):
     return out
     
 _procnum = -1 # number of child process
-def makeSharedParam(shared):
+def makeSharedReturnParam(shared):
     assert(_procnum>=0)
     return (shared.name(),_procnum)
+    
+def makeSharedPublicationParam(shared):
+    return shared.name()
 
-def receivedShared(parallel,sharedparam):
+def receivedSharedReturn(parallel,sharedparam):
     (name,sender) = sharedparam
     shm = shared_memory.SharedMemory(name)
     out = pickle.loads(shm.buf)
     parallel._notifySenderShmDone(sender,name)
     return out
+
+def fromPublication(sharedparam):
+    shm = shared_memory.SharedMemory(sharedparam)
+    return pickle.loads(shm.buf)
 
 def _procFunc(num,inq,outq):
     global _procnum
@@ -158,6 +191,7 @@ class Parallel:
                 print('WARNING: error loading JSON weights '+jsonfname+': '+str(e)+'. Will continue w/o weights')
                 self.jsonweights = {} # just in case                        
         self.isrunning = False
+        self.publications = {}
 
     def __enter__(self):
         #self.smm.start()
@@ -414,6 +448,13 @@ class Parallel:
             self.processes[i].join()
         self.joined = True        
         
+    def unpublish(self,name):
+        #TODO: restore back
+        pass
+        #pub = self.publications[name]
+        #pub.close()
+        #del self.publications[name]
+        
     def __exit__(self,exceptiontype,exceptionval,exceptiontraceback):
         if exceptiontype is not None:
             print('Parallel: exception '+str(exceptiontype)+' :'+str(exceptionval))
@@ -424,7 +465,9 @@ class Parallel:
         if not self.joined:
             self.joinAll()
             
-        #self.smm.shutdown()
+        names = [name for name in self.publications]
+        for name in names:
+            self.unpublish(name)
             
         if exceptiontype is None:
             if self.jsonfname is not None:
