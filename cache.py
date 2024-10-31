@@ -389,12 +389,19 @@ def _ownScanDownloads2SelfTaskFunc(cache,out):
     assert(len(cache.jsonarchives)==len(cache.jsonarchivesbypath)) 
     print('scanned/modified archives:'+str(nscanned)+'/'+str(nmodified)+', '
           +str(len(cache.jsonarchives))+' JSON archives')
-    
+
+_cachedFilesByPath = None #it is constant, so we can memoize it
+
 def _scanMo2TaskFunc(param,fromhc2toself,fromjsonfiles2self):
     (dir,mo2excludefolders,mo2reincludefolders) = param
     (_,pubfilesbypath) = fromhc2toself
     (jsonfilesbypath,) = fromjsonfiles2self
-    filesbypath = tasks.fromPublication(pubfilesbypath)
+    global _cachedFilesByPath
+    if _cachedFilesByPath is None:
+        filesbypath = tasks.fromPublication(pubfilesbypath)
+        _cachedFilesByPath = filesbypath
+    else:
+        filesbypath = _cachedFilesByPath
     nmodified = Val(0)
     ldout = _LoadDirOut()
     nscanned = Cache._loadDir(ldout,dir,

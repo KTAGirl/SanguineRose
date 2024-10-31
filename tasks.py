@@ -465,7 +465,7 @@ class Parallel:
         assert(task.name not in self.ownnodesbyname)
         added = self._internalAddTaskIf(task)
         assert(added) #failure to add is ok only during original building of the tree
-        print(_printTime()+'Parallel: late task '+task.name+' added')
+        #print(_printTime()+'Parallel: late task '+task.name+' added')
     
     def addLateOwnTask(self,ot):
         assert(self.isrunning)
@@ -474,7 +474,7 @@ class Parallel:
         assert(ot.name not in self.ownnodesbyname)
         added = self._internalAddOwnTaskIf(ot)
         assert(added) #failure to add is ok only during original building of the tree
-        print(_printTime()+'Parallel: late own task '+ot.name+' added')
+        #print(_printTime()+'Parallel: late own task '+ot.name+' added')
     
     def _findBestProcess(self):
         besti = -1
