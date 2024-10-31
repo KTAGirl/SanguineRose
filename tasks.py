@@ -121,14 +121,21 @@ def fromPublication(sharedparam):
     shm = shared_memory.SharedMemory(sharedparam)
     return pickle.loads(shm.buf)
 
-def _procFunc(num,inq,outq):
+def _procFunc(t0,num,inq,outq):
     try:
+        global _started
+        _started = t0+0.05 # experimental
         global _procnum
         assert(_procnum==-1)
         _procnum = num
         #print('Process #'+str(num+1)+' started')
         while True:
+            waitt0 = time.perf_counter()
             taskplus = inq.get()
+            dwait = time.perf_counter() - waitt0
+            # print(dwait)
+            waitstr = str(round(dwait,2))+'s'
+            
             if taskplus is None:
                 #print('Process #'+str(num+1)+': exiting')
                 return
@@ -138,7 +145,7 @@ def _procFunc(num,inq,outq):
             assert(task is not None or processedshm is not None)
             if processedshm is not None:
                 assert(task is None)
-                print('Process #'+str(num+1)+': releasing shm='+processedshm)
+                print('Process #'+str(num+1)+': after waiting for '+waitstr+', releasing shm='+processedshm)
                 _poolofshared.doneWith(processedshm)
                 continue #while True
                 
@@ -146,11 +153,11 @@ def _procFunc(num,inq,outq):
             assert(len(taskplus)==2+ndep)
             t0 = time.perf_counter()
             tp0 = time.process_time()
-            print('Process #'+str(num+1)+': starting task '+task.name)
+            print(_printTime()+'Process #'+str(num+1)+': after waiting for '+waitstr+', starting task '+task.name)
             out = _runTask(task,taskplus[2:])
             elapsed = time.perf_counter() - t0
             cpu = time.process_time() - tp0
-            print('Process #'+str(num+1)+': done task '+task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
+            print(_printTime()+'Process #'+str(num+1)+': done task '+task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
             outq.put((num,task.name,(cpu,elapsed),out))
     except Exception as e:
         print('Parallel: exception '+str(e))
@@ -211,7 +218,8 @@ class Parallel:
         for i in range(0,self.NPROC):
             inq = PQueue()
             self.inqueues.append(inq)
-            p = Process(target=_procFunc,args=(i,inq,self.outq))
+            p = Process(target=_procFunc,args=(time.perf_counter(), #don't move this out of the loop
+                                               i,inq,self.outq))
             self.processes.append(p)
             p.start()
             self.processesload.append(0)
@@ -328,18 +336,21 @@ class Parallel:
                 break # while True
 
             # waiting for other processes to finish
+            waitt0 = time.perf_counter()
             got = self.outq.get()
             if got is None:
                 print('Parallel: An exception within child process reported. Terminating')
                 raise Exception('Parallel: child process exception')
-                
+            dwait = time.perf_counter() - waitt0
+            
             (procnum,taskname,times,out) = got
             assert(taskname in self.runningtasks)
             (expectedprocnum,started,node) = self.runningtasks[taskname]
             (cput,taskt) = times
             assert(procnum==expectedprocnum)
             dt = time.perf_counter() - started
-            print(_printTime()+'Parallel: received results of task '+taskname+' elapsed/task/cpu='
+            print(_printTime()+'Parallel: after waiting for '+str(round(dwait,2))+
+                  's, received results of task '+taskname+' elapsed/task/cpu='
                   +str(round(dt,2))+'/'+str(round(taskt,2))+'/'+str(round(cput,2))+'s')
             self._updateWeight(taskname,taskt)
             del self.runningtasks[taskname]
@@ -389,10 +400,10 @@ class Parallel:
         
     def _runOwnTasks(self): # returns overall status: 1: work to do, 2: all running, 3: all done
         #print(len(self.owntasks))
-        for ot in self.owntasks:
-            print('owntask: '+ot.task.name)
-        for otname in self.doneowntasks:
-            print('doneowntask: '+otname)
+        #for ot in self.owntasks:
+        #    print('owntask: '+ot.task.name)
+        #for otname in self.doneowntasks:
+        #    print('doneowntask: '+otname)
             
         for ot in self.owntasks:
             #print('task: '+ot.task.name)
@@ -463,6 +474,8 @@ class Parallel:
             pl = self.processesload[i]
             if pl == 0: #cannot be better
                 return i
+            if pl > 1:
+                continue
             if besti < 0 or self.processesload[besti] > pl:
                 besti = i
         return besti
