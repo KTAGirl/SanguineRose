@@ -111,10 +111,13 @@ def _aEntries(paths,hf,root_archive_hash):
             #    print(ae.__dict__)
             #dbgWait()
     return aes
+    
+def vfsFile():
+    home_dir = os.path.expanduser("~")
+    return home_dir+'/AppData/Local/Wabbajack/GlobalVFSCache5.sqlite'
 
 def loadVFS(dbgfile=None):
-    home_dir = os.path.expanduser("~")
-    con = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalVFSCache5.sqlite')
+    con = sqlite3.connect(vfsFile())
     cur = con.cursor()
     # rowi = -1
     nn = 0
@@ -173,6 +176,10 @@ class Archive:
         else:
             return '{"archive_hash":'+str(ar.archive_hash)+', "archive_modified": '+str(ar.archive_modified)+', "archive_path": '+escapeJSON(ar.archive_path)+'}'
 
+def hcFile():
+    home_dir = os.path.expanduser("~")
+    return home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite'
+
 def loadHC(dirs):
     lodirs = []
     for dir in dirs:
@@ -185,8 +192,7 @@ def loadHC(dirs):
             if d2.startswith(dirlo):
                 print('NOTICE: loadHC(): overlapping dirs, '+d2+' will be excluded from '+dirlo)
     
-    home_dir = os.path.expanduser("~")
-    con = sqlite3.connect(home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite')
+    con = sqlite3.connect(hcFile())
     cur = con.cursor()
     nn = 0
     nfiltered = 0

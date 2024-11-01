@@ -1,11 +1,9 @@
 import os
 import stat
 import pathlib
-#import json
+import pickle
+import json
 import shutil
-#from threading import Thread
-#from queue import Queue
-#from multiprocessing import Process as Thread, Queue as Queue
 
 import xxhash
 
@@ -181,6 +179,37 @@ def _dictOfArEntriesToJsonFile(path,aes):
             ae = aes[key]
             wfile.write(wjdb.ArchiveEntry.toJSON(ae)+'\n')
 
+############# MicroCache
+
+def _microCache(cachedir,cachedata,prefix,origfile,calc,params=None):
+    readpath = cachedata.get(prefix+'.path')
+    readtstamp = cachedata.get(prefix+'.timestamp')
+    if params is not None:
+        readparams = json.dumps(cachedata.get(prefix+'.params'))
+        jparams = json.dumps(params)
+    else:
+        readparams = None
+        jparams = None
+    #print(params)
+    #print(readparams)
+    if readpath == origfile and readparams == jparams:
+        tstamp = os.path.getmtime(origfile)
+        if tstamp == readtstamp:
+            print('_microCache(): Yahoo! Can read cache for '+prefix)
+            with open(cachedir+prefix+'.pickle','rb') as rf:
+                return (pickle.load(rf),{})
+
+    cachedataoverwrites = {}
+    tstamp = os.path.getmtime(origfile)
+    out = calc(params)
+    assert(tstamp == os.path.getmtime(origfile))
+    with open(cachedir+prefix+'.pickle','wb') as wf:
+        pickle.dump(out,wf)
+    cachedataoverwrites[prefix+'.path'] = origfile
+    cachedataoverwrites[prefix+'.timestamp'] = tstamp
+    cachedataoverwrites[prefix+'.params'] = params
+    return (out,cachedataoverwrites)
+
 ############# Parallelizable Tasks
 
 class _LoadDirOut:
@@ -188,54 +217,33 @@ class _LoadDirOut:
         self.jsonfilesbypath = {}
         self.scannedfiles = {}
         self.requested = []
-
-'''
-def _loadDirThreadFunc(procnum,inq,outq):
-    ldout = _LoadDirOut()
-    while True:
-        request = inq.get()
-        if request is None:
-            outq.put(ldout)
-            print('Proc#'+str(procnum)+': exiting')
-            return
-        #print('Proc#'+str(procnum)+': incoming '+request[0])
-        pdicttolook2 = request[2]
-        try:
-            dicttolook2 = tasks.fromPublication(pdicttolook2)
-            #print('Proc#'+str(procnum)+': got fromPublication')
-            Cache._loadDir(None,ldout,request[0],request[1],dicttolook2,pdicttolook2,request[3],request[4],request[5],request[6])
-            #print('Proc#'+str(procnum)+': end _loadDir()')
-        except Exception as e:
-            print('Proc#'+str(procnum)+': exception'+str(e))
-'''
-'''
-def _loadVFS0(unfilteredarchiveentries,dbgfile):
-    for ae in wjdb.loadVFS(dbgfile):
-        unfilteredarchiveentries.append(ae)
-'''
-def _loadVFS0(dbgfile):
+        
+def _loadVFS00(dbgfile):
     unfilteredarchiveentries = []
     for ae in wjdb.loadVFS(dbgfile):
-        unfilteredarchiveentries.append(ae)
-    shared = tasks.SharedReturn(unfilteredarchiveentries)
-    return (tasks.makeSharedReturnParam(shared),)
+        unfilteredarchiveentries.append(ae)    
+    return unfilteredarchiveentries
 
-def _loadVFS(dbgfolder):
+def _loadVFS0(cachedir,cachedata,dbgfile):
+    (unfilteredarchiveentries,cachedataoverwrites) = _microCache(cachedir,cachedata,'wjdb.vfsfile',wjdb.vfsFile(),
+                                                                 lambda _: _loadVFS00(dbgfile))
+
+    shared = tasks.SharedReturn(unfilteredarchiveentries)
+    return (tasks.makeSharedReturnParam(shared),cachedataoverwrites)
+
+def _loadVFS(cachedir,cachedata,dbgfolder):
     if dbgfolder:
         with open(dbgfolder+'loadvfs.txt','wt',encoding='utf-8') as dbgfile:
-            return _loadVFS0(dbgfile)
+            return _loadVFS0(cachedir,cachedata,dbgfile)
     else:
-        return _loadVFS0(None)
+        return _loadVFS0(cachedir,cachedata,None)
 
 def _loadVFSTaskFunc(param):
-    (dbgfolder,) = param
-    return _loadVFS(dbgfolder)
+    (cachedir,cachedata,dbgfolder) = param
+    return _loadVFS(cachedir,cachedata,dbgfolder)
 
-#def _loadVFS2ValTaskFunc(parallel,val,out):
-#    (sharedparam,) = out
-#    val.val = tasks.receivedSharedReturn(parallel,sharedparam)
-
-def _loadHC(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders):
+def _loadHC0(param):
+    (mo2,downloadsdir,mo2excludefolders,mo2reincludefolders) = param
     ndupdl = Val(0) #passable by ref
     nexf = Val(0)
     ndupf = Val(0)
@@ -246,15 +254,21 @@ def _loadHC(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders):
                     (downloadsdir,lambda ar: _hcFoundDownload(archives, archivesbypath,ndupdl,ar)),
                     (mo2,lambda ar: _hcFoundFile(filesbypath,nexf,ndupf,ar,mo2excludefolders,mo2reincludefolders))
                 ])
-    return archives,archivesbypath,filesbypath,ndupdl.val,nexf.val,ndupf.val
+    return (archives,archivesbypath,filesbypath,ndupdl.val,nexf.val,ndupf.val)
+
+def _loadHC(cachedir,cachedata,mo2,downloadsdir,mo2excludefolders,mo2reincludefolders):
+    return _microCache(cachedir,cachedata,'wjdb.hcfile',wjdb.hcFile(),
+                       _loadHC0,
+                       (mo2,downloadsdir,mo2excludefolders,mo2reincludefolders))
 
 def _loadHCTaskFunc(param):
-    (mo2,downloadsdir,mo2excludefolders,mo2reincludefolders) = param
-    archives,archivesbypath,filesbypath,ndupdl,nexf,ndupf = _loadHC(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders)
-    return (archives,archivesbypath,filesbypath,ndupdl,nexf,ndupf)
+    (cachedir,cachedata,mo2,downloadsdir,mo2excludefolders,mo2reincludefolders) = param
+    return _loadHC(cachedir,cachedata,mo2,downloadsdir,mo2excludefolders,mo2reincludefolders)
     
 def _ownHC2SelfTaskFunc(cache,parallel,out):
-    (cache.archives,cache.archivesbypath,cache.filesbypath,ndupdl,nexf,ndupf) = out        
+    (hcout,cachedataoverwrites) = out
+    cache.cachedata |= cachedataoverwrites
+    (cache.archives,cache.archivesbypath,cache.filesbypath,ndupdl,nexf,ndupf) = hcout        
     assert(len(cache.archives)==len(cache.archivesbypath)) 
     print(str(len(cache.archives))+' archives ('+str(ndupdl)+' duplicates), '
          +str(len(cache.filesbypath))+' files ('+str(nexf)+' excluded, '+str(ndupf)+' duplicates)')
@@ -320,8 +334,9 @@ def _ownJsonArchiveEntries2SelfTaskFunc(cache,out):
     
 # filtering and scanning
 
-def _ownFilterTaskFunc(cache,parallel,allarchivenames,fromloadlvs):
-    (sharedparam,) = fromloadlvs
+def _ownFilterTaskFunc(cache,parallel,allarchivenames,fromloadvfs):
+    (sharedparam,cachedataoverwrites) = fromloadvfs
+    cache.cachedata |= cachedataoverwrites
     unfilteredarchiveentries = tasks.receivedSharedReturn(parallel,sharedparam)
 
     allarchivehashes = {}
@@ -438,13 +453,22 @@ class Cache:
         self.archivesbypath = {}
         self.filesbypath = {}
         timer = Elapsed()
+        
+        self.cachedata = {}
+        try:
+            with open(self.cachedir+'cache.json', 'rt',encoding='utf-8') as rf:
+                self.cachedata = json.load(rf)
+        except Exception as e:
+            print('WARNING: error loading JSON cachedata: '+str(e)+'. Will continue w/o cachedata')
+            self.cachedata = {} # just in case
 
         scannedfiles = {}
         with tasks.Parallel(self.cachedir+'parallel.json') as parallel:
             unfilteredarchiveentries = Val(None)
             
-            hctask = tasks.Task('loadhc',_loadHCTaskFunc,(mo2,downloadsdir,mo2excludefolders,mo2reincludefolders),[])
-            vfstask = tasks.Task('loadvfs',_loadVFSTaskFunc,(dbgfolder,),[])
+            hctask = tasks.Task('loadhc',_loadHCTaskFunc,(self.cachedir,self.cachedata,
+                                                          mo2,downloadsdir,mo2excludefolders,mo2reincludefolders),[])
+            vfstask = tasks.Task('loadvfs',_loadVFSTaskFunc,(self.cachedir,self.cachedata,dbgfolder),[])
             jsonarchivestask = tasks.Task('jsonarchives',_loadJsonArchivesTaskFunc,(self.cachedir,),[])
             jsonfilestask = tasks.Task('jsonfiles',_loadJsonFilesTaskFunc,(self.cachedir,),[])
             jsonarchiveentriestask = tasks.Task('jsonarchiveentries',_loadJsonArchiveEntriesTaskFunc,(self.cachedir,),[])
@@ -467,7 +491,7 @@ class Cache:
                                         None,['jsonarchiveentries'])
                         
             ownfiltertask = tasks.Task('filteraes',
-                                        lambda _,fromlvs,_2,_3: _ownFilterTaskFunc(self,parallel,allarchivenames,fromlvs),
+                                        lambda _,fromloadvfs,_2,_3: _ownFilterTaskFunc(self,parallel,allarchivenames,fromloadvfs),
                                         None,['loadvfs','loadhc','ownjsonarchives2self'])
             scandlstask = tasks.Task('scandls',_scanDownloadsTaskFunc,
                                      (downloadsdir,tmppathbase),
@@ -522,7 +546,12 @@ class Cache:
         _dictOfArsToJsonFile(self.cachedir+'archives.njson',self.jsonarchivesbypath)
         _dictOfArsToJsonFile(self.cachedir+'files.njson',self.jsonfilesbypath)
         _dictOfArEntriesToJsonFile(self.cachedir+'archiveentries.njson',self.jsonarchiveentries)
-        timer.printAndReset('Writing JSON HashCache')
+        
+        #Writing CacheData
+        with open(self.cachedir+'cache.json','wt',encoding='utf-8') as wf:
+            json.dump(self.cachedata,wf,indent=4)
+        
+        timer.printAndReset('caches')
         
     def _loadDir(ldout,dir,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addar,foundfile):
         # print(excludefolders)
