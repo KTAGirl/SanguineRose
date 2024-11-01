@@ -162,7 +162,7 @@ def _procFunc(parentstarted,num,inq,outq):
     except Exception as e:
         print('Parallel: exception '+str(e))
         print(traceback.format_exc())
-        outq.put(None)
+        outq.put(e)
         
 class _TaskGraphNode:
     def __init__(self,task,parents,weight):
@@ -340,9 +340,16 @@ class Parallel:
             # waiting for other processes to finish
             waitt0 = time.perf_counter()
             got = self.outq.get()
-            if got is None:
-                print('Parallel: An exception within child process reported. Terminating')
-                raise Exception('Parallel: child process exception')
+            if isinstance(got,Exception):
+                print('Parallel: An exception within child process reported. Shutting down')
+                
+                if not self.shuttingdown:
+                    self.shutdown()
+                if not self.joined:
+                    self.joinAll()
+
+                print('Parallel: Terminating')
+                assert(False)
             dwait = time.perf_counter() - waitt0
             strwait=str(round(dwait,2))+'s'
             if dwait < 0.005:
