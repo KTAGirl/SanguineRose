@@ -120,6 +120,10 @@ def receivedSharedReturn(parallel,sharedparam):
 def fromPublication(sharedparam):
     shm = shared_memory.SharedMemory(sharedparam)
     return pickle.loads(shm.buf)
+    
+class _Started:
+    def __init__(self,procnum):
+        self.procnum = procnum
 
 def _procFunc(parentstarted,num,inq,outq):
     try:
@@ -129,6 +133,7 @@ def _procFunc(parentstarted,num,inq,outq):
         assert(_procnum==-1)
         _procnum = num
         #print('Process #'+str(num+1)+' started')
+        outq.put(_Started(_procnum))
         while True:
             waitt0 = time.perf_counter()
             taskplus = inq.get()
@@ -137,8 +142,7 @@ def _procFunc(parentstarted,num,inq,outq):
             waitstr = str(round(dwait,2))+'s'
             
             if taskplus is None:
-                #print('Process #'+str(num+1)+': exiting')
-                return
+                break #while True
             task = taskplus[0]
             processedshm = taskplus[1]
             assert(task is None or processedshm is None)
@@ -160,10 +164,11 @@ def _procFunc(parentstarted,num,inq,outq):
             print(_printTime()+'Process #'+str(num+1)+': done task '+task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
             outq.put((num,task.name,(cpu,elapsed),out))
     except Exception as e:
-        print('Parallel: exception '+str(e))
+        print('Process #'+str(num+1)+': exception: '+str(e))
         print(traceback.format_exc())
         outq.put(e)
-        
+    #print('Process #'+str(num+1)+': exiting')
+    
 class _TaskGraphNode:
     def __init__(self,task,parents,weight):
         self.task = task
@@ -214,6 +219,7 @@ class Parallel:
         self.processes = []
         self.processesload = [] # we'll aim to have it at 2
         self.inqueues = []
+        self.procrunningconfirmed = [] #otherwise join() on a not running yet process may hang
         self.outq = PQueue()
         for i in range(0,self.NPROC):
             inq = PQueue()
@@ -222,6 +228,7 @@ class Parallel:
             self.processes.append(p)
             p.start()
             self.processesload.append(0)
+            self.procrunningconfirmed.append(False)
         self.shuttingdown = False
         self.joined = False
         assert(len(self.processesload)==len(self.processes))
@@ -345,11 +352,17 @@ class Parallel:
                 
                 if not self.shuttingdown:
                     self.shutdown()
+                print('Parallel: shutdown ok')
                 if not self.joined:
                     self.joinAll()
 
-                print('Parallel: Terminating')
-                assert(False)
+                print('Parallel: All children terminated, aborting due to the exception in a child process. For the exception itself, see log above.')
+                os._exit(13) #if using sys.exit(), confusing logging will occur
+                
+            if isinstance(got,_Started):
+                self.procrunningconfirmed[got.procnum] = True
+                continue #while True
+                
             dwait = time.perf_counter() - waitt0
             strwait=str(round(dwait,2))+'s'
             if dwait < 0.005:
@@ -528,12 +541,24 @@ class Parallel:
         for i in range(0,self.NPROC):
             self.inqueues[i].put(None)
         self.shuttingdown = True
-        
+    
     def joinAll(self):
         assert(self.shuttingdown)
         assert(not self.joined)
+
+        n = 0
+        while not all(self.procrunningconfirmed):
+            if n == 0:
+                print('Parallel: joinAll(): waiting for all processes to confirm start before joining to avoid not started yet join race')
+                n = 1
+            got = self.outq.get()
+            if isinstance(got,_Started):
+                self.procrunningconfirmed[got.procnum] = True
+                #print('Parallel: joinAll(): process #'+str(got.procnum+1)+' confirmed as started')
+            
         for i in range(0,self.NPROC):
             self.processes[i].join()
+            #print('Process #'+str(i+1)+' joined')
         self.joined = True        
         
     def unpublish(self,name):
