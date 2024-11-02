@@ -25,29 +25,29 @@ def _hcFoundDownload(archives,archivesbypath,ndup,ar):
         archives[ar.file_hash] = ar
         archivesbypath[ar.file_path] = ar
     
-def _hcFoundFile(filesbypath,nex,ndup,ar,excludefolders,reincludefolders):
+def _hcFoundFile(filesbypath,nex,ndup,fi,excludefolders,reincludefolders):
     exclude = False
     for ex in excludefolders:
-        if ar.file_path.startswith(ex.lower()):
+        if fi.file_path.startswith(ex.lower()):
             exclude = True
             break
     if exclude:
         for inc in reincludefolders:
-            if ar.file_path.startswith(inc.lower()):
+            if fi.file_path.startswith(inc.lower()):
                 exclude = False
                 break
     if exclude:
         nex.val += 1
         return
         
-    olda = filesbypath.get(ar.file_path)
-    if olda!=None and not olda.eq(ar):
-        # print("TODO: multiple archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(ar.__dict__))
+    olda = filesbypath.get(fi.file_path)
+    if olda!=None and not olda.eq(fi):
+        # print("TODO: multiple archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(fi.__dict__))
         # wait = input("Press Enter to continue.")
         ndup.val += 1
         pass
     else:
-        filesbypath[ar.file_path] = ar
+        filesbypath[fi.file_path] = fi
 
 #### Generic helpers
 
@@ -72,11 +72,11 @@ def _getFromOneOfDicts(dicttolook,dicttolook2,key):
 
 ##### Lambda parts
 
-def _diffFound(ldout,fpath,tstamp,addar,updatednotadded):
+def _diffFound(ldout,fpath,tstamp,addfi,updatednotadded):
     # print(fpath)
     hash = wjHash(fpath)
     newa = File(hash,tstamp,fpath.lower())
-    addar.call((ldout,newa,updatednotadded))
+    addfi.call((ldout,newa,updatednotadded))
 
 def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plugin,archivepath):
     if not os.path.isdir(tmppath):
@@ -125,9 +125,9 @@ def _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,
     shutil.rmtree(tmproot)
     nmodified.val += 1
   
-def _diffFile(jsonfilesbypath,nmodified,ar,updatednotadded):
-    print('NOTICE: file '+ar.file_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
-    jsonfilesbypath[ar.file_path]=ar
+def _diffFile(jsonfilesbypath,nmodified,fi,updatednotadded):
+    print('NOTICE: file '+fi.file_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
+    jsonfilesbypath[fi.file_path]=fi
     nmodified.val += 1
 
 def _scannedFoundFile(scannedfiles,fpath):
@@ -136,7 +136,7 @@ def _scannedFoundFile(scannedfiles,fpath):
 
 #### JSON loading helpers
 
-def _dictOfArsFromJsonFile(path):
+def _dictOfFisFromJsonFile(path):
     out = {}
     with openModTxtFile(path) as rfile:
         for line in rfile:
@@ -145,7 +145,7 @@ def _dictOfArsFromJsonFile(path):
             out[ar.file_path] = ar
     return out
 
-def _dictOfArsToJsonFile(path,ars):
+def _dictOfFisToJsonFile(path,ars):
     with openModTxtFileW(path) as wfile:
         for key in sorted(ars):
             ar = ars[key]
@@ -239,7 +239,7 @@ def _loadHC0(param):
     filesbypath = {}
     wjdb.loadHC([ 
                     (downloadsdir,lambda ar: _hcFoundDownload(archives, archivesbypath,ndupdl,ar)),
-                    (mo2,lambda ar: _hcFoundFile(filesbypath,nexf,ndupf,ar,mo2excludefolders,mo2reincludefolders))
+                    (mo2,lambda fi: _hcFoundFile(filesbypath,nexf,ndupf,fi,mo2excludefolders,mo2reincludefolders))
                 ])
     return (archives,archivesbypath,filesbypath,ndupdl.val,nexf.val,ndupf.val)
 
@@ -269,7 +269,7 @@ def _loadJsonArchivesTaskFunc(param):
     (cachedir,) = param
     jsonarchivesbypath = {}
     try:
-        jsonarchivesbypath = _dictOfArsFromJsonFile(cachedir+'archives.njson')
+        jsonarchivesbypath = _dictOfFisFromJsonFile(cachedir+'archives.njson')
     except Exception as e:
         print('WARNING: error loading JSON cache archives.njson: '+str(e)+'. Will continue w/o archive JSON cache')
         jsonarchivesbypath = {} # just in case  
@@ -290,7 +290,7 @@ def _loadJsonFilesTaskFunc(param):
     (cachedir,) = param
     jsonfilesbypath = {}
     try:
-        jsonfilesbypath = _dictOfArsFromJsonFile(cachedir+'files.njson')
+        jsonfilesbypath = _dictOfFisFromJsonFile(cachedir+'files.njson')
     except Exception as e:
         print('WARNING: error loading JSON cache files.njson: '+str(e)+'. Will continue w/o file JSON cache')
         jsonfilesbypath = {} # just in case            
@@ -354,9 +354,9 @@ def _notALambda0(capture,param):
   _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded)
 
 def _notALambda1(capture,param):
-    (ldout,ar,updatednotadded) = param
+    (ldout,fi,updatednotadded) = param
     (nmodified,) = capture
-    _diffFile(ldout.jsonfilesbypath,nmodified,ar,updatednotadded)
+    _diffFile(ldout.jsonfilesbypath,nmodified,fi,updatednotadded)
     
 def _notALambda2(capture,param):
     assert(capture is None)
@@ -530,8 +530,8 @@ class Cache:
         #dbgWait()
         
         ### Writing JSON HashCache
-        _dictOfArsToJsonFile(self.cachedir+'archives.njson',self.jsonarchivesbypath)
-        _dictOfArsToJsonFile(self.cachedir+'files.njson',self.jsonfilesbypath)
+        _dictOfFisToJsonFile(self.cachedir+'archives.njson',self.jsonarchivesbypath)
+        _dictOfFisToJsonFile(self.cachedir+'files.njson',self.jsonfilesbypath)
         _dictOfArEntriesToJsonFile(self.cachedir+'archiveentries.njson',self.jsonarchiveentries)
         
         #Writing CacheData
@@ -540,7 +540,7 @@ class Cache:
         
         timer.printAndReset('caches')
         
-    def _loadDir(ldout,dir,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addar,foundfile):
+    def _loadDir(ldout,dir,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addfi,foundfile):
         # print(excludefolders)
         # print(reincludefolders)
         nscanned = 0
@@ -569,9 +569,9 @@ class Cache:
                         dbgWait()
                     # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
                     if _compareTimestamps(tstamp,tstamp2)!=0:
-                        _diffFound(ldout,fpath,tstamp,addar,True)
+                        _diffFound(ldout,fpath,tstamp,addfi,True)
                 else:
-                    _diffFound(ldout,fpath,tstamp,addar,False)
+                    _diffFound(ldout,fpath,tstamp,addfi,False)
             elif stat.S_ISDIR(fmode):
                 newdir=fpath+'\\'
                 exclude = newdir in excludefolders
@@ -587,9 +587,9 @@ class Cache:
                                 if ldout is not None:
                                     ldout.requested.append(newdir2)
                                 else:
-                                    nscanned += Cache._loadDir(None,newdir2,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addar,foundfile)
+                                    nscanned += Cache._loadDir(None,newdir2,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addfi,foundfile)
                 else:
-                    nscanned += Cache._loadDir(ldout,newdir,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addar,foundfile)
+                    nscanned += Cache._loadDir(ldout,newdir,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addfi,foundfile)
             else:
                 print(fpath)
                 assert(False)
@@ -614,13 +614,13 @@ class Cache:
         return archive
 
     def findFile(self,fpath):
-        #ar = self.filesbypath.get(fpath.lower())
-        ar = _getFromOneOfDicts(self.jsonfilesbypath,self.filesbypath,fpath.lower())
-        if ar == None:
+        #fi = self.filesbypath.get(fpath.lower())
+        fi = _getFromOneOfDicts(self.jsonfilesbypath,self.filesbypath,fpath.lower())
+        if fi == None:
             print("WARNING: path="+fpath+" NOT FOUND")
             return None,None
 
-        hash=ar.file_hash
+        hash=fi.file_hash
         assert(hash>=0)
         #archiveEntry = self.archiveentries.get(hash)
         archiveEntry = _getFromOneOfDicts(self.jsonarchiveentries,self.archiveentries,hash)

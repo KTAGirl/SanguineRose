@@ -34,13 +34,13 @@ class File:
     def fromJSON(s):
         return json.loads(s, object_hook=lambda d: SimpleNamespace(**d))
 
-    def toJSON(ar):
+    def toJSON(fi):
         # works both for ar=Archive, and ar=SimpleNamespace
         # for SimpleNamespace cannot use return json.dumps(self,default=lambda o: o.__dict__)
-        if ar.file_hash is None:
-            return '{"file_path": '+escapeJSON(ar.file_path)+', "file_hash":null}'
+        if fi.file_hash is None:
+            return '{"file_path": '+escapeJSON(fi.file_path)+', "file_hash":null}'
         else:
-            return '{"file_hash":'+str(ar.file_hash)+', "file_modified": '+str(ar.file_modified)+', "file_path": '+escapeJSON(ar.file_path)+'}'
+            return '{"file_hash":'+str(fi.file_hash)+', "file_modified": '+str(fi.file_modified)+', "file_path": '+escapeJSON(fi.file_path)+'}'
 
 class ArchiveEntry:
     def __init__(self,archive_hash,intra_path,file_size,file_hash):
