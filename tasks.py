@@ -489,7 +489,7 @@ class Parallel:
     
     def addLateOwnTask(self,ot):
         assert(self.isrunning)
-        print(ot.name)
+        #print(ot.name)
         assert(ot.name not in self.alltasknames)
         assert(ot.name not in self.ownnodesbyname)
         added = self._internalAddOwnTaskIf(ot)

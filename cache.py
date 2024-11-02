@@ -520,7 +520,7 @@ class Cache:
 
         #print('scanned/modified files:'+str(nscanned)+'/'+str(nmodified)+', '+str(len(self.jsonfilesbypath))+' JSON files')
         print(len(scannedfiles))
-        dbgWait()
+        #dbgWait()
         # timer.printAndReset('Scanning MO2')
         #dbgWait()
 
@@ -638,7 +638,7 @@ class Cache:
         #archiveEntry = self.archiveentries.get(hash)
         archiveEntry = _getFromOneOfDicts(self.jsonarchiveentries,self.archiveentries,hash)
         if archiveEntry == None:
-            print("WARNING: archiveEntry for path="+fpath+" with hash="+str(hash)+" NOT FOUND")
+            #print("WARNING: archiveEntry for path="+fpath+" with hash="+str(hash)+" NOT FOUND")
             return None,None
         #print(archiveEntry.__dict__)
 
@@ -646,11 +646,19 @@ class Cache:
         #archive = self.archives.get(ahash)
         archive = _getFromOneOfDicts(self.jsonarchives,self.archives,ahash)
         if archive == None:
-            print("WARNING: archive with hash="+str(ahash)+" NOT FOUND")
+            #print("WARNING: archive with hash="+str(ahash)+" NOT FOUND")
             return None,None
         #print(archive.__dict__)
         return archiveEntry, archive
-         
+    
+    def allFiles(self):
+        for file in self.jsonfilesbypath:
+            yield self.jsonfilesbypath[file]
+        for file in self.filesbypath:
+            if file not in self.jsonfilesbypath:
+                yield self.filesbypath[file]
+        return None
+    
     def dbgDump(self,folder):
         with open(folder+'archives.txt', 'wt', encoding="utf-8") as f:
             for hash in self.archives:
