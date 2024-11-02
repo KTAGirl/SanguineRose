@@ -19,10 +19,13 @@ class _PoolOfShared:
         shared.close()
         del self.shareds[name]
         
-    def __del__(self):
+    def cleanup(self):
         for name in self.shareds:
             shared = self.shareds[name]
-            shared.close()
+            shared.close()        
+        
+    def __del__(self):
+        self.cleanup()
 
 _poolofshared = _PoolOfShared()
 _started = time.perf_counter()
@@ -166,6 +169,7 @@ def _procFunc(parentstarted,num,inq,outq):
         print('Process #'+str(num+1)+': exception: '+str(e))
         print(traceback.format_exc())
         outq.put(e)
+    _poolofshared.cleanup()
     #print('Process #'+str(num+1)+': exiting')
     
 class _TaskGraphNode:
@@ -198,7 +202,7 @@ class Parallel:
         if NPROC:
             self.NPROC = NPROC
         else:
-            self.NPROC = os.cpu_count() - 1 # -1 for the process which will run self.run()
+            self.NPROC = os.cpu_count() - 1 # -1 for the master process
         assert(self.NPROC>=0)
         print('Using '+str(self.NPROC)+' processes...')
         self.jsonfname = jsonfname
@@ -561,11 +565,9 @@ class Parallel:
         self.joined = True        
         
     def unpublish(self,name):
-        #TODO: restore back
-        pass
-        #pub = self.publications[name]
-        #pub.close()
-        #del self.publications[name]
+        pub = self.publications[name]
+        pub.close()
+        del self.publications[name]
         
     def __exit__(self,exceptiontype,exceptionval,exceptiontraceback):
         if exceptiontype is not None:
