@@ -23,6 +23,7 @@ class _PoolOfShared:
         for name in self.shareds:
             shared = self.shareds[name]
             shared.close()        
+        self.shareds = {}
         
     def __del__(self):
         self.cleanup()
