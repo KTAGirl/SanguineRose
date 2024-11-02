@@ -8,6 +8,11 @@ from mo2git.common import *
 from mo2git.files import File,ArchiveEntry
 import mo2git.wjcompat.binaryreader as binaryreader
 
+def compareTimestampWithWj(a,b):
+    if abs(a-b) == 0: #< 0.000001: 
+        return 0
+    return -1 if a < b else 1
+
 class _Img:
     def __init__(self,br):
         binaryreader.traceReader('Img:')
@@ -138,16 +143,18 @@ def hcFile():
     return home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite'
 
 def loadHC(dirs):
+    print(dirs)
     lodirs = []
     for dir in dirs:
-        dirlo = dir[0].lower()
-        lodirs.append(dirlo)
+        dir0 = dir[0]
+        assert(dir0.lower() == dir0)
+        lodirs.append(dir0)
         for d2 in lodirs:
-            if d2 == dirlo:
+            if d2 == dir0:
                 break
-            assert(not dirlo.startswith(d2)) # if folders are overlapping, smaller one MUST go first
-            if d2.startswith(dirlo):
-                print('NOTICE: loadHC(): overlapping dirs, '+d2+' will be excluded from '+dirlo)
+            assert(not dir0.startswith(d2)) # if folders are overlapping, smaller one MUST go first
+            if d2.startswith(dir0):
+                info('loadHC(): overlapping dirs, '+d2+' will be excluded from '+dir0)
     
     con = sqlite3.connect(hcFile())
     cur = con.cursor()

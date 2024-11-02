@@ -1,8 +1,9 @@
 import sys
 import time
 import os
+import json
 
-from mo2git.common import isEslFlagged,scriptDirFrom__file__,normalizeDirPath
+from mo2git.common import isEslFlagged,scriptDirFrom__file__
 from mo2git.commands.cmdcommon import _openCache
 import mo2git.commands.mo2git as mo2git
 import mo2git.commands.git2mo as git2mo
@@ -11,7 +12,10 @@ if not sys.version_info >= (3, 10):
     print('Sorry, mo2git needs at least Python 3.10')
     sys.exit(4) # why not?
     
-def run(config):
+def run(configfilepath):
+    with open(configfilepath,'rt',encoding='utf-8') as rf:
+        config = json.load(rf)
+        
     argv = sys.argv
     argc = len(argv)
     # print(argv)
@@ -21,7 +25,7 @@ def run(config):
         match argv[1].lower():
             case 'mo2git':
                 if argc == 2:
-                   mo2git._mo2git(config)
+                   mo2git._mo2git(configfilepath,config)
                    ok = True 
                 '''
                 if argc >= 2:
@@ -45,7 +49,7 @@ def run(config):
                 '''
             case 'git2mo':
                 if argc == 2:
-                   git2mo._git2mo(config)
+                   git2mo._git2mo(configfilepath,config)
                    ok = True
             case 'debug.dumpwjdb':
                 if argc == 3:

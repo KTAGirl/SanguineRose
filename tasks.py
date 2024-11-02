@@ -7,6 +7,10 @@ import traceback
 import pickle
 from multiprocessing import Process, Queue as PQueue, shared_memory
 
+_procnum = -1 # number of child process
+def thisProcNum():
+    return _procnum
+
 class _PoolOfShared:
     def __init__(self):
         self.shareds = {}
@@ -105,9 +109,9 @@ def _runTask(task,depparams):
             out = task.f(task.param,depparams[0],depparams[1],depparams[2]) 
     return out
     
-_procnum = -1 # number of child process
 def makeSharedReturnParam(shared):
     #assert(_procnum>=0)
+    global _procnum
     return (shared.name(),_procnum)
     
 def makeSharedPublicationParam(shared):

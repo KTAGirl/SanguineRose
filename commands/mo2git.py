@@ -6,8 +6,9 @@ from mo2git.common import *
 from mo2git.installfile import manualUrlAndPrompt
 from mo2git.modlist import ModList
 from mo2git.common import *
-from mo2git.commands.cmdcommon import _openCache,_mo2AndCSAndMasterModList
+from mo2git.commands.cmdcommon import _openCache,_csAndMasterModList
 import mo2git.cache as cache
+from mo2git.folders import Folders
 
 def mo2AndMasterModList(config):
     mo2,compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _mo2AndCSAndMasterModList(config)
@@ -80,15 +81,15 @@ def _copyRestOfProfile(mo2,fulltargetdir,profilename):
     targetfdir = fulltargetdir + 'profiles\\'+profilename+'\\'
     shutil.copyfile(srcfdir+'loadorder.txt',targetfdir+'loadorder.txt')
 
-def _mo2git(config):
-    mo2,compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _mo2AndCSAndMasterModList(config)
-    todl,allarchivenames,filecache = _openCache(config,mastermodlist)
+def _mo2git(jsonconfigfname,config):
+    compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)
+    ignore=compiler_settings['Ignore']
+    todl,allarchivenames,filecache = _openCache(jsonconfigfname,config,mastermodlist,ignore)
 
-    targetgithub=config['github']
     ownmods=config['ownmods']
-    downloadsdir = config['downloads']
     
-    targetdir = 'MO2\\'
+    targetgithub = filecache.folders.targetgithub
+    targetdir = 'mo2\\'
     stats = {}
     
     # writing beautified compiler settings
@@ -105,18 +106,20 @@ def _mo2git(config):
         allmods[mod]=1
     altmodlists = {}
     for profile in altprofilenames:
-        aml = ModList(mo2+'profiles\\'+profile+'\\')
+        aml = ModList(filecache.folders.mo2+'profiles\\'+profile+'\\')
         for mod in aml.allEnabled():
             allmods[mod]=1
         altmodlists[profile] = aml
 
     allinstallfiles = {}
     for arname in allarchivenames:
-        archive = filecache.findArchive(arname)
-        if archive:
-            allinstallfiles[archive.file_hash] = cache.denormalizePath(cache.normalizePath(downloadsdir)+'\\',arname)
+        ar = filecache.findArchiveByName(arname)
+        if ar is not None:
+            assert(ar.file_path.endswith(arname))
+            #print(ar.file_hash)
+            allinstallfiles[ar.file_hash] = ar.file_path
         else:
-            print('WARNING: no archive found for '+arname)
+            warn('no archive found for '+arname)
     #print(allinstallfiles)
     #dbgWait()
 
@@ -124,33 +127,32 @@ def _mo2git(config):
     nn = 0
     for modname in allmods:
         print("mod="+modname)
-        for dirpath, dirs, filenames in os.walk(mo2+'\\mods\\'+modname):
+        for dirpath, dirs, filenames in os.walk(filecache.folders.mo2+'\\mods\\'+modname):
             for filename in filenames:
                 # print("file="+filename)
                 nn += 1
-                fpath = cache.normalizePath(os.path.join(dirpath,filename))
+                fpath = Folders.normalizeDirPath(os.path.join(dirpath,filename))
                 assert(not os.path.islink(fpath))
                 files.append(fpath)
 
     files.sort()
 
     nwarn = 0
-    mo2abs = cache.normalizePath(mo2)+'\\'
-    ignore=compiler_settings['Ignore']
 
     # pre-cleanup
-    modsdir = targetgithub+'mods'
+    modsdir = targetgithub+'mods\\'
     if os.path.isdir(modsdir):
         shutil.rmtree(modsdir)
     # dbgWait()
 
     nesx = 0
-    with open(targetgithub+'master.json','wt',encoding="utf-8") as wfile:
+    with open(targetgithub+'master.json','wt',encoding='utf-8') as wfile:
         wfile.write('{ "archives": [\n')
         na = 0
         aif = []
-        for key, value in allinstallfiles.items():
-            aif.append([value,key])
+        for hash, path in allinstallfiles.items():
+            fname = os.path.split(path)[1]
+            aif.append((fname,hash))
         aif.sort(key=lambda f: f[0])
         for f in aif:
             if na:
@@ -159,16 +161,12 @@ def _mo2git(config):
             wfile.write('    { "name": "'+str(f[0])+'", "hash": '+str(f[1])+' }')
         wfile.write('\n], "files": [\n')
         nf = 0
-        for fpath0 in files:            
-            assert(fpath0.lower().startswith(mo2abs.lower()))
-            fpath = fpath0[len(mo2abs):]
-            toignore=False
-            for ign in ignore:
-                if fpath.startswith(ign):
-                    toignore = True
-                    break
-            if toignore:
-                continue
+        mo2 = filecache.folders.mo2
+        mo2len = len(mo2)
+        for fpath0 in files:
+            assert(fpath0.lower() == fpath0)
+            assert(fpath0.startswith(mo2))
+            fpath = fpath0[mo2len:]
 
             if nf:
                 wfile.write(",\n")
@@ -239,12 +237,12 @@ def _mo2git(config):
 
     #validating json
     if DEBUG:
-        with open(targetgithub+'master.json', 'rt',encoding="utf-8") as rfile:
-            json.load(rfile)
+        with open(targetgithub+'master.json', 'rt',encoding='utf-8') as rf:
+            json.load(rf)
 
     # copying own mods
     for mod in ownmods:
-        shutil.copytree(mo2+'mods/'+mod, targetgithub + targetdir+'mods\\'+mod, dirs_exist_ok=True)
+        shutil.copytree(mo2+'mods\\'+mod, targetgithub + targetdir+'mods\\'+mod, dirs_exist_ok=True)
  
     # writing profiles
     targetfdir = targetgithub + targetdir + 'profiles\\'+masterprofilename+'\\'
@@ -264,7 +262,7 @@ def _mo2git(config):
         if genprofiles:
             filteroutpattern = genprofiles.get(profile)
         if filteroutpattern is None:
-            print("WARNING: profile "+profile+"is not found in config['genprofiles']")
+            warn('profile '+profile+"is not found in config['genprofiles']")
         else:
             optionalmods=0
             optionalesxs=0

@@ -2,7 +2,7 @@ import os
 
 from mo2git.common import *
 import mo2git.cache as cache
-from mo2git.commands.cmdcommon  import _openCache,_mo2AndCSAndMasterModList
+from mo2git.commands.cmdcommon  import _openCache,_csAndMasterModList
 
 def _git2mo(config):
     mo2,compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _mo2AndCSAndMasterModList(config)

@@ -10,13 +10,14 @@ from mo2git.files import File,ArchiveEntry,wjHash
 import mo2git.wjcompat.wjdb as wjdb
 import mo2git.pluginhandler as pluginhandler
 import mo2git.tasks as tasks
+from mo2git.folders import Folders,NoFolders
 
 def _hcFoundDownload(archives,archivesbypath,ndup,ar):
     if ar.file_path.endswith('.meta'):
         return
     olda = archives.get(ar.file_hash)
     if olda!=None and not olda.eq(ar):
-        print("WARNING: identical archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(ar.__dict__))
+        warn("identical archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(ar.__dict__))
         # dbgWait()
         ndup.val += 1
         pass
@@ -25,18 +26,8 @@ def _hcFoundDownload(archives,archivesbypath,ndup,ar):
         archives[ar.file_hash] = ar
         archivesbypath[ar.file_path] = ar
     
-def _hcFoundFile(filesbypath,nex,ndup,fi,excludefolders,reincludefolders):
-    exclude = False
-    for ex in excludefolders:
-        if fi.file_path.startswith(ex.lower()):
-            exclude = True
-            break
-    if exclude:
-        for inc in reincludefolders:
-            if fi.file_path.startswith(inc.lower()):
-                exclude = False
-                break
-    if exclude:
+def _hcFoundFile(filesbypath,nex,ndup,fi,folders):
+    if not folders.isMo2FilePathIncluded(fi.file_path): #ignored or mo2excluded
         nex.val += 1
         return
         
@@ -53,16 +44,10 @@ def _hcFoundFile(filesbypath,nex,ndup,fi,excludefolders,reincludefolders):
 
 def _getFileTimestamp(s):
     path = pathlib.Path(fname)
-    return path.stat().st_mtime
+    return path.lstat().st_mtime
 
 def _getFileTimestampFromSt(st):
-    # path = pathlib.Path(fname)
     return st.st_mtime
-
-def _compareTimestamps(a,b):
-    if abs(a-b) == 0: #< 0.000001: 
-        return 0
-    return -1 if a < b else 1
 
 def _getFromOneOfDicts(dicttolook,dicttolook2,key):
     found = dicttolook.get(key)
@@ -70,20 +55,20 @@ def _getFromOneOfDicts(dicttolook,dicttolook2,key):
         return found
     return dicttolook2.get(key)
 
-##### Lambda parts
+def _allValuesInBothDicts(dicttoscan,dicttoscan2):
+    for key,val in dicttoscan.items():
+        yield val
+    for key,val in dicttoscan2.items():
+        yield val
 
-def _diffFound(ldout,fpath,tstamp,addfi,updatednotadded):
-    # print(fpath)
-    hash = wjHash(fpath)
-    newa = File(hash,tstamp,fpath.lower())
-    addfi.call((ldout,newa,updatednotadded))
+##### hashing archive file into ArchiveEntries
 
 def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plugin,archivepath):
     if not os.path.isdir(tmppath):
         os.makedirs(tmppath)
     plugin.extractAll(archivepath,tmppath)
     #dbgWait()
-    exts = pluginhandler.allArchivePluginsExtensions()
+    pluginexts = pluginhandler.allArchivePluginsExtensions()
     for root, dirs, files in os.walk(tmppath):
         nf = 0
         for f in files:
@@ -93,32 +78,41 @@ def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plu
             # print(fpath)
             hash = wjHash(fpath)
             assert(fpath.startswith(tmppath))
-            intra_path = cur_intra_path.copy()
-            intra_path.append(fpath[len(tmppath):])
-            ae = ArchiveEntry(archive_hash,intra_path,os.path.getsize(fpath),hash)
+            new_intra_path = cur_intra_path.copy()
+            new_intra_path.append(Folders.normalizeArchiveIntraPath(fpath[len(tmppath):]))
+            ae = ArchiveEntry(archive_hash,new_intra_path,os.path.getsize(fpath),hash)
             # print(ae.__dict__)
             jsonarchiveentries[ae.file_hash]=ae
 
             ext = os.path.split(fpath)[1].lower()
-            if ext in exts:
+            if ext in pluginexts:
                 nested_plugin = pluginhandler.archivePluginFor(fpath)
                 assert(nested_plugin != None)
-                _archiveToEntries(jsonarchiveentries,archive_hash,tmppath + str(nf) + '/',intra_path,nested_plugin,fpath)
+                _archiveToEntries(jsonarchiveentries,archive_hash,tmppath + str(nf) + '\\',new_intra_path,nested_plugin,fpath)
+
+##### Lambda parts
+
+def _diffFound(ldout,fpath,tstamp,addfi,updatednotadded):
+    #print(fpath)
+    hash = wjHash(fpath) #TODO: to Task (only for larger files)
+    assert(Folders.normalizeFilePath(fpath)==fpath)
+    newa = File(hash,tstamp,fpath)
+    addfi.call((ldout,newa,updatednotadded))
 
 def _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded):
     if ar.file_path.endswith('.meta'):
         return
-    print('NOTICE: archive '+ar.file_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
+    info('archive '+ar.file_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
     jsonarchives[ar.file_hash]=ar
     jsonarchivesbypath[ar.file_path]=ar
     
-    tmproot = tmppathbase + 'tmp/'
+    tmproot = tmppathbase + 'mo2git.tmp\\' + str(tasks.thisProcNum()+1) + '\\'
     if os.path.isdir(tmproot):
         shutil.rmtree(tmproot)
     os.makedirs(tmproot,exist_ok=True)
     plugin = pluginhandler.archivePluginFor(ar.file_path)
     if plugin == None:
-        print('WARNING: no archive plugin found for '+ar.file_path)
+        warn('no archive plugin found for '+ar.file_path)
     else:
         _archiveToEntries(jsonarchiveentries,ar.file_hash,tmproot,[],plugin,ar.file_path)
 
@@ -126,13 +120,13 @@ def _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,
     nmodified.val += 1
   
 def _diffFile(jsonfilesbypath,nmodified,fi,updatednotadded):
-    print('NOTICE: file '+fi.file_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
+    info('file '+fi.file_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
     jsonfilesbypath[fi.file_path]=fi
     nmodified.val += 1
 
 def _scannedFoundFile(scannedfiles,fpath):
-    assert(normalizePath(fpath)==fpath)
-    scannedfiles[fpath.lower()] = 1
+    assert(Folders.normalizeFilePath(fpath)==fpath)
+    scannedfiles[fpath] = 1
 
 #### JSON loading helpers
 
@@ -171,15 +165,17 @@ def _dictOfArEntriesToJsonFile(path,aes):
 def _microCache(cachedir,cachedata,prefix,origfile,calc,params=None):
     readpath = cachedata.get(prefix+'.path')
     readtstamp = cachedata.get(prefix+'.timestamp')
+    
     if params is not None:
-        readparams = json.dumps(cachedata.get(prefix+'.params'))
-        jparams = json.dumps(params)
+        #comparing as JSONs is important
+        readparams = JsonEncoder().encode(cachedata.get(prefix+'.params'))
+        jparams = JsonEncoder().encode(params)
+        sameparams = (readparams == jparams)
     else:
-        readparams = None
-        jparams = None
+        sameparams = True
     #print(params)
     #print(readparams)
-    if readpath == origfile and readparams == jparams:
+    if readpath == origfile and sameparams:
         tstamp = os.path.getmtime(origfile)
         if tstamp == readtstamp:
             print('_microCache(): Yahoo! Can read cache for '+prefix)
@@ -229,28 +225,28 @@ def _loadVFSTaskFunc(param):
     (cachedir,cachedata,dbgfolder) = param
     return _loadVFS(cachedir,cachedata,dbgfolder)
 
-def _loadHC0(param):
-    (mo2,downloadsdir,mo2excludefolders,mo2reincludefolders) = param
+def _loadHC0(params):
+    (folders,) = params
     ndupdl = Val(0) #passable by ref
     nexf = Val(0)
     ndupf = Val(0)
     archives = {}
     archivesbypath = {}
     filesbypath = {}
-    wjdb.loadHC([ 
-                    (downloadsdir,lambda ar: _hcFoundDownload(archives, archivesbypath,ndupdl,ar)),
-                    (mo2,lambda fi: _hcFoundFile(filesbypath,nexf,ndupf,fi,mo2excludefolders,mo2reincludefolders))
-                ])
+
+    hclist = [(dl,lambda ar: _hcFoundDownload(archives, archivesbypath,ndupdl,ar)) for dl in folders.downloads]
+    hclist.append((folders.mo2,lambda fi: _hcFoundFile(filesbypath,nexf,ndupf,fi,folders)))
+    wjdb.loadHC(hclist)
     return (archives,archivesbypath,filesbypath,ndupdl.val,nexf.val,ndupf.val)
 
-def _loadHC(cachedir,cachedata,mo2,downloadsdir,mo2excludefolders,mo2reincludefolders):
-    return _microCache(cachedir,cachedata,'wjdb.hcfile',wjdb.hcFile(),
+def _loadHC(folders,cachedata):
+    return _microCache(folders.cache,cachedata,'wjdb.hcfile',wjdb.hcFile(),
                        _loadHC0,
-                       (mo2,downloadsdir,mo2excludefolders,mo2reincludefolders))
+                       (folders,))
 
 def _loadHCTaskFunc(param):
-    (cachedir,cachedata,mo2,downloadsdir,mo2excludefolders,mo2reincludefolders) = param
-    return _loadHC(cachedir,cachedata,mo2,downloadsdir,mo2excludefolders,mo2reincludefolders)
+    (folders,cachedata) = param
+    return _loadHC(folders,cachedata)
     
 def _ownHC2SelfTaskFunc(cache,parallel,out):
     (hcout,cachedataoverwrites) = out
@@ -374,7 +370,7 @@ def _scanDownloadsTaskFunc(param,fromhc2toself,fromjsonarchives2self,fromjsonarc
     nscanned = Cache._loadDir(None,downloadsdir,
                               jsonarchivesbypath,
                               archivesbypath,pubarchivesbypath,
-                              [],[],
+                              NoFolders(),
                               tasks.LambdaReplacement(_notALambda0,
                                                       (jsonarchives,jsonarchivesbypath,jsonarchiveentries,
                                                        tmppathbase,nmodified)
@@ -395,7 +391,7 @@ def _ownScanDownloads2SelfTaskFunc(cache,out):
 _cachedFilesByPath = None #it is constant, so we can memoize it
 
 def _scanMo2TaskFunc(param,fromhc2toself,fromjsonfiles2self):
-    (dir,mo2excludefolders,mo2reincludefolders) = param
+    (dir,folders) = param
     (_,pubfilesbypath) = fromhc2toself
     (jsonfilesbypath,) = fromjsonfiles2self
     global _cachedFilesByPath
@@ -409,21 +405,21 @@ def _scanMo2TaskFunc(param,fromhc2toself,fromjsonfiles2self):
     nscanned = Cache._loadDir(ldout,dir,
                               jsonfilesbypath,
                               filesbypath,pubfilesbypath,
-                              mo2excludefolders,mo2reincludefolders,
+                              folders,
                               tasks.LambdaReplacement(_notALambda1,(nmodified,)),
                               tasks.LambdaReplacement(_notALambda2,None)
                              )
-    return (nscanned,nmodified.val,ldout,pubfilesbypath,mo2excludefolders,mo2reincludefolders)
+    return (nscanned,nmodified.val,ldout,pubfilesbypath,folders)
 
 def _ownScanMo22SelfTaskFunc(cache,parallel,scannedfiles,out):
-    (nscanned,nmodified,ldout,pubfilesbypath,mo2excludefolders,mo2reincludefolders) = out
+    (nscanned,nmodified,ldout,pubfilesbypath,folders) = out
     cache.jsonfilesbypath |= ldout.jsonfilesbypath
     scannedfiles |= ldout.scannedfiles
     for requested in ldout.requested:
         taskname = 'scanmo2.'+requested
         # recursive task
         task = tasks.Task(taskname,_scanMo2TaskFunc,
-                          (requested,mo2excludefolders,mo2reincludefolders),
+                          (requested,folders),
                           ['ownhc2self','ownjsonfiles2self'])
         parallel.addLateTask(task)
         owntaskname = 'ownscanmo22self.'+requested
@@ -433,8 +429,8 @@ def _ownScanMo22SelfTaskFunc(cache,parallel,scannedfiles,out):
         parallel.addLateOwnTask(owntask)
 
 class Cache:
-    def __init__(self,allarchivenames,cachedir,downloadsdir,mo2,mo2excludefolders,mo2reincludefolders,tmppathbase,dbgfolder):
-        self.cachedir = cachedir
+    def __init__(self,allarchivenames,folders,dbgfolder):
+        self.folders = folders
         
         self.archives = {}
         self.archivesbypath = {}
@@ -443,22 +439,21 @@ class Cache:
         
         self.cachedata = {}
         try:
-            with open(self.cachedir+'cache.json', 'rt',encoding='utf-8') as rf:
+            with open(self.folders.cache+'cache.json', 'rt',encoding='utf-8') as rf:
                 self.cachedata = json.load(rf)
         except Exception as e:
             print('WARNING: error loading JSON cachedata: '+str(e)+'. Will continue w/o cachedata')
             self.cachedata = {} # just in case
 
         scannedfiles = {}
-        with tasks.Parallel(self.cachedir+'parallel.json') as parallel:
+        with tasks.Parallel(self.folders.cache+'parallel.json') as parallel:
             unfilteredarchiveentries = Val(None)
             
-            hctask = tasks.Task('loadhc',_loadHCTaskFunc,(self.cachedir,self.cachedata,
-                                                          mo2,downloadsdir,mo2excludefolders,mo2reincludefolders),[])
-            vfstask = tasks.Task('loadvfs',_loadVFSTaskFunc,(self.cachedir,self.cachedata,dbgfolder),[])
-            jsonarchivestask = tasks.Task('jsonarchives',_loadJsonArchivesTaskFunc,(self.cachedir,),[])
-            jsonfilestask = tasks.Task('jsonfiles',_loadJsonFilesTaskFunc,(self.cachedir,),[])
-            jsonarchiveentriestask = tasks.Task('jsonarchiveentries',_loadJsonArchiveEntriesTaskFunc,(self.cachedir,),[])
+            hctask = tasks.Task('loadhc',_loadHCTaskFunc,(self.folders,self.cachedata),[])
+            vfstask = tasks.Task('loadvfs',_loadVFSTaskFunc,(self.folders.cache,self.cachedata,dbgfolder),[])
+            jsonarchivestask = tasks.Task('jsonarchives',_loadJsonArchivesTaskFunc,(self.folders.cache,),[])
+            jsonfilestask = tasks.Task('jsonfiles',_loadJsonFilesTaskFunc,(self.folders.cache,),[])
+            jsonarchiveentriestask = tasks.Task('jsonarchiveentries',_loadJsonArchiveEntriesTaskFunc,(self.folders.cache,),[])
             #unfilteredarchiveentries = Val(None)
             
             owntaskhc2self = tasks.Task('ownhc2self',
@@ -480,15 +475,18 @@ class Cache:
             ownfiltertask = tasks.Task('filteraes',
                                         lambda _,fromloadvfs,_2,_3: _ownFilterTaskFunc(self,parallel,allarchivenames,fromloadvfs),
                                         None,['loadvfs','loadhc','ownjsonarchives2self'])
-            scandlstask = tasks.Task('scandls',_scanDownloadsTaskFunc,
-                                     (downloadsdir,tmppathbase),
+            for i in range(len(self.folders.downloads)):
+                taskname = 'scandls.'+str(i)
+                scandlstask = tasks.Task(taskname,_scanDownloadsTaskFunc,
+                                     (self.folders.downloads[i],self.folders.tmp),
                                      ['ownhc2self','ownjsonarchives2self','ownjsonarchiveentries2self'])
-            owntaskscansdl2self = tasks.Task('ownscandls2self',
+                owntaskname = 'ownscandls2self.'+str(i)
+                owntaskscansdl2self = tasks.Task(owntaskname,
                                         lambda _,out: _ownScanDownloads2SelfTaskFunc(self,out),
-                                        None,['scandls'])
+                                        None,[taskname])
 
             scanmo2task = tasks.Task('scanmo2',_scanMo2TaskFunc,
-                                     (mo2,mo2excludefolders,mo2reincludefolders),
+                                     (self.folders.mo2,self.folders),
                                      ['ownhc2self','ownjsonfiles2self'])
             ownscanmo22selftask = tasks.Task('ownscanmo22self',
                                         lambda _,out: _ownScanMo22SelfTaskFunc(self,parallel,scannedfiles,out),
@@ -516,12 +514,13 @@ class Cache:
         ndel = 0
         for dict in [self.jsonfilesbypath, self.filesbypath]:
             for fpath in dict:
+                assert(Folders.normalizeFilePath(fpath)==fpath)
                 if scannedfiles.get(fpath) is None:
-                    injson = self.jsonfilesbypath.get(fpath.lower())
+                    injson = self.jsonfilesbypath.get(fpath)
                     #print(injson)
                     if injson is not None and injson.file_hash is None: #special record is already present
                         continue
-                    print('NOTICE: '+fpath+' was deleted')
+                    info(fpath+' was deleted')
                     #dbgWait()
                     self.jsonfilesbypath[fpath] = File(None,None,fpath.lower())
                     ndel += 1
@@ -530,37 +529,36 @@ class Cache:
         #dbgWait()
         
         ### Writing JSON HashCache
-        _dictOfFisToJsonFile(self.cachedir+'archives.njson',self.jsonarchivesbypath)
-        _dictOfFisToJsonFile(self.cachedir+'files.njson',self.jsonfilesbypath)
-        _dictOfArEntriesToJsonFile(self.cachedir+'archiveentries.njson',self.jsonarchiveentries)
+        _dictOfFisToJsonFile(self.folders.cache+'archives.njson',self.jsonarchivesbypath)
+        _dictOfFisToJsonFile(self.folders.cache+'files.njson',self.jsonfilesbypath)
+        _dictOfArEntriesToJsonFile(self.folders.cache+'archiveentries.njson',self.jsonarchiveentries)
         
         #Writing CacheData
-        with open(self.cachedir+'cache.json','wt',encoding='utf-8') as wf:
-            json.dump(self.cachedata,wf,indent=4)
+        with open(self.folders.cache+'cache.json','wt',encoding='utf-8') as wf:
+            wf.write(JsonEncoder().encode(self.cachedata))
         
         timer.printAndReset('caches')
         
-    def _loadDir(ldout,dir,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addfi,foundfile):
+    def _loadDir(ldout,dir,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile):
         # print(excludefolders)
         # print(reincludefolders)
         nscanned = 0
         # recursive implementation: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
         # still, after recent performance fix seems to win like 1.5x over os.walk-based one
         for f in os.listdir(dir):
-            fpath = dir+f
+            fpath = dir+Folders.normalizeFileName(f)
             st = os.lstat(fpath)
             fmode = st.st_mode
             if stat.S_ISREG(fmode):
                 #assert(not os.path.islink(fpath))
                 assert(not stat.S_ISLNK(fmode))
-                if DEBUG:
-                    assert(normalizePath(fpath)==fpath)
+                assert(Folders.normalizeFilePath(fpath)==fpath)
                 nscanned += 1
                 if foundfile:
                     foundfile.call((ldout,fpath))
                 tstamp = _getFileTimestampFromSt(st)
                 # print(fpath)
-                found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath.lower())
+                found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath)
                 if found:
                     try:
                         tstamp2 = found.file_modified
@@ -568,51 +566,51 @@ class Cache:
                         print(found)
                         dbgWait()
                     # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
-                    if _compareTimestamps(tstamp,tstamp2)!=0:
+                    if wjdb.compareTimestampWithWj(tstamp,tstamp2)!=0:
                         _diffFound(ldout,fpath,tstamp,addfi,True)
                 else:
                     _diffFound(ldout,fpath,tstamp,addfi,False)
             elif stat.S_ISDIR(fmode):
                 newdir=fpath+'\\'
-                exclude = newdir in excludefolders
-                if exclude:
+                included = folders.isMo2ExactDirIncluded(newdir)
+                if not included: #ignored or mo2excluded
                     # print('Excluding '+newdir)
                     for ff in os.listdir(newdir):
-                        newdir2 = newdir + ff 
+                        newdir2 = newdir + Folders.normalizeFileName(ff) 
                         if os.path.isdir(newdir2):
                             newdir2 += '\\'
                             # print(newdir2)
-                            if newdir2 in reincludefolders:
+                            newincluded = folders.isMo2ExactDirIncluded(newdir2)
+                            assert(newincluded is not False)
+                            if newincluded == 2: #mo2reincluded
                                 # print('Re-including '+newdir2)
                                 if ldout is not None:
                                     ldout.requested.append(newdir2)
                                 else:
-                                    nscanned += Cache._loadDir(None,newdir2,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addfi,foundfile)
+                                    nscanned += Cache._loadDir(None,newdir2,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile)
                 else:
-                    nscanned += Cache._loadDir(ldout,newdir,dicttolook,dicttolook2,pdicttolook2,excludefolders,reincludefolders,addfi,foundfile)
+                    nscanned += Cache._loadDir(ldout,newdir,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile)
             else:
                 print(fpath)
                 assert(False)
         return nscanned
 
-    def findArchive(self,fpath):
-        fpath = normalizePath(fpath)
+    def findArchiveByName(self,fname):
+        assert(Folders.normalizeFileName(fname)==fname)
         #ar = self.archivesbypath.get(fpath.lower())
-        ar = _getFromOneOfDicts(self.jsonarchivesbypath,self.archivesbypath,fpath.lower())
+        ar = None
+        for a in _allValuesInBothDicts(self.jsonarchivesbypath,self.archivesbypath):
+            if os.path.split(a.file_path)[1] == fname:
+                ar = a
+                break
         if ar == None:
-            print("WARNING: path="+fpath+" NOT FOUND")
-            return None
+            return ar
 
         hash=ar.file_hash
         assert(hash>=0)
-        #archive = self.archives.get(hash)
-        archive = _getFromOneOfDicts(self.jsonarchives,self.archives,hash)
-        if archive == None:
-            print("WARNING: archive with path="+fpath+" NOT FOUND")
-            return None
-        #print(archive.__dict__)
-        return archive
-
+        assert(_getFromOneOfDicts(self.jsonarchives,self.archives,hash) is not None)
+        return ar
+    
     def findFile(self,fpath):
         #fi = self.filesbypath.get(fpath.lower())
         fi = _getFromOneOfDicts(self.jsonfilesbypath,self.filesbypath,fpath.lower())

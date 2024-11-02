@@ -2,14 +2,30 @@ import os
 import glob
 import json
 import time
+import logging
 
 DEBUG = True
 # DEBUG = False
     
 def dbgWait():
     wait = input("Press Enter to continue.")
+
+_logger = logging.getLogger('mo2git')
+def warn(msg):
+    global _logger
+    _logger.warning(msg)
+def info(msg):
+    global _logger
+    _logger.info(msg)
     
 ###
+
+class JsonEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o,object):
+            return o.__dict__
+        else:
+            return o
 
 def openModTxtFile(fname):
     return open(fname,'rt',encoding='cp1252',errors='replace')
@@ -52,26 +68,6 @@ def allEsxs(mod,mo2):
     esxs = esxs + glob.glob(mo2+'mods/' + mod + '/*.esp')
     esxs = esxs + glob.glob(mo2+'mods/' + mod + '/*.esm')
     return esxs
-
-def absDir(dir):
-    if DEBUG:
-        assert(dir.endswith('\\') or dir.endswith('/'))
-    return os.path.abspath(dir)+'\\'
-
-def normalizeDirPath(path):
-    path = os.path.abspath(path)
-    assert(path.find('/')<0)
-    assert(not path.endswith('\\'))
-    return path+'\\'
-
-def normalizePath(path):
-    path = os.path.abspath(path)
-    assert(path.find('/')<0)
-    return path
-
-def denormalizePath(base,path):
-    assert(path.startswith(base))
-    return path[len(base):]
 
 class Elapsed:
     def __init__(self):
