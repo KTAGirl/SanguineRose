@@ -3,8 +3,7 @@ import glob
 import importlib
 import inspect
 
-# import mo2git.plugins.archives
-from mo2git.debug import *
+from mo2git.common import *
 
 def _loadPlugins(plugindir,basecls,found):
     # plugindir is relative to the path of this very file

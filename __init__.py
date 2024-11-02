@@ -2,11 +2,10 @@ import sys
 import time
 import os
 
-# from mo2git.common import isEslFlagged, escapeJSON, openModTxtFile, openModTxtFileW, allEsxs
 from mo2git.common import isEslFlagged,scriptDirFrom__file__,normalizeDirPath
-from mo2git.common2 import _openCache
-import mo2git.mo2git as mo2git
-import mo2git.git2mo as git2mo
+from mo2git.commands.cmdcommon import _openCache
+import mo2git.commands.mo2git as mo2git
+import mo2git.commands.git2mo as git2mo
 
 if not sys.version_info >= (3, 10):
     print('Sorry, mo2git needs at least Python 3.10')

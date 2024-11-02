@@ -3,7 +3,13 @@ import glob
 import json
 import time
 
-from mo2git.debug import DEBUG
+DEBUG = True
+# DEBUG = False
+    
+def dbgWait():
+    wait = input("Press Enter to continue.")
+    
+###
 
 def openModTxtFile(fname):
     return open(fname,'rt',encoding='cp1252',errors='replace')

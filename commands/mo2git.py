@@ -2,12 +2,11 @@ import json
 import re
 import shutil
 
-from mo2git.debug import *
 from mo2git.common import *
 from mo2git.installfile import manualUrlAndPrompt
 from mo2git.modlist import ModList
 from mo2git.common import *
-from mo2git.common2 import _openCache,_mo2AndCSAndMasterModList
+from mo2git.commands.cmdcommon import _openCache,_mo2AndCSAndMasterModList
 import mo2git.cache as cache
 
 def mo2AndMasterModList(config):
@@ -190,7 +189,7 @@ def _mo2git(config):
             if isown:
                 targetpath0 = targetdir + fpath
                 fpath1 = mo2+fpath
-                hash = cache._wjHash(fpath1)
+                hash = cache.wjHash(fpath1)
                 wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "hash":'+str(hash)+', "source":'+cache.escapeJSON(targetpath0)+' }')
                 # dbgWait()
                 continue
@@ -210,7 +209,7 @@ def _mo2git(config):
                         makeDirsForFile(targetpath)
                         srcpath = mo2 + fpath
                         shutil.copyfile(srcpath,targetpath)
-                        hash = cache._wjHash(srcpath)
+                        hash = cache.wjHash(srcpath)
                         processed = True
                         # dbgWait()
                         wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "hash":'+str(hash)+', "source":'+cache.escapeJSON(targetpath0)+' }')

@@ -3,11 +3,10 @@ import gzip
 import os
 import json
 import traceback
-from types import SimpleNamespace
 
-from mo2git.debug import *
 from mo2git.common import *
-import mo2git.binaryreader as binaryreader
+from mo2git.files import Archive,ArchiveEntry
+import mo2git.wjcompat.binaryreader as binaryreader
 
 class _Img:
     def __init__(self,br):
@@ -77,26 +76,11 @@ def _parseContents(hash,contents,gzipped=True):
         dbgWait()
         return None
 
-def normalizeHash(hash):
+def _normalizeHash(hash):
     if hash < 0:
         return hash + (1<<64)
     else:
         return hash
-
-class ArchiveEntry:
-    def __init__(self,archive_hash,intra_path,file_size,file_hash):
-        self.archive_hash = archive_hash
-        self.intra_path = intra_path
-        self.file_size = file_size
-        self.file_hash = file_hash
-        
-    def fromJSON(s):
-        return json.loads(s, object_hook=lambda d: SimpleNamespace(**d))
-
-    def toJSON(ar):
-        # works both for ar=ArchiveEntry, and ar=SimpleNamespace
-        # for SimpleNamespace cannot use return json.dumps(self,default=lambda o: o.__dict__)
-        return '{"archive_hash":'+str(ar.archive_hash)+', "intra_path": '+escapeJSON(ar.intra_path)+', "file_size": '+str(ar.file_size)+', "file_hash": '+str(ar.file_hash)+'}'
         
 def _aEntries(paths,hf,root_archive_hash):
     aes = []
@@ -149,33 +133,6 @@ def loadVFS(dbgfile=None):
 def _wjTimestampToPythonTimestamp(wjftime):
     return (wjftime - 116444736000000000) / 10**7
 
-class Archive:
-    def __init__(self,archive_hash,archive_modified,archive_path):
-        assert(archive_path is not None)
-        self.archive_hash=archive_hash
-        self.archive_modified=archive_modified
-        self.archive_path=archive_path
-        
-    def eq(self,other):
-        if self.archive_hash != other.archive_hash:
-            return False
-        if self.archive_modified != other.archive_modified:
-            return False
-        if self.archive_path != other.archive_path:
-            return False
-        return True
-                
-    def fromJSON(s):
-        return json.loads(s, object_hook=lambda d: SimpleNamespace(**d))
-
-    def toJSON(ar):
-        # works both for ar=Archive, and ar=SimpleNamespace
-        # for SimpleNamespace cannot use return json.dumps(self,default=lambda o: o.__dict__)
-        if ar.archive_hash is None:
-            return '{"archive_path": '+escapeJSON(ar.archive_path)+', "archive_hash":null}'
-        else:
-            return '{"archive_hash":'+str(ar.archive_hash)+', "archive_modified": '+str(ar.archive_modified)+', "archive_path": '+escapeJSON(ar.archive_path)+'}'
-
 def hcFile():
     home_dir = os.path.expanduser("~")
     return home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite'
@@ -206,7 +163,7 @@ def loadHC(dirs):
         if idx < 0:
             nfiltered += 1
             continue
-        hash = normalizeHash(row[2])
+        hash = _normalizeHash(row[2])
         
         newa = Archive(hash,_wjTimestampToPythonTimestamp(row[1]),row[0])
         # olda = out[idx].get(hash)

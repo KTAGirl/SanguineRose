@@ -1,5 +1,4 @@
-from mo2git.debug import DEBUG
-from mo2git.debug import dbgWait
+from mo2git.common import *
 
 def traceReader(x):
     # print("'"+str(x)+"'")

@@ -5,11 +5,9 @@ import pickle
 import json
 import shutil
 
-import xxhash
-
-from mo2git.debug import *
 from mo2git.common import *
-import mo2git.wjdb as wjdb
+from mo2git.files import Archive,ArchiveEntry,wjHash
+import mo2git.wjcompat.wjdb as wjdb
 import mo2git.pluginhandler as pluginhandler
 import mo2git.tasks as tasks
 
@@ -66,17 +64,6 @@ def _compareTimestamps(a,b):
         return 0
     return -1 if a < b else 1
 
-def _wjHash(fname):
-    h = xxhash.xxh64()
-    blocksize = 1048576
-    with open(fname,'rb') as f:
-        while True:
-            bb = f.read(blocksize)
-            h.update(bb)
-            assert(len(bb)<=blocksize)
-            if len(bb) != blocksize:
-                return h.intdigest()
-
 def _getFromOneOfDicts(dicttolook,dicttolook2,key):
     found = dicttolook.get(key)
     if found != None:
@@ -87,8 +74,8 @@ def _getFromOneOfDicts(dicttolook,dicttolook2,key):
 
 def _diffFound(ldout,fpath,tstamp,addar,updatednotadded):
     # print(fpath)
-    hash = _wjHash(fpath)
-    newa = wjdb.Archive(hash,tstamp,fpath.lower())
+    hash = wjHash(fpath)
+    newa = Archive(hash,tstamp,fpath.lower())
     addar.call((ldout,newa,updatednotadded))
 
 def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plugin,archivepath):
@@ -104,11 +91,11 @@ def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plu
             fpath = os.path.join(root, f)
             assert(os.path.isfile(fpath))
             # print(fpath)
-            hash = _wjHash(fpath)
+            hash = wjHash(fpath)
             assert(fpath.startswith(tmppath))
             intra_path = cur_intra_path.copy()
             intra_path.append(fpath[len(tmppath):])
-            ae = wjdb.ArchiveEntry(archive_hash,intra_path,os.path.getsize(fpath),hash)
+            ae = ArchiveEntry(archive_hash,intra_path,os.path.getsize(fpath),hash)
             # print(ae.__dict__)
             jsonarchiveentries[ae.file_hash]=ae
 
@@ -153,7 +140,7 @@ def _dictOfArsFromJsonFile(path):
     out = {}
     with openModTxtFile(path) as rfile:
         for line in rfile:
-            ar = wjdb.Archive.fromJSON(line)
+            ar = Archive.fromJSON(line)
             assert(out.get(ar.archive_path) is None)
             out[ar.archive_path] = ar
     return out
@@ -162,13 +149,13 @@ def _dictOfArsToJsonFile(path,ars):
     with openModTxtFileW(path) as wfile:
         for key in sorted(ars):
             ar = ars[key]
-            wfile.write(wjdb.Archive.toJSON(ar)+'\n')
+            wfile.write(Archive.toJSON(ar)+'\n')
 
 def _dictOfArEntriesFromJsonFile(path):
     out = {}
     with openModTxtFile(path) as rfile:
         for line in rfile:
-            ae = wjdb.ArchiveEntry.fromJSON(line)
+            ae = ArchiveEntry.fromJSON(line)
             # print(ar.__dict__)
             out[ae.file_hash] = ae
     return out
@@ -177,7 +164,7 @@ def _dictOfArEntriesToJsonFile(path,aes):
     with openModTxtFileW(path) as wfile:
         for key in sorted(aes):
             ae = aes[key]
-            wfile.write(wjdb.ArchiveEntry.toJSON(ae)+'\n')
+            wfile.write(ArchiveEntry.toJSON(ae)+'\n')
 
 ############# MicroCache
 
@@ -536,7 +523,7 @@ class Cache:
                         continue
                     print('NOTICE: '+fpath+' was deleted')
                     dbgWait()
-                    self.jsonfilesbypath[fpath] = wjdb.Archive(None,None,fpath.lower())
+                    self.jsonfilesbypath[fpath] = Archive(None,None,fpath.lower())
                     ndel += 1
         print('Reconcile: '+str(ndel)+' files were deleted')
         timer.printAndReset('Reconciling dicts with scannedfiles')

@@ -1,4 +1,4 @@
-# mini-micro lib for data-driven parallel processing
+# mini-micro <s>skirt</s>, sorry, lib for data-driven parallel processing
 
 import os
 import time
@@ -6,7 +6,6 @@ import json
 import traceback
 import pickle
 from multiprocessing import Process, Queue as PQueue, shared_memory
-#from multiprocessing.managers import SharedMemoryManager
 
 class _PoolOfShared:
     def __init__(self):
