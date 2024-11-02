@@ -114,7 +114,7 @@ def _mo2git(config):
     for arname in allarchivenames:
         archive = filecache.findArchive(arname)
         if archive:
-            allinstallfiles[archive.archive_hash] = cache.denormalizePath(cache.normalizePath(downloadsdir)+'\\',arname)
+            allinstallfiles[archive.file_hash] = cache.denormalizePath(cache.normalizePath(downloadsdir)+'\\',arname)
         else:
             print('WARNING: no archive found for '+arname)
     #print(allinstallfiles)

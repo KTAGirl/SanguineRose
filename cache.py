@@ -6,15 +6,15 @@ import json
 import shutil
 
 from mo2git.common import *
-from mo2git.files import Archive,ArchiveEntry,wjHash
+from mo2git.files import File,ArchiveEntry,wjHash
 import mo2git.wjcompat.wjdb as wjdb
 import mo2git.pluginhandler as pluginhandler
 import mo2git.tasks as tasks
 
 def _hcFoundDownload(archives,archivesbypath,ndup,ar):
-    if ar.archive_path.endswith('.meta'):
+    if ar.file_path.endswith('.meta'):
         return
-    olda = archives.get(ar.archive_hash)
+    olda = archives.get(ar.file_hash)
     if olda!=None and not olda.eq(ar):
         print("WARNING: identical archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(ar.__dict__))
         # dbgWait()
@@ -22,32 +22,32 @@ def _hcFoundDownload(archives,archivesbypath,ndup,ar):
         pass
     else:
         # out[idx][hash] = ar
-        archives[ar.archive_hash] = ar
-        archivesbypath[ar.archive_path] = ar
+        archives[ar.file_hash] = ar
+        archivesbypath[ar.file_path] = ar
     
 def _hcFoundFile(filesbypath,nex,ndup,ar,excludefolders,reincludefolders):
     exclude = False
     for ex in excludefolders:
-        if ar.archive_path.startswith(ex.lower()):
+        if ar.file_path.startswith(ex.lower()):
             exclude = True
             break
     if exclude:
         for inc in reincludefolders:
-            if ar.archive_path.startswith(inc.lower()):
+            if ar.file_path.startswith(inc.lower()):
                 exclude = False
                 break
     if exclude:
         nex.val += 1
         return
         
-    olda = filesbypath.get(ar.archive_path)
+    olda = filesbypath.get(ar.file_path)
     if olda!=None and not olda.eq(ar):
         # print("TODO: multiple archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(ar.__dict__))
         # wait = input("Press Enter to continue.")
         ndup.val += 1
         pass
     else:
-        filesbypath[ar.archive_path] = ar
+        filesbypath[ar.file_path] = ar
 
 #### Generic helpers
 
@@ -75,7 +75,7 @@ def _getFromOneOfDicts(dicttolook,dicttolook2,key):
 def _diffFound(ldout,fpath,tstamp,addar,updatednotadded):
     # print(fpath)
     hash = wjHash(fpath)
-    newa = Archive(hash,tstamp,fpath.lower())
+    newa = File(hash,tstamp,fpath.lower())
     addar.call((ldout,newa,updatednotadded))
 
 def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plugin,archivepath):
@@ -106,28 +106,28 @@ def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plu
                 _archiveToEntries(jsonarchiveentries,archive_hash,tmppath + str(nf) + '/',intra_path,nested_plugin,fpath)
 
 def _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded):
-    if ar.archive_path.endswith('.meta'):
+    if ar.file_path.endswith('.meta'):
         return
-    print('NOTICE: archive '+ar.archive_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
-    jsonarchives[ar.archive_hash]=ar
-    jsonarchivesbypath[ar.archive_path]=ar
+    print('NOTICE: archive '+ar.file_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
+    jsonarchives[ar.file_hash]=ar
+    jsonarchivesbypath[ar.file_path]=ar
     
     tmproot = tmppathbase + 'tmp/'
     if os.path.isdir(tmproot):
         shutil.rmtree(tmproot)
     os.makedirs(tmproot,exist_ok=True)
-    plugin = pluginhandler.archivePluginFor(ar.archive_path)
+    plugin = pluginhandler.archivePluginFor(ar.file_path)
     if plugin == None:
-        print('WARNING: no archive plugin found for '+ar.archive_path)
+        print('WARNING: no archive plugin found for '+ar.file_path)
     else:
-        _archiveToEntries(jsonarchiveentries,ar.archive_hash,tmproot,[],plugin,ar.archive_path)
+        _archiveToEntries(jsonarchiveentries,ar.file_hash,tmproot,[],plugin,ar.file_path)
 
     shutil.rmtree(tmproot)
     nmodified.val += 1
   
 def _diffFile(jsonfilesbypath,nmodified,ar,updatednotadded):
-    print('NOTICE: file '+ar.archive_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
-    jsonfilesbypath[ar.archive_path]=ar
+    print('NOTICE: file '+ar.file_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
+    jsonfilesbypath[ar.file_path]=ar
     nmodified.val += 1
 
 def _scannedFoundFile(scannedfiles,fpath):
@@ -140,16 +140,16 @@ def _dictOfArsFromJsonFile(path):
     out = {}
     with openModTxtFile(path) as rfile:
         for line in rfile:
-            ar = Archive.fromJSON(line)
-            assert(out.get(ar.archive_path) is None)
-            out[ar.archive_path] = ar
+            ar = File.fromJSON(line)
+            assert(out.get(ar.file_path) is None)
+            out[ar.file_path] = ar
     return out
 
 def _dictOfArsToJsonFile(path,ars):
     with openModTxtFileW(path) as wfile:
         for key in sorted(ars):
             ar = ars[key]
-            wfile.write(Archive.toJSON(ar)+'\n')
+            wfile.write(File.toJSON(ar)+'\n')
 
 def _dictOfArEntriesFromJsonFile(path):
     out = {}
@@ -281,7 +281,7 @@ def _ownJsonArchives2SelfTaskFunc(cache,out):
     cache.jsonarchives = {}
     for key in cache.jsonarchivesbypath:
         val = cache.jsonarchivesbypath[key]
-        cache.jsonarchives[val.archive_hash] = val
+        cache.jsonarchives[val.file_hash] = val
     assert(len(cache.jsonarchives)==len(cache.jsonarchivesbypath)) 
     print(str(len(cache.jsonarchives))+' JSON archives')
     return (cache.jsonarchives,cache.jsonarchivesbypath)
@@ -330,7 +330,7 @@ def _ownFilterTaskFunc(cache,parallel,allarchivenames,fromloadvfs):
     for arname in allarchivenames:
         ar = _getFromOneOfDicts(cache.archivesbypath,cache.jsonarchivesbypath,arname.lower())
         if ar:
-            allarchivehashes[ar.archive_hash] = 1
+            allarchivehashes[ar.file_hash] = 1
         else:
             print('WARNING: no archive hash found for '+arname)
     
@@ -519,11 +519,11 @@ class Cache:
                 if scannedfiles.get(fpath) is None:
                     injson = self.jsonfilesbypath.get(fpath.lower())
                     #print(injson)
-                    if injson is not None and injson.archive_hash is None: #special record is already present
+                    if injson is not None and injson.file_hash is None: #special record is already present
                         continue
                     print('NOTICE: '+fpath+' was deleted')
-                    dbgWait()
-                    self.jsonfilesbypath[fpath] = Archive(None,None,fpath.lower())
+                    #dbgWait()
+                    self.jsonfilesbypath[fpath] = File(None,None,fpath.lower())
                     ndel += 1
         print('Reconcile: '+str(ndel)+' files were deleted')
         timer.printAndReset('Reconciling dicts with scannedfiles')
@@ -563,7 +563,7 @@ class Cache:
                 found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath.lower())
                 if found:
                     try:
-                        tstamp2 = found.archive_modified
+                        tstamp2 = found.file_modified
                     except:
                         print(found)
                         dbgWait()
@@ -603,7 +603,7 @@ class Cache:
             print("WARNING: path="+fpath+" NOT FOUND")
             return None
 
-        hash=ar.archive_hash
+        hash=ar.file_hash
         assert(hash>=0)
         #archive = self.archives.get(hash)
         archive = _getFromOneOfDicts(self.jsonarchives,self.archives,hash)
@@ -620,7 +620,7 @@ class Cache:
             print("WARNING: path="+fpath+" NOT FOUND")
             return None,None
 
-        hash=ar.archive_hash
+        hash=ar.file_hash
         assert(hash>=0)
         #archiveEntry = self.archiveentries.get(hash)
         archiveEntry = _getFromOneOfDicts(self.jsonarchiveentries,self.archiveentries,hash)

@@ -5,7 +5,7 @@ import json
 import traceback
 
 from mo2git.common import *
-from mo2git.files import Archive,ArchiveEntry
+from mo2git.files import File,ArchiveEntry
 import mo2git.wjcompat.binaryreader as binaryreader
 
 class _Img:
@@ -165,7 +165,7 @@ def loadHC(dirs):
             continue
         hash = _normalizeHash(row[2])
         
-        newa = Archive(hash,_wjTimestampToPythonTimestamp(row[1]),row[0])
+        newa = File(hash,_wjTimestampToPythonTimestamp(row[1]),row[0])
         # olda = out[idx].get(hash)
         dirs[idx][1](newa)
     con.close()

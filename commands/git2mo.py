@@ -46,9 +46,9 @@ def _git2mo(config):
     #print(mo2)
     for file in filecache.allFiles():
         nincache += 1
-        #print(file.archive_path)
-        assert(file.archive_path.startswith(mo2))
-        fasinjson = file.archive_path[lmo2:]
+        #print(file.file_path)
+        assert(file.file_path.startswith(mo2))
+        fasinjson = file.file_path[lmo2:]
         mfile = masterfilesbypath.get(fasinjson)
         if mfile is None:
             nmissing += 1
@@ -59,7 +59,7 @@ def _git2mo(config):
             if hash is None:
                 nnohash += 1
                 #print(fasinjson)
-            elif hash != file.archive_hash:
+            elif hash != file.file_hash:
                 nmodified2 += 1
         #print(fasinjson)
     print('nincache='+str(nincache)+' nmaster='+str(len(masterfiles)))
