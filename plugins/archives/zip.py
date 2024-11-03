@@ -31,6 +31,6 @@ class ZipArchivePlugin(ArchivePluginBase):
     def extractAll(self,archive,targetpath):
         print('Extracting from '+archive+'...')
         z = zipfile.ZipFile(archive)
-        z.extractAll(targetpath)
+        z.extractall(targetpath)
         z.close()
         print('Extraction done')
