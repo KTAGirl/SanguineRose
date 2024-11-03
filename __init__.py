@@ -3,8 +3,9 @@ import time
 import os
 import json
 
+from mo2git.folders import Folders
 from mo2git.common import isEslFlagged,scriptDirFrom__file__
-from mo2git.commands.cmdcommon import _openCache
+from mo2git.commands.cmdcommon import _openCache,_csAndMasterModList,enabledModSizes
 import mo2git.commands.mo2git as mo2git
 import mo2git.commands.git2mo as git2mo
 
@@ -27,40 +28,21 @@ def run(configfilepath):
                 if argc == 2:
                    mo2git._mo2git(configfilepath,config)
                    ok = True 
-                '''
-                if argc >= 2:
-                    i = 2
-                    dbgdumpwjdb = None
-                    optionsok = True
-                    while i < len(argv):
-                        if argv[i].lower() == '-debug.dumpwjdb':
-                            if i+1 == len(argv):
-                                optionsok = False
-                                break
-                            else:
-                                dbgdumpwjdb = argv[i+1]
-                                i += 2
-                        else:
-                            optionsok = False
-                            break
-                    if optionsok:
-                        mo2git._mo2git(config,dbgdumpwjdb)
-                        ok = True
-                '''
             case 'git2mo':
                 if argc == 2:
                    git2mo._git2mo(configfilepath,config)
                    ok = True
             case 'debug.dumpwjdb':
                 if argc == 3:
-                    mo2,mastermodlist = mo2git.mo2AndMasterModList(config)
-                    dumpwjdb = argv[2]
-                    _openCache(config,mastermodlist,normalizeDirPath(argv[2]))
+                    compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)
+                    ignore=compiler_settings['Ignore']
+                    dumpwjdb = Folders.normalizeDirPath(argv[2])
+                    filecache = _openCache(configfilepath,config,mastermodlist,ignore,dumpwjdb)
                     ok = True
             case 'debug.modsizes':
                 if argc == 2:
-                    mo2,mastermodlist = mo2git.mo2AndMasterModList(config)
-                    sizes = mo2git.enabledModSizes(mastermodlist,mo2)
+                    compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)
+                    sizes = enabledModSizes(mastermodlist,config['mo2'])
                     print(sizes)
                     ok = True
 

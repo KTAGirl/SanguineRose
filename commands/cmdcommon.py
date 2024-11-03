@@ -45,3 +45,10 @@ def _openCache(jsonconfigname,config,mastermodlist,ignore,dbgdumpwjdb=None):
     folders.setExclusions(mo2exclude,mo2reinclude)
     filecache = cache.Cache(folders,dbgdumpwjdb)
     return filecache
+    
+def enabledModSizes(modlist,mo2):
+    sizes=[]
+    for mod in modlist.allEnabled():
+        sizes.append([mod,round(folderSize(mo2+'mods/'+mod)/1000000,2)])
+    sizes.sort(key=lambda x: x[1])
+    return sizes

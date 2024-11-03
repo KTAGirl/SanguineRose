@@ -10,17 +10,11 @@ from mo2git.commands.cmdcommon import _openCache,_csAndMasterModList
 import mo2git.cache as cache
 from mo2git.folders import Folders
 
+'''
 def mo2AndMasterModList(config):
     mo2,compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _mo2AndCSAndMasterModList(config)
     return mo2,mastermodlist
-
-def enabledModSizes(modlist,mo2):
-    sizes=[]
-    for mod in modlist.allEnabled():
-        sizes.append([mod,round(folderSize(mo2+'mods/'+mod)/1000000,2)])
-    sizes.sort(key=lambda x: x[1])
-    return sizes
-    
+'''    
 def _writeManualDownloads(folders,md,modlist,config):
     mo2 = config['mo2']
     modlistname = config['modlistname']
