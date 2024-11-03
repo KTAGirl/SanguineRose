@@ -7,7 +7,7 @@
 - cache: handling updates to wj (those duplicating or invalidating json)
   
 ### PERFORMANCE/OPTIMIZATIONS:
-- master.json size optimization: text-based "compression" (string substitution; problem: keeping strings and string ids stable for github) 
+- master.json size optimization: text-based "compression" (hierarchical representation) 
 - hc -> SharedReturn
 - masterjson -> under _microCache()
 - reading masterjson -> Tasks
