@@ -61,8 +61,12 @@ class Folders:
         dls = jsonconfig['downloads']
         assert(isinstance(dls,list))
         self.downloads = [_configDirPath(dl,configdir,jsonconfig) for dl in dls]
-        self.ignore = [_configDirPath(ig,configdir,jsonconfig) for ig in ignore]
+       
         self.mo2 = _configDirPath(jsonconfig['mo2'],configdir,jsonconfig)
+        self.ignore = [_normalizeDirPath(self.mo2+ig) for ig in ignore]
+        #print(self.ignore)
+        #dbgWait()
+ 
         self.cache = _configDirPath(jsonconfig.get('cache',configdir + '..\\mo2git.cache\\'),configdir,jsonconfig)
         self.tmp = _configDirPath(jsonconfig.get('tmp',configdir + '..\\mo2git.tmp\\'),configdir,jsonconfig)
         self.github=_configDirPath(jsonconfig.get('github',configdir),configdir,jsonconfig)
