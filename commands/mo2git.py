@@ -123,11 +123,7 @@ def _mo2git(jsonconfigfname,config):
     #print(allinstallfiles)
     #dbgWait()
 
-    files = []
-    nn = 0
-    for fi in filecache.allFiles():
-        files.append(fi.file_path)
-
+    files = [fi.file_path for fi in filecache.allFiles()]
     files.sort()
 
     nwarn = 0
@@ -224,7 +220,7 @@ def _mo2git(jsonconfigfname,config):
 
         wfile.write('\n]}\n')
                 
-    print("nn="+str(nn)+" nwarn="+str(nwarn))
+    print("nn="+str(len(files))+" nwarn="+str(nwarn))
     stats['ESXS'] = nesx
 
     #validating json
