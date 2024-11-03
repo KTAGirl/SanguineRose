@@ -590,6 +590,7 @@ class Parallel:
             
         if exceptiontype is None:
             if self.jsonfname is not None:
+                sortedw = dict(sorted(self.jsonweights.items(), key=lambda item: -item[1]))
                 with open(self.jsonfname, 'wt',encoding='utf-8') as wf:
-                    json.dump(self.jsonweights,wf,indent=2)
+                    json.dump(sortedw,wf,indent=2)
             

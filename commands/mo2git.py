@@ -131,7 +131,7 @@ def _mo2git(jsonconfigfname,config):
             for filename in filenames:
                 # print("file="+filename)
                 nn += 1
-                fpath = Folders.normalizeDirPath(os.path.join(dirpath,filename))
+                fpath = Folders.normalizeFilePath(os.path.join(dirpath,filename))
                 assert(not os.path.islink(fpath))
                 files.append(fpath)
 

@@ -248,7 +248,7 @@ def _loadJsonArchivesTaskFunc(param):
     try:
         jsonarchivesbypath = _dictOfFisFromJsonFile(cachedir+'archives.njson')
     except Exception as e:
-        print('WARNING: error loading JSON cache archives.njson: '+str(e)+'. Will continue w/o archive JSON cache')
+        warn('error loading JSON cache archives.njson: '+str(e)+'. Will continue w/o archive JSON cache')
         jsonarchivesbypath = {} # just in case  
     return (jsonarchivesbypath,)
 
@@ -260,7 +260,7 @@ def _ownJsonArchives2SelfTaskFunc(cache,out):
         val = cache.jsonarchivesbypath[key]
         cache.jsonarchives[val.file_hash] = val
     assert(len(cache.jsonarchives)==len(cache.jsonarchivesbypath)) 
-    print(str(len(cache.jsonarchives))+' JSON archives')
+    info(str(len(cache.jsonarchives))+' JSON archives')
     return (cache.jsonarchives,cache.jsonarchivesbypath)
 
 def _loadJsonFilesTaskFunc(param):
@@ -269,10 +269,10 @@ def _loadJsonFilesTaskFunc(param):
     try:
         jsonfilesbypath = _dictOfFisFromJsonFile(cachedir+'files.njson')
     except Exception as e:
-        print('WARNING: error loading JSON cache files.njson: '+str(e)+'. Will continue w/o file JSON cache')
+        warn('error loading JSON cache files.njson: '+str(e)+'. Will continue w/o file JSON cache')
         jsonfilesbypath = {} # just in case            
 
-    print(str(len(jsonfilesbypath))+' JSON files')
+    info(str(len(jsonfilesbypath))+' JSON files')
     return (jsonfilesbypath,)
     
 def _ownJsonFiles2SelfTaskFunc(cache,out):
@@ -286,9 +286,9 @@ def _loadJsonArchiveEntriesTaskFunc(param):
     try:
         jsonarchiveentries = _dictOfArEntriesFromJsonFile(cachedir+'archiveentries.njson')
     except Exception as e:
-        print('WARNING: error loading JSON cache archiveentries.njson: '+str(e)+'. Will continue w/o archiveentries JSON cache')
+        warn('error loading JSON cache archiveentries.njson: '+str(e)+'. Will continue w/o archiveentries JSON cache')
         jsonarchiveentries = {} # just in case            
-    print(str(len(jsonarchiveentries))+' JSON archiveentries')
+    info(str(len(jsonarchiveentries))+' JSON archiveentries')
     return (jsonarchiveentries,)
     
 def _ownJsonArchiveEntries2SelfTaskFunc(cache,out):
@@ -344,7 +344,7 @@ def _ownFilterTaskFunc(cache,parallel,allarchivenames,fromloadvfs):
     #print(dbgFirst(cache.archivesbypath).__dict__)
     for arname in allarchivenames:
         assert(arname.lower()==arname)
-        print(arname)
+        #print(arname)
         #ar = _getFromOneOfDicts(cache.jsonarchivesbypath,cache.archivesbypath,arname)
         ar = _findArByName(cache.jsonarchivesbypath,cache.archivesbypath,arname)
         if ar:
@@ -361,7 +361,7 @@ def _ownFilterTaskFunc(cache,parallel,allarchivenames,fromloadvfs):
             #dbgWait()
             cache.archiveentries[ae.file_hash] = ae
     cache.publishedarchiveentries = tasks.SharedPublication(parallel,cache.archiveentries)
-    print('Filtering VFS: '+str(len(cache.archiveentries))+'survived out of '+str(len(unfilteredarchiveentries)))
+    print('Filtering VFS: '+str(len(cache.archiveentries))+' survived out of '+str(len(unfilteredarchiveentries)))
     
 ### Scanning
 
@@ -436,6 +436,7 @@ def _ownScanMo22SelfTaskFunc(cache,parallel,scannedfiles,out):
     (nscanned,nmodified,ldout,pubfilesbypath,folders) = out
     cache.jsonfilesbypath |= ldout.jsonfilesbypath
     scannedfiles |= ldout.scannedfiles
+    print('Merging scannedfiles: added '+str(len(ldout.scannedfiles))+', now '+str(len(scannedfiles)))
     for requested in ldout.requested:
         taskname = 'scanmo2.'+requested
         # recursive task
@@ -525,27 +526,25 @@ class Cache:
             timer.printAndReset('Dumping dbgfolder')
 
         #print('scanned/modified files:'+str(nscanned)+'/'+str(nmodified)+', '+str(len(self.jsonfilesbypath))+' JSON files')
-        print(len(scannedfiles))
-        #dbgWait()
+        info(str(len(scannedfiles))+' files scanned')
         # timer.printAndReset('Scanning MO2')
-        #dbgWait()
 
         ### Reconciling
         #print('#2:'+str(self.jsonfilesbypath.get('c:\\\\mo2modding\\logs\\usvfs-2024-10-13_19-52-38.log')))
         ndel = 0
-        for dict in [self.jsonfilesbypath, self.filesbypath]:
-            for fpath in dict:
-                assert(Folders.normalizeFilePath(fpath)==fpath)
-                if scannedfiles.get(fpath) is None:
-                    injson = self.jsonfilesbypath.get(fpath)
-                    #print(injson)
-                    if injson is not None and injson.file_hash is None: #special record is already present
-                        continue
-                    info(fpath+' was deleted')
-                    #dbgWait()
-                    self.jsonfilesbypath[fpath] = File(None,None,fpath.lower())
-                    ndel += 1
-        print('Reconcile: '+str(ndel)+' files were deleted')
+        for file in _allValuesInBothDicts(self.jsonfilesbypath, self.filesbypath):
+            fpath = file.file_path
+            assert(Folders.normalizeFilePath(fpath)==fpath)
+            if scannedfiles.get(fpath) is None:
+                injson = self.jsonfilesbypath.get(fpath)
+                #print(injson)
+                if injson is not None and injson.file_hash is None: #special record is already present
+                    continue
+                info(fpath+' was deleted')
+                #dbgWait()
+                self.jsonfilesbypath[fpath] = File(None,None,fpath)
+                ndel += 1
+        info('Reconcile: '+str(ndel)+' files were deleted')
         timer.printAndReset('Reconciling dicts with scannedfiles')
         #dbgWait()
         
@@ -600,7 +599,7 @@ class Cache:
                         newdir2 = newdir + Folders.normalizeFileName(ff) 
                         if os.path.isdir(newdir2):
                             newdir2 += '\\'
-                            # print(newdir2)
+                            #print('Cache:'+newdir2)
                             newincluded = folders.isMo2ExactDirIncluded(newdir2)
                             assert(newincluded is not False)
                             if newincluded == 2: #mo2reincluded
@@ -634,12 +633,17 @@ class Cache:
     
     def findFile(self,fpath):
         #fi = self.filesbypath.get(fpath.lower())
-        fi = _getFromOneOfDicts(self.jsonfilesbypath,self.filesbypath,fpath.lower())
+        assert(fpath.lower()==fpath)
+        #print(dbgFirst(self.filesbypath).__dict__)
+        fi = _getFromOneOfDicts(self.jsonfilesbypath,self.filesbypath,fpath)
         if fi == None:
             print("WARNING: path="+fpath+" NOT FOUND")
             return None,None
 
         hash=fi.file_hash
+        if hash is None:#file was deleted
+            return None,None
+        #print(fi.__dict__)
         assert(hash>=0)
         #archiveEntry = self.archiveentries.get(hash)
         archiveEntry = _getFromOneOfDicts(self.jsonarchiveentries,self.archiveentries,hash)

@@ -81,9 +81,9 @@ class Folders:
         assert(dirpath.startswith(self.mo2))
         if dirpath in self.ignore:
             return None
-        if not dirpath in self.mo2excludes:
-            return 1
-        return 2 if dirpath in self.mo2reincludes else False
+        if dirpath in self.mo2reincludes: #that's right: with exact dir comparison, we should check reincludes first
+            return 2 
+        return False if dirpath in self.mo2excludes else 1
         
     def isMo2FilePathIncluded(self,fpath): 
         # returns: None if ignored, False if mo2excluded, 1 if regular (not excluded), 2 if mo2reincluded

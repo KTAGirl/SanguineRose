@@ -24,6 +24,7 @@ def dbgFirst(data):
         return data
 
 _logger = logging.getLogger('mo2git')
+logging.basicConfig(level=logging.DEBUG)
 def warn(msg):
     global _logger
     _logger.warning(msg)
