@@ -5,6 +5,10 @@ from mo2git.installfile import installfileModidManualUrlAndPrompt
 from mo2git.folders import Folders
 from mo2git.modlist import ModList
 import mo2git.cache as cache
+import json5 #only for user configs! Very slow for any other purpose
+
+def _loadUserConfig(rf): #don't use for anything except for hand-editable user configs! Very slow for any other purpose
+    return json5.load(rf) 
 
 def _csAndMasterModList(config):
     mo2=config['mo2']

@@ -132,7 +132,7 @@ def _scannedFoundFile(scannedfiles,fpath):
 
 #### JSON loading helpers
 
-def _dictOfFisFromJsonFile(path):
+def _dictOfFilesFromJsonFile(path):
     out = {}
     with openModTxtFile(path) as rfile:
         for line in rfile:
@@ -141,11 +141,13 @@ def _dictOfFisFromJsonFile(path):
             out[ar.file_path] = ar
     return out
 
-def _dictOfFisToJsonFile(path,ars):
+def _dictOfFilesToJsonFile(path,files,filteredfiles):
     with openModTxtFileW(path) as wfile:
-        for key in sorted(ars):
-            ar = ars[key]
-            wfile.write(File.toJSON(ar)+'\n')
+        for key in sorted(files):
+            fi = files[key]
+            wfile.write(File.toJSON(fi)+'\n')
+        for fi in filteredfiles:
+            wfile.write(File.toJSON(fi)+'\n')
 
 def _dictOfArEntriesFromJsonFile(path):
     out = {}
@@ -248,7 +250,7 @@ def _loadJsonArchivesTaskFunc(param):
     (cachedir,) = param
     jsonarchivesbypath = {}
     try:
-        jsonarchivesbypath = _dictOfFisFromJsonFile(cachedir+'archives.njson')
+        jsonarchivesbypath = _dictOfFilesFromJsonFile(cachedir+'archives.njson')
     except Exception as e:
         warn('error loading JSON cache archives.njson: '+str(e)+'. Will continue w/o archive JSON cache')
         jsonarchivesbypath = {} # just in case  
@@ -256,7 +258,15 @@ def _loadJsonArchivesTaskFunc(param):
 
 def _ownJsonArchives2SelfTaskFunc(cache,out):
     (jsonarchivesbypath,) = out
-    cache.jsonarchivesbypath = jsonarchivesbypath
+    cache.jsonarchivesbypath = {}
+    cache.filteredjsonarchives = []
+    for key,val in jsonarchivesbypath.items():
+        assert(key==val.file_path)
+        if cache.folders.isKnownArchive(key):
+            cache.jsonarchivesbypath[key] = val
+        else:
+            cache.filteredjsonarchives.append(val)
+
     cache.jsonarchives = {}
     for key in cache.jsonarchivesbypath:
         val = cache.jsonarchivesbypath[key]
@@ -269,7 +279,7 @@ def _loadJsonFilesTaskFunc(param):
     (cachedir,) = param
     jsonfilesbypath = {}
     try:
-        jsonfilesbypath = _dictOfFisFromJsonFile(cachedir+'files.njson')
+        jsonfilesbypath = _dictOfFilesFromJsonFile(cachedir+'files.njson')
     except Exception as e:
         warn('error loading JSON cache files.njson: '+str(e)+'. Will continue w/o file JSON cache')
         jsonfilesbypath = {} # just in case            
@@ -279,7 +289,14 @@ def _loadJsonFilesTaskFunc(param):
     
 def _ownJsonFiles2SelfTaskFunc(cache,out):
     (jsonfilesbypath,) = out
-    cache.jsonfilesbypath = jsonfilesbypath
+    cache.jsonfilesbypath = {}
+    cache.filteredjsonfiles = []
+    for key,val in jsonfilesbypath.items():
+        assert(key==val.file_path)
+        if cache.folders.isMo2FilePathIncluded(key):
+            cache.jsonfilesbypath[key] = val
+        else:
+            cache.filteredjsonfiles.append(val)
     return (cache.jsonfilesbypath,)
 
 def _loadJsonArchiveEntriesTaskFunc(param):
@@ -552,15 +569,15 @@ class Cache:
         #dbgWait()
         
         ### Writing JSON HashCache
-        _dictOfFisToJsonFile(self.folders.cache+'archives.njson',self.jsonarchivesbypath)
-        _dictOfFisToJsonFile(self.folders.cache+'files.njson',self.jsonfilesbypath)
+        _dictOfFilesToJsonFile(self.folders.cache+'archives.njson',self.jsonarchivesbypath,self.filteredjsonarchives)
+        _dictOfFilesToJsonFile(self.folders.cache+'files.njson',self.jsonfilesbypath,self.filteredjsonfiles)
         _dictOfArEntriesToJsonFile(self.folders.cache+'archiveentries.njson',self.jsonarchiveentries)
         
         #Writing CacheData
         with open(self.folders.cache+'cache.json','wt',encoding='utf-8') as wf:
             wf.write(JsonEncoder(indent=4).encode(self.cachedata))
         
-        timer.printAndReset('caches')
+        timer.printAndReset('Caches saved')
         
     def _loadDir(ldout,dir,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile):
         # print(excludefolders)

@@ -5,7 +5,7 @@ import json
 
 from mo2git.folders import Folders
 from mo2git.common import isEslFlagged,scriptDirFrom__file__
-from mo2git.commands.cmdcommon import _openCache,_csAndMasterModList,enabledModSizes
+from mo2git.commands.cmdcommon import _openCache,_csAndMasterModList,enabledModSizes,_loadUserConfig
 import mo2git.commands.mo2git as mo2git
 import mo2git.commands.git2mo as git2mo
 
@@ -15,7 +15,7 @@ if not sys.version_info >= (3, 10):
     
 def run(configfilepath):
     with open(configfilepath,'rt',encoding='utf-8') as rf:
-        config = json.load(rf)
+        config = _loadUserConfig(rf)
         
     argv = sys.argv
     argc = len(argv)
