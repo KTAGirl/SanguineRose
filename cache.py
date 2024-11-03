@@ -595,19 +595,12 @@ class Cache:
                 included = folders.isMo2ExactDirIncluded(newdir)
                 if not included: #ignored or mo2excluded
                     # print('Excluding '+newdir)
-                    for ff in os.listdir(newdir):
-                        newdir2 = newdir + Folders.normalizeFileName(ff) 
-                        if os.path.isdir(newdir2):
-                            newdir2 += '\\'
-                            #print('Cache:'+newdir2)
-                            newincluded = folders.isMo2ExactDirIncluded(newdir2)
-                            assert(newincluded is not False)
-                            if newincluded == 2: #mo2reincluded
-                                # print('Re-including '+newdir2)
-                                if ldout is not None:
-                                    ldout.requested.append(newdir2)
-                                else:
-                                    nscanned += Cache._loadDir(None,newdir2,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile)
+                    for newdir2 in folders.allReinclusionsForIgnoredOrExcluded(newdir):
+                        assert(Folders.normalizeDirPath(newdir2) == newdir2) 
+                        if ldout is not None:
+                            ldout.requested.append(newdir2)
+                        else:
+                            nscanned += Cache._loadDir(None,newdir2,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile)
                 else:
                     nscanned += Cache._loadDir(ldout,newdir,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile)
             else:

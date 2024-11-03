@@ -70,20 +70,26 @@ class Folders:
         #dbgWait()
         
     def setExclusions(self,mo2excludes,mo2reincludes):
-        # TODO: check that all reincludes are directly under mo2excludes (otherwise isMo2ExactDir-based scans won't work) 
         self.mo2excludes = [_normalizeDirPath(ex) for ex in mo2excludes]
         self.mo2reincludes = [_normalizeDirPath(rein) for rein in mo2reincludes]        
         
     def isMo2ExactDirIncluded(self,dirpath):
-        # returns: None if ignored, False if mo2excluded, 1 if regular (not excluded), 2 if mo2reincluded
+        # returns: None if ignored, False if mo2excluded, 1 if regular (not excluded)
+        # unlike isMo2FilePathIncluded(), does not return 2; instead, on receiving False, caller should call getReinclusions()
         #print(dirpath)
         _assertNormalizedDirPath(dirpath)
         assert(dirpath.startswith(self.mo2))
         if dirpath in self.ignore:
             return None
-        if dirpath in self.mo2reincludes: #that's right: with exact dir comparison, we should check reincludes first
-            return 2 
         return False if dirpath in self.mo2excludes else 1
+        
+    def allReinclusionsForIgnoredOrExcluded(self,dirpath):
+        _assertNormalizedDirPath(dirpath)
+        assert(dirpath in self.ignore or dirpath in self.mo2excludes)
+        out = []
+        for rein in self.mo2reincludes:
+            if rein.startswith(dirpath):
+                yield rein
         
     def isMo2FilePathIncluded(self,fpath): 
         # returns: None if ignored, False if mo2excluded, 1 if regular (not excluded), 2 if mo2reincluded
