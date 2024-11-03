@@ -1,7 +1,8 @@
 ## TODO:
 
 ### MAINSTREAM:
-- git2mo: restore according to master.json
+- git2mo.changestofolder and git2mo.discardchanges: restore according to master.json
+- better and more systemic logging
 - fix ESXS stats
 - mo.genprofiles command-line param
 - cache: handling updates to wj (those duplicating or invalidating json)
@@ -19,6 +20,7 @@
 - Parallelize Reconciliation
 
 ### PARALLEL:
+- logging
 - identify and fix occasional problem with hanging when an exception occurs in child
 - make sure that all its shm are always released by child processes
 - handle wait() in child process
