@@ -73,10 +73,26 @@ class Folders:
         #print(self.__dict__)
         #dbgWait()
         
+        toolinstallfiles = jsonconfig.get('toolinstallfiles')
+        if toolinstallfiles:
+            self.allarchivenames = [Folders.normalizeFileName(arname) for arname in toolinstallfiles]
+        
+    def addArchiveNames(self,addarchivenames):
+        for arname in addarchivenames:
+            self.allarchivenames.append(Folders.normalizeFileName(arname))
+        
     def setExclusions(self,mo2excludes,mo2reincludes):
         self.mo2excludes = [_normalizeDirPath(ex) for ex in mo2excludes]
         self.mo2reincludes = [_normalizeDirPath(rein) for rein in mo2reincludes]        
         
+    def allArchiveNames(self):
+        for arname in self.allarchivenames:
+            yield arname
+   
+    def isKnownArchive(self,arpath):
+        arname = Folders.normalizeFileName(os.path.split(arpath)[1])
+        return arname in self.allarchivenames
+   
     def isMo2ExactDirIncluded(self,dirpath):
         # returns: None if ignored, False if mo2excluded, 1 if regular (not excluded)
         # unlike isMo2FilePathIncluded(), does not return 2; instead, on receiving False, caller should call getReinclusions()
@@ -146,13 +162,19 @@ class Folders:
         _assertShortFilePath(fpath.lower())
         return fpath.lower()
         
+'''
 class NoFolders:
-    #mimics Folders for limited purposes
-    def __init__(self):
-        pass
+    #mimics Folders for downloads-scanning purposes
+    def __init__(self,allarchivenames):
+        self.allarchivenames = [arname for arname in allarchivenames]
         
     def isMo2ExactDirIncluded(self,dirpath):
         return 1
         
     def isMo2FilePathIncluded(self,fpath): 
         return 1
+
+    def allArchiveNames(self):
+        for arname in self.allarchivenames:
+            yield arname
+'''

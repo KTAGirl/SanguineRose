@@ -21,22 +21,18 @@ def enabledModSizes(modlist,mo2):
     sizes.sort(key=lambda x: x[1])
     return sizes
     
-def _writeManualDownloads(md,modlist,todl0,config):
+def _writeManualDownloads(folders,md,modlist,config):
     mo2 = config['mo2']
-    toolinstallfiles = config['toolinstallfiles']
     modlistname = config['modlistname']
     with openModTxtFileW('manualdl.md') as md:
         md.write('## '+modlistname+' - Manual Downloads\n')
         md.write('|#| URL | Comment |\n')
         md.write('|-----|-----|-----|\n')
         todl = {}
-        if toolinstallfiles:
-            for installfile in toolinstallfiles:
-                manualurl,prompt = manualUrlAndPrompt(installfile,mo2)
+        for arname in folders.allArchiveNames():
+                manualurl,prompt = manualUrlAndPrompt(arname,mo2)
                 if manualurl:
                     addToDictOfLists(todl,manualurl,prompt)
-
-        todl = todl | todl0
 
         rowidx = 1
         sorted_todl = dict(sorted(todl.items()))
@@ -84,7 +80,7 @@ def _copyRestOfProfile(mo2,fulltargetdir,profilename):
 def _mo2git(jsonconfigfname,config):
     compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)
     ignore=compiler_settings['Ignore']
-    todl,allarchivenames,filecache = _openCache(jsonconfigfname,config,mastermodlist,ignore)
+    filecache = _openCache(jsonconfigfname,config,mastermodlist,ignore)
 
     ownmods=config['ownmods']
     
@@ -112,7 +108,7 @@ def _mo2git(jsonconfigfname,config):
         altmodlists[profile] = aml
 
     allinstallfiles = {}
-    for arname in allarchivenames:
+    for arname in filecache.folders.allarchivenames:
         ar = filecache.findArchiveByName(arname)
         if ar is not None:
             assert(ar.file_path.endswith(arname))
@@ -308,7 +304,7 @@ def _mo2git(jsonconfigfname,config):
 
     stats['ACTIVEMODS'] = sum(1 for i in mastermodlist.allEnabled())
 
-    _writeManualDownloads(targetgithub+'manualdl.md',mastermodlist,todl,config)
+    _writeManualDownloads(filecache.folders,targetgithub+'manualdl.md',mastermodlist,config)
         
     # more stats
     wjcompiled = config.get('wjcompiled')

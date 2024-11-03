@@ -7,7 +7,7 @@ from mo2git.commands.cmdcommon  import _openCache,_csAndMasterModList
 def _git2mo(jsonconfigfname,config):
     compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)
     ignore=compiler_settings['Ignore']
-    todl,allarchivenames,filecache = _openCache(jsonconfigfname,config,mastermodlist,ignore)
+    filecache = _openCache(jsonconfigfname,config,mastermodlist,ignore)
     print('Cache loaded')
     
     srcgithub = filecache.folders.github

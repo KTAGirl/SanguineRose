@@ -10,7 +10,7 @@ from mo2git.files import File,ArchiveEntry,wjHash
 import mo2git.wjcompat.wjdb as wjdb
 import mo2git.pluginhandler as pluginhandler
 import mo2git.tasks as tasks
-from mo2git.folders import Folders,NoFolders
+from mo2git.folders import Folders#,NoFolders
 
 def _hcFoundDownload(archives,archivesbypath,ndup,ar):
     if ar.file_path.endswith('.meta'):
@@ -92,15 +92,17 @@ def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plu
 
 ##### Lambda parts
 
-def _diffFound(ldout,fpath,tstamp,addfi,updatednotadded):
+def _diffFound(folders,ldout,fpath,tstamp,addfi,updatednotadded):
     #print(fpath)
     hash = wjHash(fpath) #TODO: to Task (only for larger files)
     assert(Folders.normalizeFilePath(fpath)==fpath)
     newa = File(hash,tstamp,fpath)
-    addfi.call((ldout,newa,updatednotadded))
+    addfi.call((folders,ldout,newa,updatednotadded))
 
-def _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded):
+def _diffArchive(folders,jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded):
     if ar.file_path.endswith('.meta'):
+        return
+    if not folders.isKnownArchive(ar.file_path):
         return
     info('archive '+ar.file_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
     jsonarchives[ar.file_hash]=ar
@@ -335,14 +337,14 @@ def _findArByName(dict1,dict2,arname):
             return ar
     return None
 
-def _ownFilterTaskFunc(cache,parallel,allarchivenames,fromloadvfs):
+def _ownFilterTaskFunc(cache,parallel,folders,fromloadvfs):
     (sharedparam,cachedataoverwrites) = fromloadvfs
     cache.cachedata |= cachedataoverwrites
     unfilteredarchiveentries = tasks.receivedSharedReturn(parallel,sharedparam)
 
     allarchivehashes = {}
     #print(dbgFirst(cache.archivesbypath).__dict__)
-    for arname in allarchivenames:
+    for arname in folders.allArchiveNames():
         assert(arname.lower()==arname)
         #print(arname)
         #ar = _getFromOneOfDicts(cache.jsonarchivesbypath,cache.archivesbypath,arname)
@@ -366,12 +368,12 @@ def _ownFilterTaskFunc(cache,parallel,allarchivenames,fromloadvfs):
 ### Scanning
 
 def _notALambda0(capture,param):
-  (_,ar,updatednotadded) = param
+  (folders,_,ar,updatednotadded) = param
   (jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,nmodified) = capture
-  _diffArchive(jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded)
+  _diffArchive(folders,jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmppathbase,nmodified,ar,updatednotadded)
 
 def _notALambda1(capture,param):
-    (ldout,fi,updatednotadded) = param
+    (_,ldout,fi,updatednotadded) = param
     (nmodified,) = capture
     _diffFile(ldout.jsonfilesbypath,nmodified,fi,updatednotadded)
     
@@ -381,7 +383,7 @@ def _notALambda2(capture,param):
     _scannedFoundFile(ldout.scannedfiles,fpath)
 
 def _scanDownloadsTaskFunc(param,fromhc2toself,fromjsonarchives2self,fromjsonarchiveentries2self):
-    (downloadsdir,tmppathbase) = param
+    (folders,downloadsdir) = param
     (pubarchivesbypath,_) = fromhc2toself
     (jsonarchives,jsonarchivesbypath) = fromjsonarchives2self
     (jsonarchiveentries,) = fromjsonarchiveentries2self
@@ -391,10 +393,11 @@ def _scanDownloadsTaskFunc(param,fromhc2toself,fromjsonarchives2self,fromjsonarc
     nscanned = Cache._loadDir(None,downloadsdir,
                               jsonarchivesbypath,
                               archivesbypath,pubarchivesbypath,
-                              NoFolders(),
+                              #NoFolders,
+                              folders,
                               tasks.LambdaReplacement(_notALambda0,
                                                       (jsonarchives,jsonarchivesbypath,jsonarchiveentries,
-                                                       tmppathbase,nmodified)
+                                                       folders.tmp,nmodified)
                                                      ),
                               None
                              )                             
@@ -451,7 +454,7 @@ def _ownScanMo22SelfTaskFunc(cache,parallel,scannedfiles,out):
         parallel.addLateOwnTask(owntask)
 
 class Cache:
-    def __init__(self,allarchivenames,folders,dbgfolder):
+    def __init__(self,folders,dbgfolder):
         self.folders = folders
         
         self.archives = {}
@@ -495,12 +498,12 @@ class Cache:
                                         None,['jsonarchiveentries'])
                         
             ownfiltertask = tasks.Task('filteraes',
-                                        lambda _,fromloadvfs,_2,_3: _ownFilterTaskFunc(self,parallel,allarchivenames,fromloadvfs),
+                                        lambda _,fromloadvfs,_2,_3: _ownFilterTaskFunc(self,parallel,self.folders,fromloadvfs),
                                         None,['loadvfs','loadhc','ownjsonarchives2self'])
             for i in range(len(self.folders.downloads)):
                 taskname = 'scandls.'+str(i)
                 scandlstask = tasks.Task(taskname,_scanDownloadsTaskFunc,
-                                     (self.folders.downloads[i],self.folders.tmp),
+                                     (self.folders,self.folders.downloads[i]),
                                      ['ownhc2self','ownjsonarchives2self','ownjsonarchiveentries2self'])
                 owntaskname = 'ownscandls2self.'+str(i)
                 owntaskscansdl2self = tasks.Task(owntaskname,
@@ -587,9 +590,9 @@ class Cache:
                         dbgWait()
                     # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
                     if wjdb.compareTimestampWithWj(tstamp,tstamp2)!=0:
-                        _diffFound(ldout,fpath,tstamp,addfi,True)
+                        _diffFound(folders,ldout,fpath,tstamp,addfi,True)
                 else:
-                    _diffFound(ldout,fpath,tstamp,addfi,False)
+                    _diffFound(folders,ldout,fpath,tstamp,addfi,False)
             elif stat.S_ISDIR(fmode):
                 newdir=fpath+'\\'
                 included = folders.isMo2ExactDirIncluded(newdir)

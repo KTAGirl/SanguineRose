@@ -19,7 +19,6 @@ def _openCache(jsonconfigname,config,mastermodlist,ignore,dbgdumpwjdb=None):
     ownmods=config['ownmods']
     
     allarchivenames = []
-    todl = {}
     for mod in mastermodlist.allEnabled():
         if mod in ownmods:
             continue
@@ -28,8 +27,7 @@ def _openCache(jsonconfigname,config,mastermodlist,ignore,dbgdumpwjdb=None):
             installfile = installfile.strip('/').strip('\\') #an odd / in the beginning of meta-provided path
             #print(installfile)
             allarchivenames.append(Folders.normalizeFileName(installfile))
-        if manualurl:
-            addToDictOfLists(todl,manualurl,prompt)
+    folders.addArchiveNames(allarchivenames)
 
     mo2exclude = [folders.mo2+'downloads\\', # even if downloadsdirs are different
                   folders.mo2+'mods\\']
@@ -45,5 +43,5 @@ def _openCache(jsonconfigname,config,mastermodlist,ignore,dbgdumpwjdb=None):
         mo2reinclude.append(folders.mo2+'mods\\'+mod+'\\')
         #print('reincluded:'+mod)
     folders.setExclusions(mo2exclude,mo2reinclude)
-    filecache = cache.Cache(allarchivenames,folders,dbgdumpwjdb)
-    return todl,allarchivenames,filecache
+    filecache = cache.Cache(folders,dbgdumpwjdb)
+    return filecache
