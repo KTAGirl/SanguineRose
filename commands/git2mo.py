@@ -4,16 +4,18 @@ from mo2git.common import *
 import mo2git.cache as cache
 from mo2git.commands.cmdcommon  import _openCache,_csAndMasterModList
 
-def _git2mo(config):
-    mo2,compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _mo2AndCSAndMasterModList(config)
-    todl,allarchivenames,filecache = _openCache(config,mastermodlist)
+def _git2mo(jsonconfigfname,config):
+    compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)
+    ignore=compiler_settings['Ignore']
+    todl,allarchivenames,filecache = _openCache(jsonconfigfname,config,mastermodlist,ignore)
     print('Cache loaded')
-    srcgithub = config['github']
-    masterjsonfname = srcgithub + 'master.json'
-    with open(masterjsonfname, 'rt',encoding="utf-8") as rfile:
-        masterjson = json.load(rfile)
     
-    mo2 = normalizeDirPath(mo2).lower()
+    srcgithub = filecache.folders.github
+    masterjsonfname = srcgithub + 'master.json'
+    with open(masterjsonfname, 'rt',encoding='utf-8') as rf:
+        masterjson = json.load(rf)
+    
+    mo2 = filecache.folders.mo2
     #print(mo2)
     masterfiles = masterjson['files']
     nnotfound = 0
@@ -35,7 +37,7 @@ def _git2mo(config):
                 print('WARNING: master.json hash '+str(fentry['hash'])+' != cache hash '+str(incachearentry.file_hash)
                        +' for '+fname)
                 nmodified += 1
-    print('not found (WARNINGS)='+str(nnotfound)+' modified='+str(nmodified))
+    info('not found (WARNINGS)='+str(nnotfound)+' modified='+str(nmodified))
     
     nmodified2 = 0
     nmissing = 0

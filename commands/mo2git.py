@@ -88,7 +88,7 @@ def _mo2git(jsonconfigfname,config):
 
     ownmods=config['ownmods']
     
-    targetgithub = filecache.folders.targetgithub
+    targetgithub = filecache.folders.github
     targetdir = 'mo2\\'
     stats = {}
     
