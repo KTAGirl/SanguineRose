@@ -6,7 +6,8 @@
 - mo.genprofiles command-line param
 - cache: handling updates to wj (those duplicating or invalidating json)
   
-### PERFORMANCE:
+### PERFORMANCE/OPTIMIZATIONS:
+- master.json size optimization: text-based "compression" (string substitution; problem: keeping strings and string ids stable for github) 
 - hc -> SharedReturn
 - masterjson -> under _microCache()
 - reading masterjson -> Tasks
