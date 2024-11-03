@@ -103,7 +103,7 @@ def _aEntries(paths,hf,root_archive_hash):
     
 def vfsFile():
     home_dir = os.path.expanduser("~")
-    return home_dir+'/AppData/Local/Wabbajack/GlobalVFSCache5.sqlite'
+    return home_dir+'\\AppData\\Local\\Wabbajack\\GlobalVFSCache5.sqlite'
 
 def loadVFS(dbgfile=None):
     con = sqlite3.connect(vfsFile())
@@ -140,7 +140,7 @@ def _wjTimestampToPythonTimestamp(wjftime):
 
 def hcFile():
     home_dir = os.path.expanduser("~")
-    return home_dir+'/AppData/Local/Wabbajack/GlobalHashCache2.sqlite'
+    return home_dir+'\\AppData\\Local\\Wabbajack\\GlobalHashCache2.sqlite'
 
 def loadHC(dirs):
     print(dirs)

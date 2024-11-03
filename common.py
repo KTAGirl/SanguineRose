@@ -9,6 +9,19 @@ DEBUG = True
     
 def dbgWait():
     wait = input("Press Enter to continue.")
+    
+def dbgFirst(data):
+    if isinstance(data,list):
+        print(len(data))
+        return data[0]
+    elif isinstance(data,dict):
+        print(len(data))
+        it = iter(data)
+        key = next(it)
+        print(key)
+        return data[key]
+    else:
+        return data
 
 _logger = logging.getLogger('mo2git')
 def warn(msg):

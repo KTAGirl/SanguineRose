@@ -171,14 +171,21 @@ def _microCache(cachedir,cachedata,prefix,origfile,calc,params=None):
         readparams = JsonEncoder().encode(cachedata.get(prefix+'.params'))
         jparams = JsonEncoder().encode(params)
         sameparams = (readparams == jparams)
+        #print(readparams)
+        #print(jparams)
+        #print(sameparams)
     else:
         sameparams = True
-    #print(params)
-    #print(readparams)
+
+    #print(readpath)
+    #print(origfile)
+    #print(readpath==origfile)
     if readpath == origfile and sameparams:
         tstamp = os.path.getmtime(origfile)
+        #print(tstamp)
+        #print(readtstamp)
         if tstamp == readtstamp:
-            print('_microCache(): Yahoo! Can read cache for '+prefix)
+            info('_microCache(): Yahoo! Can use cache for '+prefix)
             with open(cachedir+prefix+'.pickle','rb') as rf:
                 return (pickle.load(rf),{})
 
@@ -195,35 +202,7 @@ def _microCache(cachedir,cachedata,prefix,origfile,calc,params=None):
 
 ############# Parallelizable Tasks
 
-class _LoadDirOut:
-    def __init__(self):
-        self.jsonfilesbypath = {}
-        self.scannedfiles = {}
-        self.requested = []
-        
-def _loadVFS00(dbgfile):
-    unfilteredarchiveentries = []
-    for ae in wjdb.loadVFS(dbgfile):
-        unfilteredarchiveentries.append(ae)    
-    return unfilteredarchiveentries
-
-def _loadVFS0(cachedir,cachedata,dbgfile):
-    (unfilteredarchiveentries,cachedataoverwrites) = _microCache(cachedir,cachedata,'wjdb.vfsfile',wjdb.vfsFile(),
-                                                                 lambda _: _loadVFS00(dbgfile))
-
-    shared = tasks.SharedReturn(unfilteredarchiveentries)
-    return (tasks.makeSharedReturnParam(shared),cachedataoverwrites)
-
-def _loadVFS(cachedir,cachedata,dbgfolder):
-    if dbgfolder:
-        with open(dbgfolder+'loadvfs.txt','wt',encoding='utf-8') as dbgfile:
-            return _loadVFS0(cachedir,cachedata,dbgfile)
-    else:
-        return _loadVFS0(cachedir,cachedata,None)
-
-def _loadVFSTaskFunc(param):
-    (cachedir,cachedata,dbgfolder) = param
-    return _loadVFS(cachedir,cachedata,dbgfolder)
+### Loading HashCache
 
 def _loadHC0(params):
     (folders,) = params
@@ -255,11 +234,13 @@ def _ownHC2SelfTaskFunc(cache,parallel,out):
     assert(len(cache.archives)==len(cache.archivesbypath)) 
     print(str(len(cache.archives))+' archives ('+str(ndupdl)+' duplicates), '
          +str(len(cache.filesbypath))+' files ('+str(nexf)+' excluded, '+str(ndupf)+' duplicates)')
-         
+    
     cache.publishedarchives = tasks.SharedPublication(parallel,cache.archives)
     cache.publishedarchivesbypath = tasks.SharedPublication(parallel,cache.archivesbypath)
     cache.publishedfilesbypath = tasks.SharedPublication(parallel,cache.filesbypath)
     return (tasks.makeSharedPublicationParam(cache.publishedarchivesbypath),tasks.makeSharedPublicationParam(cache.publishedfilesbypath))
+
+### Loading JSON Caches
 
 def _loadJsonArchivesTaskFunc(param):
     (cachedir,) = param
@@ -315,7 +296,44 @@ def _ownJsonArchiveEntries2SelfTaskFunc(cache,out):
     cache.jsonarchiveentries = jsonarchiveentries
     return (cache.jsonarchiveentries,)
     
-# filtering and scanning
+### Loading VFS and filtering
+
+class _LoadDirOut:
+    def __init__(self):
+        self.jsonfilesbypath = {}
+        self.scannedfiles = {}
+        self.requested = []
+        
+def _loadVFS00(dbgfile):
+    unfilteredarchiveentries = []
+    for ae in wjdb.loadVFS(dbgfile):
+        unfilteredarchiveentries.append(ae)    
+    return unfilteredarchiveentries
+
+def _loadVFS0(cachedir,cachedata,dbgfile):
+    (unfilteredarchiveentries,cachedataoverwrites) = _microCache(cachedir,cachedata,'wjdb.vfsfile',wjdb.vfsFile(),
+                                                                 lambda _: _loadVFS00(dbgfile))
+
+    shared = tasks.SharedReturn(unfilteredarchiveentries)
+    return (tasks.makeSharedReturnParam(shared),cachedataoverwrites)
+
+def _loadVFS(cachedir,cachedata,dbgfolder):
+    if dbgfolder:
+        with open(dbgfolder+'loadvfs.txt','wt',encoding='utf-8') as dbgfile:
+            return _loadVFS0(cachedir,cachedata,dbgfile)
+    else:
+        return _loadVFS0(cachedir,cachedata,None)
+
+def _loadVFSTaskFunc(param):
+    (cachedir,cachedata,dbgfolder) = param
+    return _loadVFS(cachedir,cachedata,dbgfolder)
+
+def _findArByName(dict1,dict2,arname):
+    arname1 = '\\'+arname
+    for ar in _allValuesInBothDicts(dict1,dict2):
+        if ar.file_path.endswith(arname1):
+            return ar
+    return None
 
 def _ownFilterTaskFunc(cache,parallel,allarchivenames,fromloadvfs):
     (sharedparam,cachedataoverwrites) = fromloadvfs
@@ -323,17 +341,18 @@ def _ownFilterTaskFunc(cache,parallel,allarchivenames,fromloadvfs):
     unfilteredarchiveentries = tasks.receivedSharedReturn(parallel,sharedparam)
 
     allarchivehashes = {}
+    #print(dbgFirst(cache.archivesbypath).__dict__)
     for arname in allarchivenames:
-        ar = _getFromOneOfDicts(cache.archivesbypath,cache.jsonarchivesbypath,arname.lower())
+        assert(arname.lower()==arname)
+        print(arname)
+        #ar = _getFromOneOfDicts(cache.jsonarchivesbypath,cache.archivesbypath,arname)
+        ar = _findArByName(cache.jsonarchivesbypath,cache.archivesbypath,arname)
         if ar:
             allarchivehashes[ar.file_hash] = 1
         else:
-            print('WARNING: no archive hash found for '+arname)
+            warn('no archive hash found for '+arname)
     
     cache.archiveentries = {}
-#       for ae in unfilteredarchiveentries.val:
-#           if allarchivehashes.get(ae.archive_hash) is not None:
-#               cache.archiveentries[ae.file_hash] = ae
     for ae in unfilteredarchiveentries:
         ahash = ae.archive_hash
         assert(ahash>=0)
@@ -342,7 +361,9 @@ def _ownFilterTaskFunc(cache,parallel,allarchivenames,fromloadvfs):
             #dbgWait()
             cache.archiveentries[ae.file_hash] = ae
     cache.publishedarchiveentries = tasks.SharedPublication(parallel,cache.archiveentries)
-    print('Filtered: '+str(len(cache.archiveentries))+' out of '+str(len(unfilteredarchiveentries)))
+    print('Filtering VFS: '+str(len(cache.archiveentries))+'survived out of '+str(len(unfilteredarchiveentries)))
+    
+### Scanning
 
 def _notALambda0(capture,param):
   (_,ar,updatednotadded) = param
@@ -535,7 +556,7 @@ class Cache:
         
         #Writing CacheData
         with open(self.folders.cache+'cache.json','wt',encoding='utf-8') as wf:
-            wf.write(JsonEncoder().encode(self.cachedata))
+            wf.write(JsonEncoder(indent=4).encode(self.cachedata))
         
         timer.printAndReset('caches')
         
