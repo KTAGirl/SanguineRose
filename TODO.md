@@ -5,7 +5,9 @@
 - better and more systemic logging
 - fix ESXS stats
 - mo.genprofiles command-line param
+- invalidate caches in case of any changes in Folders
 - cache: handling updates to wj (those duplicating or invalidating json)
+- cache: exclusive json and non-json (removing from non-json when adding json; remove search when looking for, if any)
   
 ### PERFORMANCE/OPTIMIZATIONS:
 - master.json size optimization: text-based "compression" (hierarchical representation) 
