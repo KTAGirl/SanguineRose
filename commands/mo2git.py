@@ -125,15 +125,8 @@ def _mo2git(jsonconfigfname,config):
 
     files = []
     nn = 0
-    for modname in allmods:
-        print("mod="+modname)
-        for dirpath, dirs, filenames in os.walk(filecache.folders.mo2+'\\mods\\'+modname):
-            for filename in filenames:
-                # print("file="+filename)
-                nn += 1
-                fpath = Folders.normalizeFilePath(os.path.join(dirpath,filename))
-                assert(not os.path.islink(fpath))
-                files.append(fpath)
+    for fi in filecache.allFiles():
+        files.append(fi.file_path)
 
     files.sort()
 
@@ -192,7 +185,6 @@ def _mo2git(jsonconfigfname,config):
                 # dbgWait()
                 continue
             
-            # archiveEntry, archive = wjdb.findFile(filesbypath,archives,archiveEntries,fpath0)
             archiveEntry, archive = filecache.findFile(fpath0)
             if archiveEntry == None:
                 processed = False
