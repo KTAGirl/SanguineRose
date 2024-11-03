@@ -177,8 +177,8 @@ def _mo2git(jsonconfigfname,config):
                 # dbgWait()
                 continue
             
-            archiveEntry, archive = filecache.findFile(fpath0)
-            if archiveEntry == None:
+            ae,archive = filecache.findFile(fpath0)
+            if ae is None:
                 processed = False
                 m = re.search('^mods\\\\(.*)\\\\meta.ini$',fpath)
                 if m:
@@ -194,25 +194,29 @@ def _mo2git(jsonconfigfname,config):
                         hash = cache.wjHash(srcpath)
                         processed = True
                         # dbgWait()
-                        wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "hash":'+str(hash)+', "source":'+cache.escapeJSON(targetpath0)+' }')
+                        wfile.write('    { "path":'+cache.escapeJSON(fpath)+', "hash":'+str(hash)+', "source":'+cache.escapeJSON(targetpath0)+' }')
                                 
                 if not processed:
-                    wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" }')
+                    wfile.write('    { "path":'+cache.escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" }')
                     nwarn += 1
             else:
-                wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "hash":'+str(archiveEntry.file_hash)+', "size":'+str(archiveEntry.file_size)+', "archive_hash":'+str(archiveEntry.archive_hash)+', "in_archive_path":[')
-                np = 0
-                for path in archiveEntry.intra_path:
-                    if np:
-                        wfile.write(',')
-                    wfile.write(cache.escapeJSON(path))
-                    np += 1
-                wfile.write(']')
-                
-                if not allinstallfiles.get(archiveEntry.archive_hash):
-                    wfile.write(', "warning":"archive found is NOT one of those listed"')
-                    nwarn += 1
-                wfile.write(' }')
+                if archive is None:
+                    assert(ae.file_size==0)
+                    wfile.write('    { "path":'+cache.escapeJSON(fpath)+', "size":0 }')
+                else:
+                    wfile.write('    { "path":'+cache.escapeJSON(fpath)+', "hash":'+str(ae.file_hash)+', "size":'+str(ae.file_size)+', "archive_hash":'+str(ae.archive_hash)+', "in_archive_path":[')
+                    np = 0
+                    for path in ae.intra_path:
+                        if np:
+                            wfile.write(',')
+                        wfile.write(cache.escapeJSON(path))
+                        np += 1
+                    wfile.write(']')
+                    
+                    if not allinstallfiles.get(ae.archive_hash):
+                        wfile.write(', "warning":"archive found is NOT one of those listed"')
+                        nwarn += 1
+                    wfile.write(' }')
 
         wfile.write('\n]}\n')
                 

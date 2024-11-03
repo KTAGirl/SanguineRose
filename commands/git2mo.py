@@ -28,12 +28,12 @@ def _git2mo(jsonconfigfname,config):
         #print(fe)
         #print(fname)
         #assert(os.path.isfile(fname))
-        incachearentry,incachear = filecache.findFile(fname)
+        incacheae,incachear = filecache.findFile(fname)
         if incachear is None:
             nnotfound += 1
         else:
             #print(fentry)
-            if incachearentry.file_hash != fentry['hash']:
+            if incacheae.file_hash != fentry['hash']:
                 print('WARNING: master.json hash '+str(fentry['hash'])+' != cache hash '+str(incachearentry.file_hash)
                        +' for '+fname)
                 nmodified += 1
