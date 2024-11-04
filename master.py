@@ -6,6 +6,11 @@ import urllib
 from mo2git.common import *
 from mo2git.files import wjHash
 
+# we have reasons to have our own Json writer:
+#  1. major. we need very specific gitdiff-friendly format
+#  2. minor. we want to keep these files as small as feasible (while keeping it more or less readable), 
+#            hence JSON5 quote-less names, and path and elements "compression". It was seen to save 3.8x, for a 50M file it is quite a bit
+
 def _toJsonHash(h):
     assert(isinstance(h,int))
     assert(h>=0)
@@ -29,7 +34,7 @@ def _fromJsonHash(s):
     
 def _toJsonPath(prevpath,path):
     assert(path.find('/')<0)
-    assert(path.find('>')<0)
+    #assert(path.find('>')<0)
     path = path.replace('\\','/')
     spl = path.split('/')
     #print(prevpath.val)
