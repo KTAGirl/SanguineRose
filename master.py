@@ -4,7 +4,7 @@ import shutil
 import urllib
 
 from mo2git.common import *
-from mo2git.files import wjHash
+from mo2git.files import wjHash,File
 
 # we have reasons to have our own Json writer:
 #  1. major. we need very specific gitdiff-friendly format
@@ -61,6 +61,21 @@ def _toJsonPath(prevpath,path):
     prevpath.val=spl
     assert('"' not in path[1:])
     return path+'"'
+    
+def _fromJsonPath(prevpath,path):
+    p0 = path[0]
+    if p0 >= '0' and p0 <= '9':
+        nmatch = int(p0)
+    elif p0 >= 'A' and p0 <= 'Z':
+        nmatch = ord(p0) - 65+10
+    out = ''
+    for i in range(nmatch):
+        if i>0:
+            out += '/'
+        out += prevpath[i]
+    out += path[1:]
+    prevpath = path.split('/')
+    return out
     
 def _appendJsonS(prevs,s):
     if prevs.val==s:
@@ -204,3 +219,104 @@ def writeMaster(wfile,filecache,nesx,nwarn,allinstallfiles,ownmods,files):
                 #nlasti = 0
 
     wfile.write('\n]}\n')
+    
+def readMaster(rfile):
+    files = []
+    patphsi=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",s:([0-9]*),i:\["([^"]*)"\]}(.)?')
+    patphsai=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",s:([0-9]*),a:"([^"]*)",i:\["([^"]*)"\]}(.)?')
+    patphai=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",a:"([^"]*)",i:\["([^"]*)"\]}(.)?')
+    patphsii=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",s:([0-9]*),i:\["([^"]*)","([^"]*)"\]}(.)?')
+    patphsaii=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",s:([0-9]*),a:"([^"]*)",i:\["([^"]*)","([^"]*)"\]}(.)?')
+    patphi=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",i:\["([^"]*)"\]}(.)?')
+    patphii=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",i:\["([^"]*)","([^"]*)"\]}(.)?')
+    patphf=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",f:"([^"]*)"}(.)?')
+    patps0=re.compile(r'^{p:"([^"]*)",s:0}(.)?')
+    patpw=re.compile(r'^{p:"([^"]*)",warning:"([^"]*)"}(.)?')
+    patnh=re.compile(r'^{n:"([^"]*)",h:"([^"]*)"}(.)?')
+    patcomment=re.compile(r'^\s*//')
+    patspecial1 = re.compile(r'^{\s*archives\s*:\s*\[\s*//')
+    patspecial2 = re.compile(r'^\s*\]\s*,\s*files\s*:\s\[\s*//')
+    patspecial3 = re.compile(r'^\s*]\s*}')
+    for line in rfile:
+        #ordered in rough order of probability to save time
+        m = patphsi.match(line)
+        if m:
+            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
+            #print(f.__dict__)
+            files.append(f)
+            continue
+        m = patphsai.match(line)
+        if m:
+            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
+            #print(f.__dict__)
+            files.append(f)
+            continue
+        m = patphi.match(line)
+        if m:
+            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
+            #print(f.__dict__)
+            files.append(f)
+            continue
+        m = patphai.match(line)
+        if m:
+            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
+            #print(f.__dict__)
+            files.append(f)
+            continue
+        m = patphsii.match(line)
+        if m:
+            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
+            #print(f.__dict__)
+            files.append(f)
+            continue
+        m = patphii.match(line)
+        if m:
+            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
+            #print(f.__dict__)
+            files.append(f)
+            continue
+        m = patphsaii.match(line)
+        if m:
+            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
+            #print(f.__dict__)
+            files.append(f)
+            continue
+        m = patphf.match(line)
+        if m:
+            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
+            #print(f.__dict__)
+            files.append(f)
+            continue
+        m = patps0.match(line)
+        if m:
+            f=File(None,None,m.group(1))
+            #print(f.__dict__)
+            files.append(f)
+            continue
+        m = patpw.match(line)
+        if m:
+            f=File(None,None,m.group(1))
+            #print(f.__dict__)
+            files.append(f)
+            continue
+        m = patnh.match(line)
+        if m:
+            #f=File(None,None,m.group(1))
+            #print(f.__dict__)
+            #files.append(f)
+            continue
+        m = patcomment.match(line)
+        if m:
+            continue
+        m = patspecial1.match(line)
+        if m:
+            continue
+        m = patspecial2.match(line)
+        if m:
+            continue
+        m = patspecial3.match(line)
+        if m:
+            continue
+
+        print(line)
+        assert(False)

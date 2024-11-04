@@ -133,12 +133,10 @@ def _mo2git(jsonconfigfname,config):
     stats['ESXS'] = nesx.val
 
     #validating json
-    '''
     if DEBUG:
-        import json5 
         with open(targetgithub+'master.json', 'rt',encoding='utf-8') as rf:
-            json5.load(rf)
-    '''
+            master.readMaster(rf)
+            dbgWait()
     
     mo2 = filecache.folders.mo2
     # copying own mods
