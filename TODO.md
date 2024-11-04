@@ -5,7 +5,7 @@
 - better and more systemic logging
 - fix ESXS stats
 - mo.genprofiles command-line param
-- invalidate caches in case of any changes in Folders (better: filtering caches in-memory while keeping them on disk so invalidation is not necessary)
+- remove PROJECT.py (in project there should be config only, and .bat files)
 - cache: handling updates to wj (those duplicating or invalidating json)
 - cache: exclusive json and non-json (removing from non-json when adding json; remove search when looking for, if any)
   
