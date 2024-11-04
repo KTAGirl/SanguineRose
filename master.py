@@ -141,8 +141,8 @@ def writeMaster(wfile,filecache,nesx,nwarn,allinstallfiles,ownmods,files):
                 mod = m.group(1)
                 if mod.find('\\') < 0:
                     # print(mod)
-                    targetpath0 = targetdir + fpath
-                    targetpath = filecache.folders.github + targetpath0
+                    targetpath0 = fpath
+                    targetpath = filecache.folders.github + targetdir + targetpath0
                     # print(realpath)
                     makeDirsForFile(targetpath)
                     srcpath = mo2 + fpath
@@ -150,7 +150,7 @@ def writeMaster(wfile,filecache,nesx,nwarn,allinstallfiles,ownmods,files):
                     hash = wjHash(srcpath)
                     processed = True
                     # dbgWait()
-                    wfile.write('{p:'+_toJsonPath(lastp,fpath)+',h:"'+_toJsonHash(hash)+'",f:'+escapeJSON(targetpath0)+'}')
+                    wfile.write('{p:'+_toJsonPath(lastp,fpath)+',h:"'+_toJsonHash(hash)+'",f:'+_toJsonPath(lastf,targetpath0)+'}')
                     #lastp.val = []
                     lasts.val = None
                     lasta.val = None
