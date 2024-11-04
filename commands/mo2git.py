@@ -9,6 +9,7 @@ from mo2git.common import *
 from mo2git.commands.cmdcommon import _openCache,_csAndMasterModList
 import mo2git.cache as cache
 from mo2git.folders import Folders
+import mo2git.master as master
 
 '''
 def mo2AndMasterModList(config):
@@ -116,7 +117,7 @@ def _mo2git(jsonconfigfname,config):
     files = [fi.file_path for fi in filecache.allFiles()]
     files.sort()
 
-    nwarn = 0
+    nwarn = Val(0)
 
     # pre-cleanup
     modsdir = targetgithub+'mods\\'
@@ -124,104 +125,22 @@ def _mo2git(jsonconfigfname,config):
         shutil.rmtree(modsdir)
     # dbgWait()
 
-    nesx = 0
+    nesx = Val(0)
     with open(targetgithub+'master.json','wt',encoding='utf-8') as wfile:
-        wfile.write('{ "archives": [\n')
-        na = 0
-        aif = []
-        for hash, path in allinstallfiles.items():
-            fname = os.path.split(path)[1]
-            aif.append((fname,hash))
-        aif.sort(key=lambda f: f[0])
-        for f in aif:
-            if na:
-                wfile.write(",\n")
-            na += 1
-            wfile.write('    { "name": "'+str(f[0])+'", "hash": '+str(f[1])+' }')
-        wfile.write('\n], "files": [\n')
-        nf = 0
-        mo2 = filecache.folders.mo2
-        mo2len = len(mo2)
-        for fpath0 in files:
-            assert(fpath0.lower() == fpath0)
-            assert(fpath0.startswith(mo2))
-            fpath = fpath0[mo2len:]
-
-            if nf:
-                wfile.write(",\n")
-            nf += 1
-            
-            if isEsx(fpath):
-                nesx += 1
-            
-            isown = False
-            # print(fpath)
-            for own in ownmods:
-                ownpath = 'mods\\'+own+'\\'
-                # print(ownpath)
-                # print(fpath)
-                if fpath.startswith(ownpath):
-                    isown = True
-                    break
-            if isown:
-                targetpath0 = targetdir + fpath
-                fpath1 = mo2+fpath
-                hash = cache.wjHash(fpath1)
-                wfile.write( '    { "path":'+cache.escapeJSON(fpath)+', "hash":'+str(hash)+', "source":'+cache.escapeJSON(targetpath0)+' }')
-                # dbgWait()
-                continue
-            
-            ae,archive = filecache.findFile(fpath0)
-            if ae is None:
-                processed = False
-                m = re.search('^mods\\\\(.*)\\\\meta.ini$',fpath)
-                if m:
-                    mod = m.group(1)
-                    if mod.find('\\') < 0:
-                        # print(mod)
-                        targetpath0 = targetdir + fpath
-                        targetpath = targetgithub + targetpath0
-                        # print(realpath)
-                        makeDirsForFile(targetpath)
-                        srcpath = mo2 + fpath
-                        shutil.copyfile(srcpath,targetpath)
-                        hash = cache.wjHash(srcpath)
-                        processed = True
-                        # dbgWait()
-                        wfile.write('    { "path":'+cache.escapeJSON(fpath)+', "hash":'+str(hash)+', "source":'+cache.escapeJSON(targetpath0)+' }')
-                                
-                if not processed:
-                    wfile.write('    { "path":'+cache.escapeJSON(fpath)+', "warning":"NOT FOUND IN ARCHIVES" }')
-                    nwarn += 1
-            else:
-                if archive is None:
-                    assert(ae.file_size==0)
-                    wfile.write('    { "path":'+cache.escapeJSON(fpath)+', "size":0 }')
-                else:
-                    wfile.write('    { "path":'+cache.escapeJSON(fpath)+', "hash":'+str(ae.file_hash)+', "size":'+str(ae.file_size)+', "archive_hash":'+str(ae.archive_hash)+', "in_archive_path":[')
-                    np = 0
-                    for path in ae.intra_path:
-                        if np:
-                            wfile.write(',')
-                        wfile.write(cache.escapeJSON(path))
-                        np += 1
-                    wfile.write(']')
-                    
-                    if not allinstallfiles.get(ae.archive_hash):
-                        wfile.write(', "warning":"archive found is NOT one of those listed"')
-                        nwarn += 1
-                    wfile.write(' }')
-
-        wfile.write('\n]}\n')
-                
-    print("nn="+str(len(files))+" nwarn="+str(nwarn))
-    stats['ESXS'] = nesx
+        master.writeMaster(wfile,filecache,nesx,nwarn,allinstallfiles,ownmods,files)
+        
+    print("nn="+str(len(files))+" nwarn="+str(nwarn.val))
+    stats['ESXS'] = nesx.val
 
     #validating json
+    '''
     if DEBUG:
+        import json5 
         with open(targetgithub+'master.json', 'rt',encoding='utf-8') as rf:
-            json.load(rf)
-
+            json5.load(rf)
+    '''
+    
+    mo2 = filecache.folders.mo2
     # copying own mods
     for mod in ownmods:
         shutil.copytree(mo2+'mods\\'+mod, targetgithub + targetdir+'mods\\'+mod, dirs_exist_ok=True)
