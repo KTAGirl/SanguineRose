@@ -4,7 +4,7 @@ import shutil
 import urllib
 
 from mo2git.common import *
-from mo2git.files import wjHash,File
+from mo2git.files import wjHash
 
 # we have reasons to have our own Json writer:
 #  1. major. we need very specific gitdiff-friendly format
@@ -76,12 +76,15 @@ def _decompressJsonPath(prevpath,path):
     elif p0 >= 'A' and p0 <= 'Z':
         nmatch = ord(p0) - 65+10
     out = ''
+    
+    #print(prevpath)
+    #print(nmatch)
     for i in range(nmatch):
         if i>0:
             out += '/'
-        out += prevpath[i]
-    out += path[1:]
-    prevpath = path.split('/')
+        out += prevpath.val[i]
+    out += '/' + path[1:]
+    prevpath.val = out.split('/')
     return out
     
 def _appendJsonS(prevs,s):
@@ -204,7 +207,7 @@ class Master:
         lasts = Val(None)
         lasta = Val(None)
         lastf = Val([])
-        lasti = [Val(None) for i in range(8)] #8 levels of nesting should be enough for quite a while
+        lasti = [Val(None) for i in range(2)] #increasing it here will need adding more patterns to constructFromFile()
         nlasti = 0
         for fi in self.files:
             if nf:
@@ -215,7 +218,10 @@ class Master:
             if fi.hash is not None:
                 wfile.write(',h:"'+_toJsonHash(fi.hash)+'"')
             else:
-                pass #there is no lasth
+                #there is no lasth, but it is a special record (size==0)
+                #print(fi.__dict__)
+                assert(fi.warning is not None or fi.file_size==0)
+                
             if fi.file_size is not None:
                 wfile.write(_appendJsonS(lasts,fi.file_size))
             else:
@@ -247,111 +253,179 @@ class Master:
             wfile.write('}')
 
         wfile.write('\n]}\n')
-    
-def readMaster(rfile):
-    files = []
-    patphsi=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",s:([0-9]*),i:\["([^"]*)"\]}(.)?')
-    patphsai=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",s:([0-9]*),a:"([^"]*)",i:\["([^"]*)"\]}(.)?')
-    patphai=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",a:"([^"]*)",i:\["([^"]*)"\]}(.)?')
-    patphsii=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",s:([0-9]*),i:\["([^"]*)","([^"]*)"\]}(.)?')
-    patphsaii=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",s:([0-9]*),a:"([^"]*)",i:\["([^"]*)","([^"]*)"\]}(.)?')
-    patphi=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",i:\["([^"]*)"\]}(.)?')
-    patphii=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",i:\["([^"]*)","([^"]*)"\]}(.)?')
-    patphf=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",f:"([^"]*)"}(.)?')
-    patps0=re.compile(r'^{p:"([^"]*)",s:0}(.)?')
-    patpw=re.compile(r'^{p:"([^"]*)",warning:"([^"]*)"}(.)?')
-    patp=re.compile(r'^{p:"([^"]*)"}(.)?')
-    patnh=re.compile(r'^{n:"([^"]*)",h:"([^"]*)"}(.)?')
-    patcomment=re.compile(r'^\s*//')
-    patspecial1 = re.compile(r'^{\s*archives\s*:\s*\[\s*//')
-    patspecial2 = re.compile(r'^\s*\]\s*,\s*files\s*:\s\[\s*//')
-    patspecial3 = re.compile(r'^\s*]\s*}')
-    for line in rfile:
-        #ordered in rough order of probability to save time
-        m = patphsi.match(line)
-        if m:
-            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
-            #print(f.__dict__)
-            files.append(f)
-            continue
-        m = patphsai.match(line)
-        if m:
-            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
-            #print(f.__dict__)
-            files.append(f)
-            continue
-        m = patphi.match(line)
-        if m:
-            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
-            #print(f.__dict__)
-            files.append(f)
-            continue
-        m = patphai.match(line)
-        if m:
-            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
-            #print(f.__dict__)
-            files.append(f)
-            continue
-        m = patphsii.match(line)
-        if m:
-            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
-            #print(f.__dict__)
-            files.append(f)
-            continue
-        m = patphii.match(line)
-        if m:
-            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
-            #print(f.__dict__)
-            files.append(f)
-            continue
-        m = patphsaii.match(line)
-        if m:
-            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
-            #print(f.__dict__)
-            files.append(f)
-            continue
-        m = patphf.match(line)
-        if m:
-            f=File(_fromJsonHash(m.group(2)),None,m.group(1))
-            #print(f.__dict__)
-            files.append(f)
-            continue
-        m = patps0.match(line)
-        if m:
-            f=File(None,None,m.group(1))
-            #print(f.__dict__)
-            files.append(f)
-            continue
-        m = patp.match(line)
-        if m:
-            f=File(None,None,m.group(1))
-            #print(f.__dict__)
-            files.append(f)
-            continue
-        m = patpw.match(line)
-        if m:
-            f=File(None,None,m.group(1))
-            #print(f.__dict__)
-            files.append(f)
-            continue
-        m = patnh.match(line)
-        if m:
-            #f=File(None,None,m.group(1))
-            #print(f.__dict__)
-            #files.append(f)
-            continue
-        m = patcomment.match(line)
-        if m:
-            continue
-        m = patspecial1.match(line)
-        if m:
-            continue
-        m = patspecial2.match(line)
-        if m:
-            continue
-        m = patspecial3.match(line)
-        if m:
-            continue
+        
+    def constructFromFile(self,rfile):
+        self.archives = []
+        self.files = []
+        state = 0 #0 - before archives, 1 - within archives, 2 - within files, 3 - finished
 
-        print(line)
-        assert(False)
+        patphsi=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",s:([0-9]*),i:\["([^"]*)"\]}(.)?')
+        patphsai=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",s:([0-9]*),a:"([^"]*)",i:\["([^"]*)"\]}(.)?')
+        patphai=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",a:"([^"]*)",i:\["([^"]*)"\]}(.)?')
+        patphsii=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",s:([0-9]*),i:\["([^"]*)","([^"]*)"\]}(.)?')
+        patphsaii=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",s:([0-9]*),a:"([^"]*)",i:\["([^"]*)","([^"]*)"\]}(.)?')
+        patphi=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",i:\["([^"]*)"\]}(.)?')
+        patphii=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",i:\["([^"]*)","([^"]*)"\]}(.)?')
+        patphf=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",f:"([^"]*)"}(.)?')
+        patps0=re.compile(r'^{p:"([^"]*)",s:0}(.)?')
+        patpw=re.compile(r'^{p:"([^"]*)",warning:"([^"]*)"}(.)?')
+        patp=re.compile(r'^{p:"([^"]*)"}(.)?')
+        patnh=re.compile(r'^{n:"([^"]*)",h:"([^"]*)"}(.)?')
+        patcomment=re.compile(r'^\s*//')
+        patspecial1 = re.compile(r'^{\s*archives\s*:\s*\[\s*//')
+        patspecial2 = re.compile(r'^\s*\]\s*,\s*files\s*:\s\[\s*//')
+        patspecial3 = re.compile(r'^\s*]\s*}')
+
+        lastp = Val([])
+        lasts = Val(None)
+        lasta = Val(None)
+        lastf = Val([])
+        lasti = [Val(None) for i in range(2)]
+        nlasti = Val(0)
+        lastf = Val([])
+        for line in rfile:
+            #ordered in rough order of probability to save time
+            m = patphsi.match(line)
+            if m:
+                assert(state==2)
+                fi = _readPhsaii(m.group(1),m.group(2),m.group(3),None,m.group(4),None,lastp,lasts,lasta,nlasti,lasti)
+                self.files.append(fi)
+                lastf.val = []
+                continue
+            m = patphsai.match(line)
+            if m:
+                assert(state==2)
+                fi = _readPhsaii(m.group(1),m.group(2),m.group(3),m.group(4),m.group(5),None,lastp,lasts,lasta,nlasti,lasti)
+                self.files.append(fi)
+                lastf.val = []
+                continue
+            m = patphi.match(line)
+            if m:
+                assert(state==2)
+                fi = _readPhsaii(m.group(1),m.group(2),None,None,m.group(3),None,lastp,lasts,lasta,nlasti,lasti)
+                self.files.append(fi)
+                lastf.val = []
+                continue
+            m = patphai.match(line)
+            if m:
+                assert(state==2)
+                fi = _readPhsaii(m.group(1),m.group(2),None,m.group(3),m.group(4),None,lastp,lasts,lasta,nlasti,lasti)
+                self.files.append(fi)
+                lastf.val = []
+                continue
+            m = patphsii.match(line)
+            if m:
+                assert(state==2)
+                fi = _readPhsaii(m.group(1),m.group(2),m.group(3),None,m.group(4),m.group(5),lastp,lasts,lasta,nlasti,lasti)
+                self.files.append(fi)
+                lastf.val = []
+                continue
+            m = patphii.match(line)
+            if m:
+                assert(state==2)
+                fi = _readPhsaii(m.group(1),m.group(2),None,None,m.group(3),m.group(4),lastp,lasts,lasta,nlasti,lasti)
+                self.files.append(fi)
+                lastf.val = []
+                continue
+            m = patphsaii.match(line)
+            if m:
+                assert(state==2)
+                fi = _readPhsaii(m.group(1),m.group(2),m.group(3),m.group(4),m.group(5),m.group(6),lastp,lasts,lasta,nlasti,lasti)
+                self.files.append(fi)
+                lastf.val = []
+                continue
+            m = patphf.match(line)
+            if m:
+                assert(state==2)
+                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),_fromJsonHash(m.group(2)))
+                ff = _decompressJsonPath(lastf,m.group(3))
+                lasts.val = None
+                lasta.val = None
+                nlasti.val = 0
+                continue
+            m = patps0.match(line)
+            if m:
+                assert(state==2)
+                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),None)
+                ss = 0
+                fi.file_size = ss
+                lasts.val = ss
+                lasta.val = None
+                nlasti.val = 0
+                lastf.val = []
+                continue
+            m = patp.match(line)
+            if m:
+                assert(state==2)
+                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),None)
+                fi.file_size = lasts.val
+                lasta.val = None
+                nlasti.val = 0
+                lastf.val = []
+                continue
+            m = patpw.match(line)
+            if m:
+                assert(state==2)
+                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),None)
+                fi.warning = m.group(2)
+                lasts.val = None
+                lasta.val = None
+                nlasti.val = 0
+                lastf.val = []
+                continue
+            m = patnh.match(line)
+            if m:
+                continue
+            m = patcomment.match(line)
+            if m:
+                continue
+            m = patspecial1.match(line)
+            if m:
+                assert(state == 0)
+                state = 1
+                continue
+            m = patspecial2.match(line)
+            if m:
+                assert(state == 1)
+                state = 2
+                continue
+            m = patspecial3.match(line)
+            if m:
+                assert(state==2)
+                state = 3
+                continue
+
+            print(line)
+            assert(False)
+        
+        assert(state==3)
+    
+def _readPhsaii(p,h,s,a,i1,i2,lastp,lasts,lasta,nlasti,lasti):
+    fi=MasterFileItem(_decompressJsonPath(lastp,p),_fromJsonHash(h) if h is not None else None)
+    
+    if s is None:
+        fi.file_size = lasts.val
+    else:
+        ss = int(s)
+        fi.file_size = ss
+        lasts.val = ss
+    if a is None:
+        fi.archive_hash = lasta.val
+    else:
+        aa = _fromJsonHash(a)
+        fi.archive_hash = aa
+        lasta.val = aa
+    if i1 is not None:
+        if nlasti.val == 0:
+            lasti[0] = Val([])
+            nlasti.val = 1
+        fi.intra_path = [_decompressJsonPath(lasti[0],i1)]
+    if i2 is not None:
+        assert(i1 is not None)
+        assert(nlasti.val>0)
+        assert(len(fi.intra_path)==1)
+        if nlasti.val == 1:
+            lasti[1] = Val([])
+            nlasti.val = 2
+        fi.intra_path.append(_decompressJsonPath(lasti[1],i2))
+    return fi

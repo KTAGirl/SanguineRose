@@ -134,8 +134,9 @@ def _mo2git(jsonconfigfname,config):
 
     #validating json
     if DEBUG:
+        masterfile2 = master.Master()
         with open(targetgithub+'master.json', 'rt',encoding='utf-8') as rf:
-            master.readMaster(rf)
+            masterfile2.constructFromFile(rf)
             dbgWait()
     
     mo2 = filecache.folders.mo2
