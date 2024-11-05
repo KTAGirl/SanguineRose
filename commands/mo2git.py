@@ -114,9 +114,6 @@ def _mo2git(jsonconfigfname,config):
     #print(allinstallfiles)
     #dbgWait()
 
-    files = [fi.file_path for fi in filecache.allFiles()]
-    files.sort()
-
     nwarn = Val(0)
 
     # pre-cleanup
@@ -126,11 +123,14 @@ def _mo2git(jsonconfigfname,config):
     # dbgWait()
 
     nesx = Val(0)
-    with open(targetgithub+'master.json','wt',encoding='utf-8') as wfile:
-        master.writeMaster(wfile,filecache,nesx,nwarn,allinstallfiles,ownmods,files)
+    masterfile = master.Master()
+    masterfile.constructFromCache(nesx,nwarn,filecache,allinstallfiles,ownmods)
         
-    print("nn="+str(len(files))+" nwarn="+str(nwarn.val))
+    print("nn="+str(len(masterfile.files))+" nwarn="+str(nwarn.val))
     stats['ESXS'] = nesx.val
+
+    with open(targetgithub+'master.json','wt',encoding='utf-8') as wfile:
+        masterfile.write(wfile)
 
     #validating json
     if DEBUG:
