@@ -14,14 +14,14 @@ Currently, mo2git uses Wabbajack for hashing and creating end-user images. I pla
 
 ## A Word to Modders
 
-### No intent to rob you - and competing with robbers
-First of all.❗**mo2git and Wabbajack modlists are NOT intended to rob you from your fame, or your money!**❗**with WJ and mo2git modlists, users still need to get your mods wherever you want them to go (and pay for the mods if it is your choice).** ❗
+### We do not help to rob you
+First of all.❗**mo2git and Wabbajack modlists are NOT intended to rob you from your fame, or your money!**❗**With WJ and mo2git modlists, users still need to download your mods wherever you want them to go.** ❗While WJ does not allow paid mods, mo2git is completely neutral about it; as a piece of really free software, mo2git doesn't feel like imposing any restrictions on the users, period. 
 
-Besides, mo2git aims to improve your bottom line (whether measured in likes or in bitcoins) by enabling Joe Average user to make complicated setups, and by taking honest users away from those swindling folks who publish those whole downloadable half-terabyte folders. WJ is based on the same concepts, but they dislike money-based mods 😱. 
+Besides, mo2git aims to improve your bottom line (whether measured in likes or in bitcoins) by enabling Joe Average user to make complicated setups, and by taking honest users away from those swindling folks who publish those whole downloadable half-terabyte folders. WJ is based on the same concepts as mo2git, but they dislike money-based mods 😱. 
 
-### 'how to build' instruction 
+### mo2git project as an automated 'how to build' instruction 
 
-mo2git-based project is essentially just a (machine-executable) *instruction on 'how to build the MO2 folder' from Downloads folder". As in "go to such and such URL, get a file there, unpack it, and copy file X from the archive to this place within MO2 folder". Rinse and repeat 10'000 times.
+mo2git-based project is essentially just a (machine-executable, but human-readable) *instruction on 'how to build the MO2 folder' from Downloads folder". As in "go to such and such URL, get a file there, unpack it, and copy file X from the archive to this place within MO2 hierarchy". Rinse and repeat 10'000 times.
 
 BTW, with mo2git (and unlike with WJ), you can easily see it on GitHub. master.json is this instruction I'm speaking about. 
 
@@ -31,20 +31,21 @@ BTW, with mo2git (and unlike with WJ), you can easily see it on GitHub. master.j
 - You absoulutely must have a pristine Skyrim install. You should even keep SKSE and ENB out of your Skyrim folder by using the Root Builder plugin for MO2.
 - You build a portable MO2 setup from "image" and files from your Downloads folder.
 
-### Extra Features Compared to Wabbajack
+### Advantages over Wabbajack
 
-- 📄 image is not a monolithic binary. Instead, it is a text file, with all the changes visible and most of them even understandable.
-- 👫 **multiple ppl can now work on the same modlist.** 👏👏👏
-- 💰 modlists with paid mods are perfectly fine. Modders also deserve to get paid, you know. Keep in mind that if you're using WJ, you're still bound by their license. 
-- ➡️ derived modlists. Now you can take other's mo2git-based modlist and build your own one on top of it, And when they update, re-merging is easy. 
-- change tracking. It is clear what has changed since previous version, and it can be rolled back easily. 
-- pull requests from ppl outside of your immediate team. And you decide whethe4r to accept them or not. 
+- 📄 _mo2git_ image is not a monolithic binary. Instead, it is a github project (with JSON file at its heart), with all the changes visible and most of them even understandable.
+- 👫 **multiple ppl can now work on the same mo2 modlist.** 👏👏👏
+- 💰 modlists with paid mods are perfectly fine. Modders also deserve to get paid, you know. Keep in mind that if you're using WJ, you're still bound by their license.
+- 📂 mod packs. Mod pack is a mo2git-described pack of closely related mods, which are only loosely related to the rest of the mod universe. For example, making a nice-looking female appearance mod pack (such as 3BA) is a piece of art by itself, but it does not interfere too much with environment modding, or with male appearance mod pack, or with quest mods. I hope that with time, there will be various mod packs all over github, so you can choose which ones to use as building blocks for your own modlist. It is all about division of labor and specialization. A special case of mod packs are derived mod lists. 
+- 📒 change tracking. It is clear what has changed since previous version, and it can be rolled back easily. 
+- ♻️ pull requests from ppl outside of your immediate team. And you decide whethe4r to accept them or not.
+- 🔨concept of transform: why uploading-downliading all those Bodyslide files, when they can be generated on the end-user box (using the same tools as you use, as all the tools and their config come in the same MO2 folder)?
+- [FUTURE] an alternative way (using ReFS's CoW feature) to launch Skyrim without MO2 running and hooking into the game processes, may be a bit cleaner in runtime than MO2 at the cost of longer startup and shutdown times. Will still preserve MO2 compatibility, and will make MO-like development even cleaner than MO itself (I should be able to enforce that all writes go to overwrites, with both Skyrim and mod folders always kept pristine (well, after mo2git restores them back 😉).
 
 ### Downsides Compared to Wabbajack
 
-- ❌ No User Interface (UI): If you or someone else wants to create a GitHub project with a UI for mo2git, that would be great! I’m happy to support that by providing non-UI functions in mo2git, as long as your project uses a permissive license
-  - no copyleft or other restrictions, please. This also means no stuff such as "Any quid-pro-quo payment structure in connection with... is strictly prohibited." either :angry: :rage: :scream: .
-- 🐌 Slower Performance: Right now, mo2git is slower than WJ when hashing and installing. I plan to make it faster by running some tasks in parallel, but let’s be honest, it’s challenging to compete with C# when using Python.
+- ❌ No User Interface (UI): If you or someone else wants to create a GitHub project with a UI for mo2git, that would be great! I’m happy to support that by providing non-UI functions in mo2git, as long as your project uses a permissive license; no copyleft or other restrictions, please. This also means no stuff such as "Any quid-pro-quo payment structure in connection with... is strictly prohibited." either :angry: :rage: :scream: .
+- 🐌 Slower Performance: mo2git is already paralellized and quite optimized, but let’s be honest, it’s challenging to compete performance-wise with C# when using Python.
 
 ## Prerequisites
 
