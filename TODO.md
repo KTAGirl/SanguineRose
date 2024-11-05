@@ -2,6 +2,7 @@
 
 ### MAINSTREAM:
 - git2mo.changestofolder and git2mo.discardchanges: restore according to master.json
+- replace assert(False) with common.abort() where necessary
 - better and more systemic logging
 - fix ESXS stats
 - mo.genprofiles command-line param
