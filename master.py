@@ -83,9 +83,11 @@ def _decompressJsonPath(prevpath,path):
         if i>0:
             out += '/'
         out += prevpath.val[i]
-    out += '/' + path[1:]
+    if out != '':
+        out += '/'
+    out += path[1:]
     prevpath.val = out.split('/')
-    return out
+    return out.replace('/','\\')
     
 def _appendJsonS(prevs,s):
     if prevs.val==s:
@@ -113,6 +115,21 @@ class MasterFileItem:
         self.intra_path = intra_path
         self.fromwhere = fromwhere
         self.warning = warning
+        
+    def eq(self,b):
+        if self.path != b.path:
+            return False
+        if self.hash != b.hash:
+            return False
+        if self.file_size != b.file_size:
+            return False
+        if self.archive_hash != b.archive_hash:
+            return False
+        if self.fromwhere != b.fromwhere:
+            return False
+        if self.warning != b.warning:
+            return False
+        return True
     
 class Master:
     def __init__(self):
@@ -339,6 +356,8 @@ class Master:
                 assert(state==2)
                 fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),_fromJsonHash(m.group(2)))
                 ff = _decompressJsonPath(lastf,m.group(3))
+                fi.fromwhere=ff
+                self.files.append(fi)
                 lasts.val = None
                 lasta.val = None
                 nlasti.val = 0
@@ -349,6 +368,7 @@ class Master:
                 fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),None)
                 ss = 0
                 fi.file_size = ss
+                self.files.append(fi)
                 lasts.val = ss
                 lasta.val = None
                 nlasti.val = 0
@@ -359,6 +379,7 @@ class Master:
                 assert(state==2)
                 fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),None)
                 fi.file_size = lasts.val
+                self.files.append(fi)
                 lasta.val = None
                 nlasti.val = 0
                 lastf.val = []
@@ -368,6 +389,7 @@ class Master:
                 assert(state==2)
                 fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),None)
                 fi.warning = m.group(2)
+                self.files.append(fi)
                 lasts.val = None
                 lasta.val = None
                 nlasti.val = 0

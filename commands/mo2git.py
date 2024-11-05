@@ -137,6 +137,15 @@ def _mo2git(jsonconfigfname,config):
         masterfile2 = master.Master()
         with open(targetgithub+'master.json', 'rt',encoding='utf-8') as rf:
             masterfile2.constructFromFile(rf)
+            #print(len(masterfile.files))
+            #print(len(masterfile2.files))
+            for i in range(len(masterfile.files)):
+                old = masterfile.files[i]
+                new = masterfile2.files[i]
+                #print(old.__dict__)
+                #print(new.__dict__)
+                assert(old.eq(new))
+                #assert(masterfile2.files[i] == masterfile.files[i])
             dbgWait()
     
     mo2 = filecache.folders.mo2
