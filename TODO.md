@@ -1,7 +1,7 @@
 ## TODO:
 
 ### MAINSTREAM:
-- master.py: parsing+checking archives, options for compression
+- master.py: parsing+checking archives
 - git2mo.changestofolder and git2mo.discardchanges: restore according to master.json
 - replace assert(False) with common.abort() where necessary
 - better and more systemic logging
