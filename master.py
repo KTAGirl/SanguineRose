@@ -38,7 +38,7 @@ def _toJsonFPath(fpath):
 def _fromJsonFPath(fpath):
     return urllib.parse.unquote(fpath)
     
-def _compressJsonPath(prevpath,path):
+def _compressJsonPath(prevn,prevpath,path,level=2):
     assert(path.find('/')<0)
     #assert(path.find('>')<0)
     path = path.replace('\\','/')
@@ -52,19 +52,24 @@ def _compressJsonPath(prevpath,path):
         else:
             break
     assert(nmatch>=0)
-    if nmatch <= 9:
-        path = '"'+str(nmatch)
-    else:
-        assert(nmatch<=35)
-        path = '"'+chr(nmatch-10+65)
-    needslash = False
-    for i in range(nmatch,len(spl)):
-        if needslash:
-            path += '/'
+    if level==2 or (level==1 and prevn.val<=nmatch):
+        if nmatch <= 9:
+            path = '"'+str(nmatch)
         else:
-            needslash = True
-        path += _toJsonFPath(spl[i])
+            assert(nmatch<=35)
+            path = '"'+chr(nmatch-10+65)
+        needslash = False
+        for i in range(nmatch,len(spl)):
+            if needslash:
+                path += '/'
+            else:
+                needslash = True
+            path += _toJsonFPath(spl[i])
+    else:#skipping compression because of level restrictions
+        path = '"0'+path
     prevpath.val=spl
+    if prevn is not None:
+        prevn.val=nmatch
     assert('"' not in path[1:])
     return path+'"'
     
@@ -209,7 +214,9 @@ class Master:
                         nwarn.val += 1
                     self.files.append(fi)
 
-    def write(self,wfile):
+    def write(self,wfile,masterconfig):
+        level = masterconfig.get('pcompression',1) if masterconfig is not None else 1
+        
         wfile.write('// This is JSON5 file, to save some space compared to JSON.\n') 
         wfile.write('// Still, do not edit it by hand, mo2git parses it itself using regex to save time\n')
         wfile.write('{ archives: [ // Legend: n means "name", h means "hash"\n')
@@ -229,12 +236,13 @@ class Master:
         lastf = Val([])
         lasti = [Val(None) for i in range(2)] #increasing it here will need adding more patterns to constructFromFile()
         nlasti = 0
+        lastpn = Val(0)
         for fi in self.files:
             if nf:
                 wfile.write(",\n")
             nf += 1
 
-            wfile.write('{p:'+_compressJsonPath(lastp,fi.path)) #fi.path is mandatory
+            wfile.write('{p:'+_compressJsonPath(lastpn,lastp,fi.path,level)) #fi.path is mandatory
             if fi.hash is not None:
                 wfile.write(',h:"'+_toJsonHash(fi.hash)+'"')
             else:
@@ -258,14 +266,14 @@ class Master:
                         wfile.write(',')
                     if np >= nlasti:
                         lasti[np] = Val([])
-                    wfile.write(_compressJsonPath(lasti[np],path))
+                    wfile.write(_compressJsonPath(None,lasti[np],path))
                     np += 1
                 wfile.write(']')
                 nlasti = np
             else:
                 nlasti = 0
             if fi.fromwhere is not None:
-                wfile.write(',f:'+_compressJsonPath(lastf,fi.fromwhere))
+                wfile.write(',f:'+_compressJsonPath(None,lastf,fi.fromwhere))
             else:
                 lastf.val = []
             if fi.warning is not None:

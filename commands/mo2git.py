@@ -130,7 +130,7 @@ def _mo2git(jsonconfigfname,config):
     stats['ESXS'] = nesx.val
 
     with open(targetgithub+'master.json','wt',encoding='utf-8') as wfile:
-        masterfile.write(wfile)
+        masterfile.write(wfile,config.get('masterfile'))
 
     #validating json
     if DEBUG:
@@ -146,6 +146,7 @@ def _mo2git(jsonconfigfname,config):
                 #print(new.__dict__)
                 assert(old.eq(new))
                 #assert(masterfile2.files[i] == masterfile.files[i])
+            print('masterfile2 is identical to masterfile')
             dbgWait()
     
     mo2 = filecache.folders.mo2

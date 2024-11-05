@@ -101,4 +101,3 @@ class Val:
         
 def scriptDirFrom__file__(file):
     return os.path.split(os.path.abspath(file))[0] + '\\'
-
