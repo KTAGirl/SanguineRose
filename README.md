@@ -38,7 +38,9 @@ BTW, with mo2git (and unlike with WJ), you can easily see it on GitHub. master.j
 - 💰 modlists with paid mods are perfectly fine. Modders also deserve to get paid, you know. Keep in mind that if you're using WJ, you're still bound by their license.
 - 📂 mod packs. Mod pack is a mo2git-described pack of closely related mods, which are only loosely related to the rest of the mod universe. For example, making a nice-looking female appearance mod pack (such as 3BA) is a piece of art by itself, but it does not interfere too much with environment modding, or with male appearance mod pack, or with quest mods. I hope that with time, there will be various mod packs all over github, so you can choose which ones to use as building blocks for your own modlist. It is all about division of labor and specialization. A special case of mod packs are derived mod lists. 
 - 📒 change tracking. It is clear what has changed since previous version, and it can be rolled back easily. 
-- pull requests from ppl outside of your immediate team. And you decide whethe4r to accept them or not. 
+- ♻️ pull requests from ppl outside of your immediate team. And you decide whethe4r to accept them or not.
+- 🔨concept of transform: why uploading-downliading all those Bodyslide files, when they can be generated on the end-user box (using the same tools as you use, as all the tools and their config come in the same MO2 folder)?
+- [FUTURE] an alternative way to launch Skyrim without MO2 running and hooking into (using ReFS's CoW feature), may be a bit cleaner in runtime than MO2. Will still preserve MO2 compatibility, and will make MO-like development even cleaner than MO itself (I should be able to enforce that all writes go to overwrites, with both Skyrim and mod folders always kept pristine (well, after mo2git restores them back 😉).
 
 ### Downsides Compared to Wabbajack
 
