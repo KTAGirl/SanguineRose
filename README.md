@@ -40,7 +40,7 @@ BTW, with mo2git (and unlike with WJ), you can easily see it on GitHub. master.j
 - 📒 change tracking. It is clear what has changed since previous version, and it can be rolled back easily. 
 - ♻️ pull requests from ppl outside of your immediate team. And you decide whethe4r to accept them or not.
 - 🔨concept of transform: why uploading-downliading all those Bodyslide files, when they can be generated on the end-user box (using the same tools as you use, as all the tools and their config come in the same MO2 folder)?
-- [FUTURE] an alternative way to launch Skyrim without MO2 running and hooking into (using ReFS's CoW feature), may be a bit cleaner in runtime than MO2. Will still preserve MO2 compatibility, and will make MO-like development even cleaner than MO itself (I should be able to enforce that all writes go to overwrites, with both Skyrim and mod folders always kept pristine (well, after mo2git restores them back 😉).
+- [FUTURE] an alternative way (using ReFS's CoW feature) to launch Skyrim without MO2 running and hooking into the game processes, may be a bit cleaner in runtime than MO2 at the cost of longer startup and shutdown times. Will still preserve MO2 compatibility, and will make MO-like development even cleaner than MO itself (I should be able to enforce that all writes go to overwrites, with both Skyrim and mod folders always kept pristine (well, after mo2git restores them back 😉).
 
 ### Downsides Compared to Wabbajack
 
