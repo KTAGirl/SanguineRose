@@ -171,7 +171,7 @@ class Master:
                 self.files.append(MasterFileItem(fpath,hash,fromwhere=targetpath0))
                 continue
             
-            ae,archive = filecache.findFile(fpath0)
+            ae,archive,fi = filecache.findFile(fpath0)
             if ae is None:
                 processed = False
                 m = re.search(r'^mods\\(.*)\\meta.ini$',fpath)
@@ -190,7 +190,10 @@ class Master:
                         self.files.append(MasterFileItem(fpath,hash,fromwhere=targetpath0))
                                 
                 if not processed:
-                    self.files.append(MasterFileItem(fpath,None,warning='NF'))
+                    if fi is not None:
+                        self.files.append(MasterFileItem(fpath,fi.file_hash,warning='NF'))
+                    else:
+                        self.files.append(MasterFileItem(fpath,None,warning='NF'))
                     nwarn.val += 1
             else:
                 if archive is None:
@@ -285,6 +288,7 @@ class Master:
         patphii=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",i:\["([^"]*)","([^"]*)"\]}(.)?')
         patphf=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",f:"([^"]*)"}(.)?')
         patps0=re.compile(r'^{p:"([^"]*)",s:0}(.)?')
+        patphw=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",warning:"([^"]*)"}(.)?')
         patpw=re.compile(r'^{p:"([^"]*)",warning:"([^"]*)"}(.)?')
         patp=re.compile(r'^{p:"([^"]*)"}(.)?')
         patnh=re.compile(r'^{n:"([^"]*)",h:"([^"]*)"}(.)?')
@@ -380,6 +384,17 @@ class Master:
                 fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),None)
                 fi.file_size = lasts.val
                 self.files.append(fi)
+                lasta.val = None
+                nlasti.val = 0
+                lastf.val = []
+                continue
+            m = patphw.match(line)
+            if m:
+                assert(state==2)
+                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),_fromJsonHash(m.group(2)))
+                fi.warning = m.group(3)
+                self.files.append(fi)
+                lasts.val = None
                 lasta.val = None
                 nlasti.val = 0
                 lastf.val = []

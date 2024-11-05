@@ -28,7 +28,7 @@ def _git2mo(jsonconfigfname,config):
         #print(fe)
         #print(fname)
         #assert(os.path.isfile(fname))
-        incacheae,incachear = filecache.findFile(fname)
+        incacheae,incachear,_ = filecache.findFile(fname)
         if incachear is None:
             nnotfound += 1
         else:

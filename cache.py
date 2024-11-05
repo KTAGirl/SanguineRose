@@ -651,22 +651,22 @@ class Cache:
         fi = _getFromOneOfDicts(self.jsonfilesbypath,self.filesbypath,fpath)
         if fi == None:
             print("WARNING: path="+fpath+" NOT FOUND")
-            return None,None
+            return None,None,None
 
         if fi.file_hash==17241709254077376921: #xxhash for 0 size
             ae=ArchiveEntry(None,None,0,fi.file_hash)
-            return ae,None #there is no archive, size=0 is enough to restore the file
+            return ae,None,None #there is no archive, size=0 is enough to restore the file
 
         hash=fi.file_hash
         if hash is None:#file was deleted
-            return None,None
+            return None,None,fi
         #print(fi.__dict__)
         assert(hash>=0)
         #archiveEntry = self.archiveentries.get(hash)
         ae = _getFromOneOfDicts(self.jsonarchiveentries,self.archiveentries,hash)
         if ae is None:
             #print("WARNING: archiveEntry for path="+fpath+" with hash="+str(hash)+" NOT FOUND")
-            return None,None
+            return None,None,fi
         #print(ae.__dict__)
 
         ahash = ae.archive_hash
@@ -674,9 +674,9 @@ class Cache:
         archive = _getFromOneOfDicts(self.jsonarchives,self.archives,ahash)
         if archive is None:
             #print("WARNING: archive with hash="+str(ahash)+" NOT FOUND")
-            return None,None
+            return None,None,fi
         #print(archive.__dict__)
-        return ae, archive
+        return ae,archive,fi
     
     def allFiles(self):
         for file in self.jsonfilesbypath:
