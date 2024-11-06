@@ -1,7 +1,7 @@
 ## TODO:
 
 ### MAINSTREAM:
-- master.py: refactor handling of ownmods, defaulting for pcompress=0, with putting it to "config" line to remove leading '0' in this case
+- master.py: refactor handling of ownmods
 - remove PROJECT.py (in project there should be config only, and .bat files)
 - git2mo.changestofolder and git2mo.discardchanges: restore according to master.json
 - replace assert(False) with common.abort() where necessary
