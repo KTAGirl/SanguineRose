@@ -133,19 +133,26 @@ def _mo2git(jsonconfigfname,config):
         masterfile.write(wfile,config.get('masterfile'))
 
     #validating json
-    if DEBUG:
+    if __debug__:
         masterfile2 = master.Master()
         with open(targetgithub+'master.json', 'rt',encoding='utf-8') as rf:
             masterfile2.constructFromFile(rf)
             #print(len(masterfile.files))
             #print(len(masterfile2.files))
+            for i in range(len(masterfile.archives)):
+                old = masterfile.archives[i]
+                new = masterfile2.archives[i]
+                #print(old.__dict__)
+                #print(new.__dict__)
+                assert(old.eq(new))
+            assert(len(masterfile2.archives)==len(masterfile.archives))
             for i in range(len(masterfile.files)):
                 old = masterfile.files[i]
                 new = masterfile2.files[i]
                 #print(old.__dict__)
                 #print(new.__dict__)
                 assert(old.eq(new))
-                #assert(masterfile2.files[i] == masterfile.files[i])
+            assert(len(masterfile2.files)==len(masterfile.files))
             print('masterfile2 is identical to masterfile')
             dbgWait()
     

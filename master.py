@@ -9,7 +9,7 @@ from mo2git.files import wjHash
 # we have reasons to have our own Json writer:
 #  1. major. we need very specific gitdiff-friendly format
 #  2. minor. we want to keep these files as small as feasible (while keeping it more or less readable), 
-#            hence JSON5 quote-less names, and path and elements "compression". It was seen to save 3.8x, for a 50M file it is quite a bit
+#            hence JSON5 quote-less names, and path and elements "compression". It was seen to save 3.8x (2x for default pcompression=0), for a 50M file it is quite a bit
 
 def _toJsonHash(h):
     assert(isinstance(h,int))
@@ -110,6 +110,13 @@ class MasterArchiveItem:
     def __init__(self,name,hash):
         self.name = name
         self.hash = hash
+
+    def eq(self,b):
+        if self.name != b.name:
+            return False
+        if self.hash != b.hash:
+            return False
+        return True
     
 class MasterFileItem:
     def __init__(self,path,hash,file_size=None,archive_hash=None,intra_path=None,fromwhere=None,warning=None):
@@ -420,6 +427,9 @@ class Master:
                 continue
             m = patnh.match(line)
             if m:
+                assert(state==1)
+                ar=MasterArchiveItem(_fromJsonFPath(m.group(1)),_fromJsonHash(m.group(2)))
+                self.archives.append(ar)
                 continue
             m = patcomment.match(line)
             if m:
