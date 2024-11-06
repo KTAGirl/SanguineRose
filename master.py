@@ -33,7 +33,7 @@ def _fromJsonHash(s):
     return h
     
 def _toJsonFPath(fpath):
-    return urllib.parse.quote(fpath,safe=" +()'&#$[];,!@")
+    return urllib.parse.quote(fpath,safe=" /+()'&#$[];,!@")
     
 def _fromJsonFPath(fpath):
     return urllib.parse.unquote(fpath)
@@ -42,6 +42,11 @@ def _compressJsonPath(prevn,prevpath,path,level=2):
     assert(path.find('/')<0)
     #assert(path.find('>')<0)
     path = path.replace('\\','/')
+    if level == 0:
+        path = '"'+_toJsonFPath(path)+'"'
+        assert('"' not in path[1:-1])
+        return path
+    
     spl = path.split('/')
     #print(prevpath.val)
     #print(spl)
@@ -66,15 +71,18 @@ def _compressJsonPath(prevn,prevpath,path,level=2):
                 needslash = True
             path += _toJsonFPath(spl[i])
     else:#skipping compression because of level restrictions
-        path = '"0'+path
+        path = '"0'+_toJsonFPath(path)
     prevpath.val=spl
     if prevn is not None:
         prevn.val=nmatch
     assert('"' not in path[1:])
     return path+'"'
     
-def _decompressJsonPath(prevpath,path):
+def _decompressJsonPath(prevpath,path,level=2):
     path = _fromJsonFPath(path)
+    if level == 0:
+        return path.replace('/','\\')
+    
     p0 = path[0]
     if p0 >= '0' and p0 <= '9':
         nmatch = int(p0)
@@ -222,11 +230,13 @@ class Master:
                     self.files.append(fi)
 
     def write(self,wfile,masterconfig):
-        level = masterconfig.get('pcompression',1) if masterconfig is not None else 1
+        level = masterconfig.get('pcompression',0) if masterconfig is not None else 0
+        assert(isinstance(level,int))
         
         wfile.write('// This is JSON5 file, to save some space compared to JSON.\n') 
         wfile.write('// Still, do not edit it by hand, mo2git parses it itself using regex to save time\n')
-        wfile.write('{ archives: [ // Legend: n means "name", h means "hash"\n')
+        wfile.write('{ config: { pcompression: '+str(level)+' },\n') 
+        wfile.write('  archives: [ // Legend: n means "name", h means "hash"\n')
         na = 0
         for ar in self.archives:
             if na:
@@ -308,7 +318,9 @@ class Master:
         patp=re.compile(r'^{p:"([^"]*)"}(.)?')
         patnh=re.compile(r'^{n:"([^"]*)",h:"([^"]*)"}(.)?')
         patcomment=re.compile(r'^\s*//')
-        patspecial1 = re.compile(r'^{\s*archives\s*:\s*\[\s*//')
+
+        patspecial0 = re.compile(r'^\s*{\s*config\s*:\s*\{\s*pcompression\s*:\s*([0-9]*)\s*}')
+        patspecial1 = re.compile(r'^\s*archives\s*:\s*\[\s*//')
         patspecial2 = re.compile(r'^\s*\]\s*,\s*files\s*:\s\[\s*//')
         patspecial3 = re.compile(r'^\s*]\s*}')
 
@@ -324,56 +336,56 @@ class Master:
             m = patphsi.match(line)
             if m:
                 assert(state==2)
-                fi = _readPhsaii(m.group(1),m.group(2),m.group(3),None,m.group(4),None,lastp,lasts,lasta,nlasti,lasti)
+                fi = _readPhsaii(m.group(1),m.group(2),m.group(3),None,m.group(4),None,lastp,lasts,lasta,nlasti,lasti,level)
                 self.files.append(fi)
                 lastf.val = []
                 continue
             m = patphsai.match(line)
             if m:
                 assert(state==2)
-                fi = _readPhsaii(m.group(1),m.group(2),m.group(3),m.group(4),m.group(5),None,lastp,lasts,lasta,nlasti,lasti)
+                fi = _readPhsaii(m.group(1),m.group(2),m.group(3),m.group(4),m.group(5),None,lastp,lasts,lasta,nlasti,lasti,level)
                 self.files.append(fi)
                 lastf.val = []
                 continue
             m = patphi.match(line)
             if m:
                 assert(state==2)
-                fi = _readPhsaii(m.group(1),m.group(2),None,None,m.group(3),None,lastp,lasts,lasta,nlasti,lasti)
+                fi = _readPhsaii(m.group(1),m.group(2),None,None,m.group(3),None,lastp,lasts,lasta,nlasti,lasti,level)
                 self.files.append(fi)
                 lastf.val = []
                 continue
             m = patphai.match(line)
             if m:
                 assert(state==2)
-                fi = _readPhsaii(m.group(1),m.group(2),None,m.group(3),m.group(4),None,lastp,lasts,lasta,nlasti,lasti)
+                fi = _readPhsaii(m.group(1),m.group(2),None,m.group(3),m.group(4),None,lastp,lasts,lasta,nlasti,lasti,level)
                 self.files.append(fi)
                 lastf.val = []
                 continue
             m = patphsii.match(line)
             if m:
                 assert(state==2)
-                fi = _readPhsaii(m.group(1),m.group(2),m.group(3),None,m.group(4),m.group(5),lastp,lasts,lasta,nlasti,lasti)
+                fi = _readPhsaii(m.group(1),m.group(2),m.group(3),None,m.group(4),m.group(5),lastp,lasts,lasta,nlasti,lasti,level)
                 self.files.append(fi)
                 lastf.val = []
                 continue
             m = patphii.match(line)
             if m:
                 assert(state==2)
-                fi = _readPhsaii(m.group(1),m.group(2),None,None,m.group(3),m.group(4),lastp,lasts,lasta,nlasti,lasti)
+                fi = _readPhsaii(m.group(1),m.group(2),None,None,m.group(3),m.group(4),lastp,lasts,lasta,nlasti,lasti,level)
                 self.files.append(fi)
                 lastf.val = []
                 continue
             m = patphsaii.match(line)
             if m:
                 assert(state==2)
-                fi = _readPhsaii(m.group(1),m.group(2),m.group(3),m.group(4),m.group(5),m.group(6),lastp,lasts,lasta,nlasti,lasti)
+                fi = _readPhsaii(m.group(1),m.group(2),m.group(3),m.group(4),m.group(5),m.group(6),lastp,lasts,lasta,nlasti,lasti,level)
                 self.files.append(fi)
                 lastf.val = []
                 continue
             m = patphf.match(line)
             if m:
                 assert(state==2)
-                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),_fromJsonHash(m.group(2)))
+                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1),level),_fromJsonHash(m.group(2)))
                 ff = _decompressJsonPath(lastf,m.group(3))
                 fi.fromwhere=ff
                 self.files.append(fi)
@@ -384,7 +396,7 @@ class Master:
             m = patps0.match(line)
             if m:
                 assert(state==2)
-                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),None)
+                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1),level),None)
                 ss = 0
                 fi.file_size = ss
                 self.files.append(fi)
@@ -396,7 +408,7 @@ class Master:
             m = patp.match(line)
             if m:
                 assert(state==2)
-                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),None)
+                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1),level),None)
                 fi.file_size = lasts.val
                 self.files.append(fi)
                 lasta.val = None
@@ -406,7 +418,7 @@ class Master:
             m = patphw.match(line)
             if m:
                 assert(state==2)
-                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),_fromJsonHash(m.group(2)))
+                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1),level),_fromJsonHash(m.group(2)))
                 fi.warning = m.group(3)
                 self.files.append(fi)
                 lasts.val = None
@@ -417,7 +429,7 @@ class Master:
             m = patpw.match(line)
             if m:
                 assert(state==2)
-                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1)),None)
+                fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1),level),None)
                 fi.warning = m.group(2)
                 self.files.append(fi)
                 lasts.val = None
@@ -433,6 +445,12 @@ class Master:
                 continue
             m = patcomment.match(line)
             if m:
+                continue
+            m = patspecial0.match(line)
+            if m:
+                assert(state == 0)
+                level = int(m.group(1))
+                assert(level>=0 and level<=2)
                 continue
             m = patspecial1.match(line)
             if m:
@@ -455,8 +473,8 @@ class Master:
         
         assert(state==3)
     
-def _readPhsaii(p,h,s,a,i1,i2,lastp,lasts,lasta,nlasti,lasti):
-    fi=MasterFileItem(_decompressJsonPath(lastp,p),_fromJsonHash(h) if h is not None else None)
+def _readPhsaii(p,h,s,a,i1,i2,lastp,lasts,lasta,nlasti,lasti,level):
+    fi=MasterFileItem(_decompressJsonPath(lastp,p,level),_fromJsonHash(h) if h is not None else None)
     
     if s is None:
         fi.file_size = lasts.val

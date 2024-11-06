@@ -154,7 +154,7 @@ def _mo2git(jsonconfigfname,config):
                 assert(old.eq(new))
             assert(len(masterfile2.files)==len(masterfile.files))
             print('masterfile2 is identical to masterfile')
-            dbgWait()
+            #dbgWait()
     
     mo2 = filecache.folders.mo2
     # copying own mods
