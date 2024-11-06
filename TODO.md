@@ -12,7 +12,6 @@
 - cache: exclusive json and non-json (removing from non-json when adding json; remove search when looking for, if any)
   
 ### PERFORMANCE/OPTIMIZATIONS:
-- master.json size optimization: text-based "compression" (hierarchical representation) 
 - hc -> SharedReturn
 - masterjson -> under _microCache()
 - reading masterjson -> Tasks
