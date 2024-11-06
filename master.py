@@ -127,13 +127,13 @@ class MasterArchiveItem:
         return True
     
 class MasterFileItem:
-    def __init__(self,path,hash,file_size=None,archive_hash=None,intra_path=None,fromwhere=None,warning=None):
+    def __init__(self,path,hash,file_size=None,archive_hash=None,intra_path=None,gitpath=None,warning=None):
         self.path = path
         self.hash = hash
         self.file_size = file_size
         self.archive_hash = archive_hash
         self.intra_path = intra_path
-        self.fromwhere = fromwhere
+        self.gitpath = gitpath
         self.warning = warning
         
     def eq(self,b):
@@ -145,7 +145,7 @@ class MasterFileItem:
             return False
         if self.archive_hash != b.archive_hash:
             return False
-        if self.fromwhere != b.fromwhere:
+        if self.gitpath != b.gitpath:
             return False
         if self.warning != b.warning:
             return False
@@ -187,8 +187,8 @@ class Master:
             if isown:
                 targetpath0 = targetdir + fpath
                 fpath1 = mo2+fpath
-                hash = wjHash(fpath1) #TODO: to Task?
-                self.files.append(MasterFileItem(fpath,hash,fromwhere=targetpath0))
+                hash = wjHash(fpath1) # TODO: add own dirs to filecache and read hash from there
+                self.files.append(MasterFileItem(fpath,hash,gitpath=targetpath0))
                 continue
             
             ae,archive,fi = filecache.findFile(fpath0)
@@ -207,7 +207,7 @@ class Master:
                         shutil.copyfile(srcpath,targetpath)
                         hash = wjHash(srcpath) 
                         processed = True
-                        self.files.append(MasterFileItem(fpath,hash,fromwhere=targetpath0))
+                        self.files.append(MasterFileItem(fpath,hash,gitpath=targetpath0))
                                 
                 if not processed:
                     if fi is not None:
@@ -289,8 +289,8 @@ class Master:
                 nlasti = np
             else:
                 nlasti = 0
-            if fi.fromwhere is not None:
-                wfile.write(',f:'+_compressJsonPath(None,lastf,fi.fromwhere))
+            if fi.gitpath is not None:
+                wfile.write(',g:'+_compressJsonPath(None,lastf,fi.gitpath))
             else:
                 lastf.val = []
             if fi.warning is not None:
@@ -311,7 +311,7 @@ class Master:
         patphsaii=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",s:([0-9]*),a:"([^"]*)",i:\["([^"]*)","([^"]*)"\]}(.)?')
         patphi=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",i:\["([^"]*)"\]}(.)?')
         patphii=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",i:\["([^"]*)","([^"]*)"\]}(.)?')
-        patphf=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",f:"([^"]*)"}(.)?')
+        patphf=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",g:"([^"]*)"}(.)?')
         patps0=re.compile(r'^{p:"([^"]*)",s:0}(.)?')
         patphw=re.compile(r'^{p:"([^"]*)",h:"([^"]*)",warning:"([^"]*)"}(.)?')
         patpw=re.compile(r'^{p:"([^"]*)",warning:"([^"]*)"}(.)?')
@@ -387,7 +387,7 @@ class Master:
                 assert(state==2)
                 fi=MasterFileItem(_decompressJsonPath(lastp,m.group(1),level),_fromJsonHash(m.group(2)))
                 ff = _decompressJsonPath(lastf,m.group(3))
-                fi.fromwhere=ff
+                fi.gitpath=ff
                 self.files.append(fi)
                 lasts.val = None
                 lasta.val = None
