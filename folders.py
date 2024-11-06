@@ -36,6 +36,11 @@ def _assertShortDirPath(fpath):
     assert(fpath.endswith('\\'))
     assert(not os.path.isabs(fpath))
     
+def _assertNormalizedFileName(fname):
+    assert('/' not in fname)
+    assert('\\' not in fname)
+    assert(fname.lower()==fname)
+    
 def _configDirPath(path,configdir,config):
     if os.path.isabs(path):
         path = _normalizeDirPath(path)
@@ -72,6 +77,8 @@ class Folders:
         self.github=_configDirPath(jsonconfig.get('github',configdir),configdir,jsonconfig)
         #print(self.__dict__)
         #dbgWait()
+
+        self.ownmods = [Folders.normalizeFileName(om) for om in jsonconfig.get('ownmods',[])]
         
         toolinstallfiles = jsonconfig.get('toolinstallfiles')
         if toolinstallfiles:
@@ -92,6 +99,22 @@ class Folders:
     def isKnownArchive(self,arpath):
         arname = Folders.normalizeFileName(os.path.split(arpath)[1])
         return arname in self.allarchivenames
+        
+    def isOwnMod(self,mod):
+        _assertNormalizedFileName(mod)
+        return mod in self.ownmods
+        
+    def isOwnModsFile(self,fpath):
+        _assertNormalizedFilePath(fpath)
+        for ownmod in self.ownmods:
+            ownpath = self.mo2+'mods\\'+ownmod+'\\'
+            if fpath.startswith(ownpath):
+                return True
+        return False
+        
+    def allOwnMods(self):
+        for ownmod in self.ownmods:
+            yield ownmod
    
     def isMo2ExactDirIncluded(self,dirpath):
         # returns: None if ignored, False if mo2excluded, 1 if regular (not excluded)

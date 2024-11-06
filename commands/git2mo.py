@@ -3,6 +3,7 @@ import os
 from mo2git.common import *
 import mo2git.cache as cache
 from mo2git.commands.cmdcommon  import _openCache,_csAndMasterModList
+from mo2git.master import Master
 
 def _git2mo(jsonconfigfname,config):
     compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)
@@ -12,17 +13,18 @@ def _git2mo(jsonconfigfname,config):
     
     srcgithub = filecache.folders.github
     masterjsonfname = srcgithub + 'master.json'
+    masterjson = Master()
     with open(masterjsonfname, 'rt',encoding='utf-8') as rf:
-        masterjson = json.load(rf)
+        masterjson.constructFromFile(rf)
     
     mo2 = filecache.folders.mo2
     #print(mo2)
-    masterfiles = masterjson['files']
+    masterfiles = masterjson.files
     nnotfound = 0
     nmodified = 0
     masterfilesbypath = {}
     for fentry in masterfiles:
-        fe = fentry['path']
+        fe = fentry.path
         fname = mo2+fe
         masterfilesbypath[fe.lower()] = fentry
         #print(fe)
@@ -33,7 +35,7 @@ def _git2mo(jsonconfigfname,config):
             nnotfound += 1
         else:
             #print(fentry)
-            if incacheae.file_hash != fentry['hash']:
+            if incacheae.file_hash != fentry.hash:
                 print('WARNING: master.json hash '+str(fentry['hash'])+' != cache hash '+str(incachearentry.file_hash)
                        +' for '+fname)
                 nmodified += 1
@@ -57,7 +59,7 @@ def _git2mo(jsonconfigfname,config):
             #print(fasinjson)
         else:
             #print(mfile)
-            hash = mfile.get('hash')
+            hash = mfile.hash
             if hash is None:
                 nnohash += 1
                 #print(fasinjson)

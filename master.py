@@ -155,7 +155,7 @@ class Master:
     def __init__(self):
         pass
         
-    def constructFromCache(self,nesx,nwarn,filecache,allinstallfiles,ownmods):
+    def constructFromCache(self,nesx,nwarn,filecache,allinstallfiles):
         aif = []
         for hash, path in allinstallfiles.items():
             fname = os.path.split(path)[1]
@@ -178,13 +178,7 @@ class Master:
             if isEsx(fpath):
                 nesx.val += 1
             
-            isown = False
-            for own in ownmods:
-                ownpath = 'mods\\'+own+'\\'
-                if fpath.startswith(ownpath):
-                    isown = True
-                    break
-            if isown:
+            if filecache.folders.isOwnModsFile(fpath0):
                 targetpath0 = targetdir + fpath
                 fpath1 = mo2+fpath
                 hash = wjHash(fpath1) # TODO: add own dirs to filecache and read hash from there

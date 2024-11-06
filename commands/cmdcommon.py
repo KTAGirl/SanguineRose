@@ -20,11 +20,10 @@ def _csAndMasterModList(config):
 
 def _openCache(jsonconfigname,config,mastermodlist,ignore,dbgdumpwjdb=None):
     folders = Folders(jsonconfigname,config,ignore)
-    ownmods=config['ownmods']
     
     allarchivenames = []
     for mod in mastermodlist.allEnabled():
-        if mod in ownmods:
+        if folders.isOwnMod(mod.lower()):
             continue
         installfile,modid,manualurl,prompt = installfileModidManualUrlAndPrompt(mod,folders.mo2)
         if installfile is not None:

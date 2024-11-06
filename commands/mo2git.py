@@ -77,8 +77,6 @@ def _mo2git(jsonconfigfname,config):
     ignore=compiler_settings['Ignore']
     filecache = _openCache(jsonconfigfname,config,mastermodlist,ignore)
 
-    ownmods=config['ownmods']
-    
     targetgithub = filecache.folders.github
     targetdir = 'mo2\\'
     stats = {}
@@ -124,7 +122,7 @@ def _mo2git(jsonconfigfname,config):
 
     nesx = Val(0)
     masterfile = master.Master()
-    masterfile.constructFromCache(nesx,nwarn,filecache,allinstallfiles,ownmods)
+    masterfile.constructFromCache(nesx,nwarn,filecache,allinstallfiles)
         
     print("nn="+str(len(masterfile.files))+" nwarn="+str(nwarn.val))
     stats['ESXS'] = nesx.val
@@ -158,7 +156,7 @@ def _mo2git(jsonconfigfname,config):
     
     mo2 = filecache.folders.mo2
     # copying own mods
-    for mod in ownmods:
+    for mod in filecache.folders.allOwnMods():
         shutil.copytree(mo2+'mods\\'+mod, targetgithub + targetdir+'mods\\'+mod, dirs_exist_ok=True)
  
     # writing profiles
