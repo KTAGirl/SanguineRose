@@ -1,10 +1,10 @@
 ## TODO:
 
 ### MAINSTREAM:
-- remove PROJECT.py (in project there should be config only, and .bat files)
+- remove PROJECT.py (in project there should be only 2 configs PROJECT.json and PROJECT-user.json, and .bat files such as PROJECT.bat, PROJECT-debug.bat, and shortcuts PROJECT-mo2git.bat, PROJECT-git2mo.bat etc.)
+- replace assert() with common.always_assert() wherever modder's/user's errors are expected (mostly in Folders)
 - targetgithub dir->filecache, rm wjHash() from master.py
 - git2mo.changestofolder and git2mo.discardchanges: restore according to master.json
-- replace assert(False) with common.abort() where necessary
 - better and more systemic logging
 - fix ESXS stats
 - mo.genprofiles command-line param
