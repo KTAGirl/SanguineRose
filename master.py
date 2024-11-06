@@ -178,31 +178,16 @@ class Master:
             if isEsx(fpath):
                 nesx.val += 1
             
-            if filecache.folders.isOwnModsFile(fpath0):
-                targetpath0 = targetdir + fpath
-                fpath1 = mo2+fpath
-                hash = wjHash(fpath1) # TODO: add own dirs to filecache and read hash from there
-                self.files.append(MasterFileItem(fpath,hash,gitpath=targetpath0))
-                continue
-            
             ae,archive,fi = filecache.findFile(fpath0)
             if ae is None:
                 processed = False
-                m = re.search(r'^mods\\(.*)\\meta.ini$',fpath)
-                if m:
-                    mod = m.group(1)
-                    if not '\\' in mod: #we know only meaning of top-level mod meta.ini's 
-                        # print(mod)
-                        targetpath0 = fpath
-                        targetpath = filecache.folders.github + targetdir + targetpath0
-                        # print(realpath)
-                        makeDirsForFile(targetpath) #TODO: to Task?
-                        srcpath = mo2 + fpath
-                        shutil.copyfile(srcpath,targetpath)
-                        hash = wjHash(srcpath) 
-                        processed = True
-                        self.files.append(MasterFileItem(fpath,hash,gitpath=targetpath0))
-                                
+                
+                srcpath = filecache.folders.github + targetdir + fpath
+                if os.path.isfile(srcpath):# TODO: add github tree to filecache and search/read hash from there
+                    hash = wjHash(srcpath) 
+                    self.files.append(MasterFileItem(fpath,hash,gitpath=fpath))
+                    processed = True
+                    
                 if not processed:
                     if fi is not None:
                         self.files.append(MasterFileItem(fpath,fi.file_hash,warning='NF'))

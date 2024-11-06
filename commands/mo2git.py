@@ -112,21 +112,35 @@ def _mo2git(jsonconfigfname,config):
     #print(allinstallfiles)
     #dbgWait()
 
-    nwarn = Val(0)
-
-    # pre-cleanup
+    # pre-copying cleanup
     modsdir = targetgithub+'mods\\'
     if os.path.isdir(modsdir):
         shutil.rmtree(modsdir)
     # dbgWait()
 
+    mo2 = filecache.folders.mo2
+    # copying own mods
+    for mod in filecache.folders.allOwnMods():
+        shutil.copytree(mo2+'mods\\'+mod, targetgithub + targetdir+'mods\\'+mod, dirs_exist_ok=True)
+
+    for mod in mastermodlist.allEnabled():
+        targetpath0 = 'mods\\'+mod.lower()+'\\meta.ini'
+        srcpath = mo2+targetpath0
+        if os.path.isfile(srcpath):
+            targetpath = targetgithub + targetdir + targetpath0
+            makeDirsForFile(targetpath)
+            shutil.copyfile(srcpath,targetpath)
+
+    nwarn = Val(0)
     nesx = Val(0)
+    # building masterfile, it relies on files in targetgithub, so filling targetgithub must go first
     masterfile = master.Master()
     masterfile.constructFromCache(nesx,nwarn,filecache,allinstallfiles)
         
     print("nn="+str(len(masterfile.files))+" nwarn="+str(nwarn.val))
     stats['ESXS'] = nesx.val
 
+    # writing master file
     with open(targetgithub+'master.json','wt',encoding='utf-8') as wfile:
         masterfile.write(wfile,config.get('masterfile'))
 
@@ -154,10 +168,6 @@ def _mo2git(jsonconfigfname,config):
             print('masterfile2 is identical to masterfile')
             #dbgWait()
     
-    mo2 = filecache.folders.mo2
-    # copying own mods
-    for mod in filecache.folders.allOwnMods():
-        shutil.copytree(mo2+'mods\\'+mod, targetgithub + targetdir+'mods\\'+mod, dirs_exist_ok=True)
  
     # writing profiles
     targetfdir = targetgithub + targetdir + 'profiles\\'+masterprofilename+'\\'
