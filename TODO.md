@@ -3,6 +3,7 @@
 ### MAINSTREAM:
 - master.py: refactor handling of ownmods
 - remove PROJECT.py (in project there should be config only, and .bat files)
+- ownmods dir->filecache, rm wjHash() from master.py
 - git2mo.changestofolder and git2mo.discardchanges: restore according to master.json
 - replace assert(False) with common.abort() where necessary
 - better and more systemic logging
