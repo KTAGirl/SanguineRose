@@ -85,7 +85,7 @@ class Folders:
         #print(self.ignore)
         #dbgWait()
  
-        self.cache = _configDirPath(jsonconfig.get('cache',self.configdir + '..\\mo2gitlib.cache\\'),self.configdir,jsonconfig)
+        self.cache = _configDirPath(jsonconfig.get('cache',self.configdir + '..\\mo2git.cache\\'),self.configdir,jsonconfig)
         self.tmp = _configDirPath(jsonconfig.get('tmp',self.configdir + '..\\mo2git.tmp\\'),self.configdir,jsonconfig)
         self.github=_configDirPath(jsonconfig.get('github',self.configdir),self.configdir,jsonconfig)
         #print(self.__dict__)

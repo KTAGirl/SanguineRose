@@ -562,6 +562,7 @@ class Parallel:
                 self.procrunningconfirmed[got.procnum] = True
                 #print('Parallel: joinAll(): process #'+str(got.procnum+1)+' confirmed as started')
             
+        print('All processes confirmed as started, waiting for joins')
         for i in range(0,self.NPROC):
             self.processes[i].join()
             dbgPrint('Process #'+str(i+1)+' joined')

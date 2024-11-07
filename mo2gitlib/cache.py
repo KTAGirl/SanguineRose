@@ -124,7 +124,7 @@ def _diffArchive(folders,jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmpp
     nmodified.val += 1
   
 def _diffFile(jsonfilesbypath,nmodified,fi,updatednotadded):
-    info('file '+fi.file_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
+    #info('file '+fi.file_path+' was '+('updated' if updatednotadded else 'added')+' since wj caching')
     jsonfilesbypath[fi.file_path]=fi
     nmodified.val += 1
 
@@ -458,7 +458,7 @@ def _ownScanMo22SelfTaskFunc(cache,parallel,scannedfiles,out):
     (nscanned,nmodified,ldout,pubfilesbypath,folders) = out
     cache.jsonfilesbypath |= ldout.jsonfilesbypath
     scannedfiles |= ldout.scannedfiles
-    print('Merging scannedfiles: added '+str(len(ldout.scannedfiles))+', now '+str(len(scannedfiles)))
+    print('Merging scannedfiles (nmodified='+str(nmodified)+'): added '+str(len(ldout.scannedfiles))+', now '+str(len(scannedfiles)))
     for requested in ldout.requested:
         taskname = 'scanmo2.'+requested
         # recursive task
@@ -602,14 +602,13 @@ class Cache:
                 # print(fpath)
                 found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath)
                 if found:
-                    try:
+                    if found.file_hash is None:#file in cache marked as deleted
+                        _diffFound(folders,ldout,fpath,tstamp,addfi,False) #False as we probably can treat 're-added' as 'added'
+                    else:
                         tstamp2 = found.file_modified
-                    except:
-                        print(found)
-                        dbgWait()
-                    # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
-                    if wjdb.compareTimestampWithWj(tstamp,tstamp2)!=0:
-                        _diffFound(folders,ldout,fpath,tstamp,addfi,True)
+                        # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
+                        if wjdb.compareTimestampWithWj(tstamp,tstamp2)!=0:
+                            _diffFound(folders,ldout,fpath,tstamp,addfi,True)
                 else:
                     _diffFound(folders,ldout,fpath,tstamp,addfi,False)
             elif stat.S_ISDIR(fmode):
