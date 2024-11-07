@@ -16,7 +16,7 @@ def _hcFoundDownload(archives,archivesbypath,ndup,ar):
     if ar.file_path.endswith('.meta'):
         return
     olda = archives.get(ar.file_hash)
-    if olda!=None and not olda.eq(ar):
+    if olda is not None and not olda.eq(ar):
         warn("identical archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(ar.__dict__))
         # dbgWait()
         ndup.val += 1
@@ -32,7 +32,7 @@ def _hcFoundFile(filesbypath,nex,ndup,fi,folders):
         return
         
     olda = filesbypath.get(fi.file_path)
-    if olda!=None and not olda.eq(fi):
+    if olda is not None and not olda.eq(fi):
         # print("TODO: multiple archives: hash="+str(hash)+" old="+str(olda.__dict__)+" new="+str(fi.__dict__))
         # wait = input("Press Enter to continue.")
         ndup.val += 1
@@ -51,7 +51,7 @@ def _getFileTimestampFromSt(st):
 
 def _getFromOneOfDicts(dicttolook,dicttolook2,key):
     found = dicttolook.get(key)
-    if found != None:
+    if found is not None:
         return found
     return dicttolook2.get(key)
 
@@ -87,7 +87,7 @@ def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plu
             ext = os.path.split(fpath)[1].lower()
             if ext in pluginexts:
                 nested_plugin = pluginhandler.archivePluginFor(fpath)
-                assert(nested_plugin != None)
+                assert(nested_plugin is not None)
                 _archiveToEntries(jsonarchiveentries,archive_hash,tmppath + str(nf) + '\\',new_intra_path,nested_plugin,fpath)
 
 ##### Lambda parts
@@ -113,7 +113,7 @@ def _diffArchive(folders,jsonarchives,jsonarchivesbypath,jsonarchiveentries,tmpp
         shutil.rmtree(tmproot)
     os.makedirs(tmproot,exist_ok=True)
     plugin = pluginhandler.archivePluginFor(ar.file_path)
-    if plugin == None:
+    if plugin is None:
         warn('no archive plugin found for '+ar.file_path)
     else:
         _archiveToEntries(jsonarchiveentries,ar.file_hash,tmproot,[],plugin,ar.file_path)
@@ -624,8 +624,8 @@ class Cache:
                 else:
                     nscanned += Cache._loadDir(ldout,newdir,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile)
             else:
-                print(fpath)
-                assert(False)
+                print(fpath+' is neither dir or file, aborting')
+                aAssert(False)
         return nscanned
 
     def findArchiveByName(self,fname):
@@ -636,7 +636,7 @@ class Cache:
             if os.path.split(a.file_path)[1] == fname:
                 ar = a
                 break
-        if ar == None:
+        if ar is None:
             return ar
 
         hash=ar.file_hash
@@ -649,7 +649,7 @@ class Cache:
         assert(fpath.lower()==fpath)
         #print(dbgFirst(self.filesbypath).__dict__)
         fi = _getFromOneOfDicts(self.jsonfilesbypath,self.filesbypath,fpath)
-        if fi == None:
+        if fi is None:
             print("WARNING: path="+fpath+" NOT FOUND")
             return None,None,None
 

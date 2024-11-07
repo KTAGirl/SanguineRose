@@ -11,11 +11,6 @@ import mo2git.cache as cache
 from mo2git.folders import Folders
 import mo2git.master as master
 
-'''
-def mo2AndMasterModList(config):
-    mo2,compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _mo2AndCSAndMasterModList(config)
-    return mo2,mastermodlist
-'''    
 def _writeManualDownloads(folders,md,modlist,config):
     mo2 = config['mo2']
     modlistname = config['modlistname']
@@ -167,8 +162,7 @@ def _mo2git(jsonconfigfname,config):
             assert(len(masterfile2.files)==len(masterfile.files))
             print('masterfile2 is identical to masterfile')
             #dbgWait()
-    
- 
+
     # writing profiles
     targetfdir = targetgithub + targetdir + 'profiles\\'+masterprofilename+'\\'
     makeDirsForFile(targetfdir+'modlist.txt')
@@ -176,8 +170,9 @@ def _mo2git(jsonconfigfname,config):
     # shutil.copyfile(mo2+'profiles\\'+masterprofilename+'\\loadorder.txt',targetfdir+'loadorder.txt')
     _copyRestOfProfile(mo2,targetgithub + targetdir,masterprofilename)
     genprofiles = config.get('genprofiles')
+    aAssert(genprofiles is None or isinstance(genprofiles,dict),lambda: "config.'genprofiles', when present, must be a dictionary, got "+repr(genprofiles))
     # print(altmodlists)
-    for profile in altmodlists: 
+    for profile in altmodlists:
         # print(profile)
         ml = altmodlists[profile]
         fname = mo2+'profiles\\'+profile+'\\modlist.txt'
@@ -201,7 +196,7 @@ def _mo2git(jsonconfigfname,config):
                 # print(separ)
                 if separ:
                     # section = separ
-                    filteredout = re.search(filteroutpattern, separ, re.IGNORECASE) != None
+                    filteredout = re.search(filteroutpattern, separ, re.IGNORECASE) is not None
                     # print(separ+':'+str(filteredout))
                 else:
                     if mod[0] != '+':
@@ -217,14 +212,14 @@ def _mo2git(jsonconfigfname,config):
                             optionalesxs += 1
                             key = os.path.split(esx)[1]
                             # print(key)
-                            # assert(optionalesxs_dict.get(key)==None)
+                            # assert(optionalesxs_dict.get(key) is None)
                             optionalesxs_dict[key] = esx #rewriting if applicable
                     else:
                         esxs=allEsxs(mod,mo2)
                         for esx in esxs:
                             key = os.path.split(esx)[1]
                             path = optionalesxs_dict.get(key)
-                            if path != None:
+                            if path is not None:
                                 # print(path + ' is overridden by '+ esx)
                                 optionalesxs_dict[key] = esx
             
@@ -234,7 +229,7 @@ def _mo2git(jsonconfigfname,config):
             # print(optionalesxs_dict)
             for key in optionalesxs_dict:
                 esx = optionalesxs_dict.get(key)
-                assert(esx!=None)
+                assert(esx is not None)
                 if not isEslFlagged(esx):
                     print('WARNING: OPTIONAL '+esx+' is not esl-flagged')
 
@@ -250,8 +245,9 @@ def _mo2git(jsonconfigfname,config):
     # more stats
     wjcompiled = config.get('wjcompiled')
     if wjcompiled:
-        _fillCompiledStats(stats,wjcompiled)
+        _fillCompiledStats(stats,filecache.folders.normalizeConfigFilePath(wjcompiled))
     statsmods = config.get('statsmods')
+    aAssert(statsmods is None or isinstance(statsmods,list),lambda: "config.'statsmods', when present, must be a list, got "+repr(statsmods))
     if statsmods:
         for stmod in statsmods:
             stats[stmod+'.SIZE']=_statsFolderSize(mo2+'mods/'+stmod)

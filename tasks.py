@@ -11,6 +11,10 @@ _procnum = -1 # number of child process
 def thisProcNum():
     return _procnum
 
+def dbgPrint(s):
+    if __debug__:
+        print(s)
+
 class _PoolOfShared:
     def __init__(self):
         self.shareds = {}
@@ -139,7 +143,7 @@ def _procFunc(parentstarted,num,inq,outq):
         global _procnum
         assert(_procnum==-1)
         _procnum = num
-        #print('Process #'+str(num+1)+' started')
+        dbgPrint('Process #'+str(num+1)+' started')
         outq.put(_Started(_procnum))
         while True:
             waitt0 = time.perf_counter()
@@ -175,7 +179,7 @@ def _procFunc(parentstarted,num,inq,outq):
         print(traceback.format_exc())
         outq.put(e)
     _poolofshared.cleanup()
-    #print('Process #'+str(num+1)+': exiting')
+    dbgPrint('Process #'+str(num+1)+': exiting')
     
 class _TaskGraphNode:
     def __init__(self,task,parents,weight):
@@ -333,7 +337,7 @@ class Parallel:
                       +taskstr+'\n'
                       +'and own tasks:\n'
                       +owntaskstr)
-                assert(False)
+                aAssert(False)
                             
         # graph ok, running the initial tasks
         assert(len(self.taskgraph))
@@ -431,13 +435,7 @@ class Parallel:
             assert(name not in self.doneowntasks)
         return done
         
-    def _runOwnTasks(self): # returns overall status: 1: work to do, 2: all running, 3: all done
-        #print(len(self.owntasks))
-        #for ot in self.owntasks:
-        #    print('owntask: '+ot.task.name)
-        #for otname in self.doneowntasks:
-        #    print('doneowntask: '+otname)
-            
+    def _runOwnTasks(self): # returns overall status: 1: work to do, 2: all running, 3: all done            
         for ot in self.owntasks:
             #print('task: '+ot.task.name)
             if ot.task.name in self.doneowntasks:
@@ -566,7 +564,7 @@ class Parallel:
             
         for i in range(0,self.NPROC):
             self.processes[i].join()
-            #print('Process #'+str(i+1)+' joined')
+            dbgPrint('Process #'+str(i+1)+' joined')
         self.joined = True        
         
     def unpublish(self,name):
@@ -578,7 +576,7 @@ class Parallel:
         if exceptiontype is not None:
             print('Parallel: exception '+str(exceptiontype)+' :'+str(exceptionval))
             traceback.print_tb(exceptiontraceback)
-        #dbgWait()
+        
         if not self.shuttingdown:
             self.shutdown()
         if not self.joined:

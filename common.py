@@ -3,6 +3,7 @@ import glob
 import json
 import time
 import logging
+import traceback
 
 def dbgWait():
     wait = input("Press Enter to continue.")
@@ -19,6 +20,22 @@ def dbgFirst(data):
         return data[key]
     else:
         return data
+        
+def dbgPrint(s):
+    if __debug__:
+        print(s)
+  
+class Mo2gitError(Exception):
+    pass
+  
+def aAssert(cond,f=None): #'always assert', even if __debug__ is False. f is a lambda printing error message before throwing
+    if not cond:
+        msg = 'aAssert() failed'
+        if f is not None:
+            msg += ':'+f()
+        where = traceback.extract_stack(limit=2)[0]
+        critical(msg+' @line '+str(where.lineno)+' of '+os.path.split(where.filename)[1])
+        raise Mo2gitError(msg)
 
 _logger = logging.getLogger('mo2git')
 logging.basicConfig(level=logging.DEBUG)
@@ -28,6 +45,9 @@ def warn(msg):
 def info(msg):
     global _logger
     _logger.info(msg)
+def critical(msg):
+    global _logger
+    _logger.critical(msg)
     
 ###
 

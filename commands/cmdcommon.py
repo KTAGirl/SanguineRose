@@ -1,4 +1,5 @@
 import os
+import re
 
 from mo2git.common import *
 from mo2git.installfile import installfileModidManualUrlAndPrompt
@@ -8,10 +9,20 @@ import mo2git.cache as cache
 import json5 #only for user configs! Very slow for any other purpose
 
 def _loadUserConfig(rf): #don't use for anything except for hand-editable user configs! Very slow for any other purpose
-    return json5.load(rf) 
+    try:
+        return json5.load(rf)
+    except Exception as e:
+        #print(repr(e))
+        msg = 'error parsing json5 config file'
+        m=re.match(r'<string>:([0-9]*)',str(e))
+        if m:
+            msg += ' at line #'+m.group(1)
+        aAssert(False,lambda: msg)
 
 def _csAndMasterModList(config):
+    aAssert('mo2' in config, lambda: "'mo2' must be present in config")
     mo2=config['mo2']
+    aAssert('compiler_settings' in config, lambda: "'compiler_settings' must be present in config")
     compiler_settings_fname=config['compiler_settings']
     with openModTxtFile(mo2+compiler_settings_fname) as rfile:
         compiler_settings = json.load(rfile)

@@ -39,8 +39,8 @@ def _fromJsonFPath(fpath):
     return urllib.parse.unquote(fpath)
     
 def _compressJsonPath(prevn,prevpath,path,level=2):
-    assert(path.find('/')<0)
-    #assert(path.find('>')<0)
+    assert('/' not in path)
+    #assert('>' not in path)
     path = path.replace('\\','/')
     if level == 0:
         path = '"'+_toJsonFPath(path)+'"'
@@ -310,8 +310,10 @@ class Master:
         lasti = [Val(None) for i in range(2)]
         nlasti = Val(0)
         lastf = Val([])
+        lineno = 0
         for line in rfile:
             #ordered in rough order of probability to save time
+            lineno += 1
             m = patphsi.match(line)
             if m:
                 assert(state==2)
@@ -447,8 +449,8 @@ class Master:
                 state = 3
                 continue
 
-            print(line)
-            assert(False)
+            print('unable to parse line #'+str(lineno)+': '+line)
+            aAssert(False)
         
         assert(state==3)
     

@@ -116,7 +116,7 @@ def loadVFS(dbgfile=None):
 
         hf = _parseContents(row[0],contents)
         nn += 1
-        if hf == None:
+        if hf is None:
             nx += 1
             if dbgfile:
                 dbgfile.write('WARNING: CANNOT PARSE'+str(contents)+' FOR hash='+str(hash)+'\n')

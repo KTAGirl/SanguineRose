@@ -3,10 +3,11 @@ import os
 from mo2git.common import *
 
 # we are compatible with wj paths, which are os.abspath.lower()
+# all our dir end with '\\'
 
 def _normalizeDirPath(path):
     path = os.path.abspath(path)
-    assert(path.find('/')<0)
+    assert('/' not in path)
     assert(not path.endswith('\\'))
     return path.lower()+'\\'
 
@@ -16,7 +17,7 @@ def _assertNormalizedDirPath(path):
 def _normalizeFilePath(path):
     assert(not path.endswith('\\') and not path.endswith('/'))
     path = os.path.abspath(path)
-    assert(path.find('/')<0)
+    assert('/' not in path)
     return path.lower()
 
 def _assertNormalizedFilePath(path):
@@ -41,11 +42,14 @@ def _assertNormalizedFileName(fname):
     assert('\\' not in fname)
     assert(fname.lower()==fname)
     
-def _configDirPath(path,configdir,config):
+def _normalizeConfigDirPath(path,configdir): #relative to config dir
     if os.path.isabs(path):
-        path = _normalizeDirPath(path)
+        return _normalizeDirPath(path)
     else:
-        path = _normalizeDirPath(configdir+path)
+        return _normalizeDirPath(configdir+path)
+    
+def _configDirPath(path,configdir,config):
+    path = _normalizeConfigDirPath(path,configdir)
     path = path.replace('{CONFIGDIR}',configdir)
     replaced = False
     for key,val in config.items():
@@ -62,27 +66,42 @@ def _configDirPath(path,configdir,config):
 
 class Folders:
     def __init__(self,jsonconfigfname,jsonconfig,ignore):
-        configdir = _normalizeDirPath(os.path.split(jsonconfigfname)[0])
-        dls = jsonconfig['downloads']
-        assert(isinstance(dls,list))
-        self.downloads = [_configDirPath(dl,configdir,jsonconfig) for dl in dls]
+        self.configdir = _normalizeDirPath(os.path.split(jsonconfigfname)[0])
+        aAssert('mo2' in jsonconfig, lambda: "'mo2' must be present in config")
+        mo2 = jsonconfig['mo2']
+        aAssert(isinstance(mo2,str), lambda: "config.'mo2' must be a string, got "+repr(mo2))
+        self.mo2 = _configDirPath(mo2,self.configdir,jsonconfig)
+
+        if 'downloads' not in jsonconfig:
+            dls = [self.mo2+'downloads\\']
+        else:
+            dls = jsonconfig['downloads']
+        if isinstance(dls,str):
+            dls = [dls]
+        aAssert(isinstance(dls,list),lambda: "'downloads' in config must be a string or a list, got "+repr(dls))
+        self.downloads = [_configDirPath(dl,self.configdir,jsonconfig) for dl in dls]
        
-        self.mo2 = _configDirPath(jsonconfig['mo2'],configdir,jsonconfig)
         self.ignore = [_normalizeDirPath(self.mo2+ig) for ig in ignore]
         #print(self.ignore)
         #dbgWait()
  
-        self.cache = _configDirPath(jsonconfig.get('cache',configdir + '..\\mo2git.cache\\'),configdir,jsonconfig)
-        self.tmp = _configDirPath(jsonconfig.get('tmp',configdir + '..\\mo2git.tmp\\'),configdir,jsonconfig)
-        self.github=_configDirPath(jsonconfig.get('github',configdir),configdir,jsonconfig)
+        self.cache = _configDirPath(jsonconfig.get('cache',self.configdir + '..\\mo2git.cache\\'),self.configdir,jsonconfig)
+        self.tmp = _configDirPath(jsonconfig.get('tmp',self.configdir + '..\\mo2git.tmp\\'),self.configdir,jsonconfig)
+        self.github=_configDirPath(jsonconfig.get('github',self.configdir),self.configdir,jsonconfig)
         #print(self.__dict__)
         #dbgWait()
 
         self.ownmods = [Folders.normalizeFileName(om) for om in jsonconfig.get('ownmods',[])]
         
-        toolinstallfiles = jsonconfig.get('toolinstallfiles')
-        if toolinstallfiles:
-            self.allarchivenames = [Folders.normalizeFileName(arname) for arname in toolinstallfiles]
+        toolinstallfiles = jsonconfig.get('toolinstallfiles',[])
+        self.allarchivenames = [Folders.normalizeFileName(arname) for arname in toolinstallfiles]
+        
+    def normalizeConfigDirPath(self,path):
+        return _normalizeConfigDirPath(path,self.configdir)
+
+    def normalizeConfigFilePath(self,path):
+        spl = os.path.split(path)
+        return _normalizeConfigDirPath(spl[0],self.configdir)+spl[1]
         
     def addArchiveNames(self,addarchivenames):
         for arname in addarchivenames:
@@ -184,20 +203,3 @@ class Folders:
     def normalizeArchiveIntraPath(fpath):
         _assertShortFilePath(fpath.lower())
         return fpath.lower()
-        
-'''
-class NoFolders:
-    #mimics Folders for downloads-scanning purposes
-    def __init__(self,allarchivenames):
-        self.allarchivenames = [arname for arname in allarchivenames]
-        
-    def isMo2ExactDirIncluded(self,dirpath):
-        return 1
-        
-    def isMo2FilePathIncluded(self,fpath): 
-        return 1
-
-    def allArchiveNames(self):
-        for arname in self.allarchivenames:
-            yield arname
-'''
