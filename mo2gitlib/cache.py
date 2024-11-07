@@ -12,6 +12,8 @@ import mo2gitlib.pluginhandler as pluginhandler
 import mo2gitlib.tasks as tasks
 from mo2gitlib.folders import Folders#,NoFolders
 
+ZEROHASH = 17241709254077376921 #xxhash for 0 size
+
 def _hcFoundDownload(archives,archivesbypath,ndup,ar):
     if ar.file_path.endswith('.meta'):
         return
@@ -643,17 +645,13 @@ class Cache:
         assert(hash>=0)
         assert(_getFromOneOfDicts(self.jsonarchives,self.archives,hash) is not None)
         return ar
-    
-    def findFile(self,fpath):
-        #fi = self.filesbypath.get(fpath.lower())
-        assert(fpath.lower()==fpath)
-        #print(dbgFirst(self.filesbypath).__dict__)
-        fi = _getFromOneOfDicts(self.jsonfilesbypath,self.filesbypath,fpath)
+        
+    def findArchiveForFile(self,fpath):
+        fi = self.findFileOnly(fpath)
         if fi is None:
-            print("WARNING: path="+fpath+" NOT FOUND")
             return None,None,None
 
-        if fi.file_hash==17241709254077376921: #xxhash for 0 size
+        if fi.file_hash==ZEROHASH: 
             ae=ArchiveEntry(None,None,0,fi.file_hash)
             return ae,None,None #there is no archive, size=0 is enough to restore the file
 
@@ -665,7 +663,6 @@ class Cache:
         #archiveEntry = self.archiveentries.get(hash)
         ae = _getFromOneOfDicts(self.jsonarchiveentries,self.archiveentries,hash)
         if ae is None:
-            #print("WARNING: archiveEntry for path="+fpath+" with hash="+str(hash)+" NOT FOUND")
             return None,None,fi
         #print(ae.__dict__)
 
@@ -673,10 +670,14 @@ class Cache:
         #archive = self.archives.get(ahash)
         archive = _getFromOneOfDicts(self.jsonarchives,self.archives,ahash)
         if archive is None:
-            #print("WARNING: archive with hash="+str(ahash)+" NOT FOUND")
             return None,None,fi
         #print(archive.__dict__)
         return ae,archive,fi
+        
+    def findFileOnly(self,fpath):
+        assert(fpath.lower()==fpath)
+        fi = _getFromOneOfDicts(self.jsonfilesbypath,self.filesbypath,fpath)
+        return fi
     
     def allFiles(self):
         for file in self.jsonfilesbypath:

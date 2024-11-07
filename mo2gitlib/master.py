@@ -128,8 +128,8 @@ class MasterArchiveItem:
     
 class MasterFileItem:
     def __init__(self,path,hash,file_size=None,archive_hash=None,intra_path=None,gitpath=None,warning=None):
-        self.path = path
-        self.hash = hash
+        self.file_path = path
+        self.file_hash = hash
         self.file_size = file_size
         self.archive_hash = archive_hash
         self.intra_path = intra_path
@@ -137,9 +137,9 @@ class MasterFileItem:
         self.warning = warning
         
     def eq(self,b):
-        if self.path != b.path:
+        if self.file_path != b.file_path:
             return False
-        if self.hash != b.hash:
+        if self.file_hash != b.file_hash:
             return False
         if self.file_size != b.file_size:
             return False
@@ -178,7 +178,7 @@ class Master:
             if isEsx(fpath):
                 nesx.val += 1
             
-            ae,archive,fi = filecache.findFile(fpath0)
+            ae,archive,fi = filecache.findArchiveForFile(fpath0)
             if ae is None:
                 processed = False
                 
@@ -207,6 +207,10 @@ class Master:
                         fi.warning = 'NL'
                         nwarn.val += 1
                     self.files.append(fi)
+                    
+    def allFiles(self):
+        for fi in self.files:
+            yield fi
 
     def write(self,wfile,masterconfig):
         level = masterconfig.get('pcompression',0) if masterconfig is not None else 0
@@ -238,9 +242,9 @@ class Master:
                 wfile.write(",\n")
             nf += 1
 
-            wfile.write('{p:'+_compressJsonPath(lastpn,lastp,fi.path,level)) #fi.path is mandatory
-            if fi.hash is not None:
-                wfile.write(',h:"'+_toJsonHash(fi.hash)+'"')
+            wfile.write('{p:'+_compressJsonPath(lastpn,lastp,fi.file_path,level)) #fi.path is mandatory
+            if fi.file_hash is not None:
+                wfile.write(',h:"'+_toJsonHash(fi.file_hash)+'"')
             else:
                 #there is no lasth, but it is a special record (size==0)
                 #print(fi.__dict__)

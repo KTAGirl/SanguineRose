@@ -16,7 +16,39 @@ def _git2mo(jsonconfigfname,config):
     masterjson = Master()
     with open(masterjsonfname, 'rt',encoding='utf-8') as rf:
         masterjson.constructFromFile(rf)
-    
+        
+    mo2 = filecache.folders.mo2
+    needtorestore = {}
+    needzerosize = []
+    needtocopy = []
+    for fimaster in masterjson.allFiles():
+        fpath = mo2+fimaster.file_path
+        if fimaster.gitpath is not None:
+            needtocopy.append(fpath)
+            continue
+        fimasterhash = cache.ZEROHASH if fimaster.file_size == 0 else fimaster.file_hash
+        ficache = filecache.findFileOnly(fpath)
+        if ficache is not None and ficache.file_hash == fimasterhash:
+            #print(fimaster.file_path)
+            #dbgWait()
+            continue
+        ae,archive,fi = filecache.findArchiveForFile(fpath)
+        if ae is None:
+            print("WARNING: don't know how to restore "+fpath)
+        else:
+            if ae.file_size == 0:
+                needzerosize.append(fpath)
+            else:
+                addToDictOfLists(needtorestore,archive.file_path,ae)
+        
+    dbgWait()
+    print('zerosize:'+str(needzerosize))
+    dbgWait()
+    print('copy:'+str(needtocopy))
+    dbgWait()
+    print('restore:'+str(needtorestore))
+    dbgWait()
+    '''
     mo2 = filecache.folders.mo2
     #print(mo2)
     masterfiles = masterjson.files
@@ -69,5 +101,5 @@ def _git2mo(jsonconfigfname,config):
     print('nincache='+str(nincache)+' nmaster='+str(len(masterfiles)))
     assert(len(masterfiles)==len(masterfilesbypath))
     print('nnohash='+str(nnohash)+' nmissing='+str(nmissing)+' modified2='+str(nmodified2))
-    
+    '''
     
