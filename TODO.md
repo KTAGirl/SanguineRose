@@ -3,6 +3,7 @@
 ### MAINSTREAM:
 - git2mo.changestofolder and git2mo.discardchanges: restore according to master.json
 - noui.py
+- user config (specified in project.config, something like ../project-user.json); support only download dirs override and login credentials (github, Nexus) there
 - install.py and install plugins (dependency-driven): currently install MSVC runtime, pip, MO2.exe->zip
 - download plugins: github, nexus, mega?, LL later (with an emphasis on equal treatment of Nexus and LL modders)
 
