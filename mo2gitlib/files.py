@@ -2,7 +2,7 @@ import xxhash
 import json
 from types import SimpleNamespace
 
-from mo2git.common import *
+from mo2gitlib.common import *
 
 def wjHash(fname): #mot only wj, we ourselves are also using it
     h = xxhash.xxh64()

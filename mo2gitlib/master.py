@@ -3,8 +3,8 @@ import re
 import shutil
 import urllib
 
-from mo2git.common import *
-from mo2git.files import wjHash
+from mo2gitlib.common import *
+from mo2gitlib.files import wjHash
 
 # we have reasons to have our own Json writer:
 #  1. major. we need very specific gitdiff-friendly format

@@ -2,14 +2,14 @@ import json
 import re
 import shutil
 
-from mo2git.common import *
-from mo2git.installfile import manualUrlAndPrompt
-from mo2git.modlist import ModList
-from mo2git.common import *
-from mo2git.commands.cmdcommon import _openCache,_csAndMasterModList
-import mo2git.cache as cache
-from mo2git.folders import Folders
-import mo2git.master as master
+from mo2gitlib.common import *
+from mo2gitlib.installfile import manualUrlAndPrompt
+from mo2gitlib.modlist import ModList
+from mo2gitlib.common import *
+from mo2gitlib.cmdcommon import _openCache,_csAndMasterModList
+import mo2gitlib.cache as cache
+from mo2gitlib.folders import Folders
+import mo2gitlib.master as master
 
 def _writeManualDownloads(folders,md,modlist,config):
     mo2 = config['mo2']

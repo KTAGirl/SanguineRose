@@ -1,6 +1,6 @@
 import py7zr
 
-from mo2git.pluginhandler import ArchivePluginBase
+from mo2gitlib.pluginhandler import ArchivePluginBase
 
 class SevenzArchivePlugin(ArchivePluginBase):
     def extensions(self):

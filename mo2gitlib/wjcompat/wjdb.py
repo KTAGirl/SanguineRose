@@ -4,9 +4,9 @@ import os
 import json
 import traceback
 
-from mo2git.common import *
-from mo2git.files import File,ArchiveEntry
-import mo2git.wjcompat.binaryreader as binaryreader
+from mo2gitlib.common import *
+from mo2gitlib.files import File,ArchiveEntry
+import mo2gitlib.wjcompat.binaryreader as binaryreader
 
 def compareTimestampWithWj(a,b):
     if abs(a-b) == 0: #< 0.000001: 

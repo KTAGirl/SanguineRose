@@ -3,7 +3,7 @@ import glob
 import importlib
 import inspect
 
-from mo2git.common import *
+from mo2gitlib.common import *
 
 def _loadPlugins(plugindir,basecls,found):
     # plugindir is relative to the path of this very file
@@ -15,7 +15,7 @@ def _loadPlugins(plugindir,basecls,found):
         if modulename == '__init__' or modulename.startswith('_'):
             continue
         # print(modulename)
-        module = importlib.import_module('mo2git.'+plugindir.replace('/','.')+modulename)
+        module = importlib.import_module('mo2gitlib.'+plugindir.replace('/','.')+modulename)
         ok = False
         for name, obj in inspect.getmembers(module):
             if inspect.isclass(obj):
@@ -54,7 +54,7 @@ def _foundArchivePlugin(archiveplugins,plugin):
 
 archiveplugins = {} # file_extension -> ArchivePluginBase
 archiveexts = []
-_loadPlugins('plugins/archives/',ArchivePluginBase,lambda plugin: _foundArchivePlugin(archiveplugins,plugin))
+_loadPlugins('plugins/archive/',ArchivePluginBase,lambda plugin: _foundArchivePlugin(archiveplugins,plugin))
 #print(archiveplugins)
 for ext in archiveplugins:
     assert(ext not in archiveexts)

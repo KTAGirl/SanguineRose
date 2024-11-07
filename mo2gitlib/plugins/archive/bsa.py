@@ -1,6 +1,6 @@
 from bethesda_structs.archive import BSAArchive
 
-from mo2git.pluginhandler import ArchivePluginBase
+from mo2gitlib.pluginhandler import ArchivePluginBase
 
 class BsaArchivePlugin(ArchivePluginBase):
     def extensions(self):

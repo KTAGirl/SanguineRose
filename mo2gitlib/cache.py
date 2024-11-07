@@ -5,12 +5,12 @@ import pickle
 import json
 import shutil
 
-from mo2git.common import *
-from mo2git.files import File,ArchiveEntry,wjHash
-import mo2git.wjcompat.wjdb as wjdb
-import mo2git.pluginhandler as pluginhandler
-import mo2git.tasks as tasks
-from mo2git.folders import Folders#,NoFolders
+from mo2gitlib.common import *
+from mo2gitlib.files import File,ArchiveEntry,wjHash
+import mo2gitlib.wjcompat.wjdb as wjdb
+import mo2gitlib.pluginhandler as pluginhandler
+import mo2gitlib.tasks as tasks
+from mo2gitlib.folders import Folders#,NoFolders
 
 def _hcFoundDownload(archives,archivesbypath,ndup,ar):
     if ar.file_path.endswith('.meta'):

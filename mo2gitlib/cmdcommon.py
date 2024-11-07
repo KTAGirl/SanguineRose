@@ -1,12 +1,12 @@
 import os
 import re
-
-from mo2git.common import *
-from mo2git.installfile import installfileModidManualUrlAndPrompt
-from mo2git.folders import Folders
-from mo2git.modlist import ModList
-import mo2git.cache as cache
 import json5 #only for user configs! Very slow for any other purpose
+
+from mo2gitlib.common import *
+from mo2gitlib.installfile import installfileModidManualUrlAndPrompt
+from mo2gitlib.folders import Folders
+from mo2gitlib.modlist import ModList
+import mo2gitlib.cache as cache
 
 def _loadUserConfig(rf): #don't use for anything except for hand-editable user configs! Very slow for any other purpose
     try:

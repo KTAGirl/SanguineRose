@@ -1,4 +1,4 @@
-from mo2git.common import *
+from mo2gitlib.common import *
 
 def traceReader(x):
     # print("'"+str(x)+"'")

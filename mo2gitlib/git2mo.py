@@ -1,9 +1,9 @@
 import os
 
-from mo2git.common import *
-import mo2git.cache as cache
-from mo2git.commands.cmdcommon  import _openCache,_csAndMasterModList
-from mo2git.master import Master
+from mo2gitlib.common import *
+import mo2gitlib.cache as cache
+from mo2gitlib.cmdcommon import _openCache,_csAndMasterModList
+from mo2gitlib.master import Master
 
 def _git2mo(jsonconfigfname,config):
     compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)

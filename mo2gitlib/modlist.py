@@ -1,4 +1,4 @@
-from mo2git.common import *
+from mo2gitlib.common import *
 
 class ModList:
     def __init__(self,path):

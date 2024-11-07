@@ -1,6 +1,6 @@
 import os
 
-from mo2git.common import *
+from mo2gitlib.common import *
 
 # we are compatible with wj paths, which are os.abspath.lower()
 # all our dir end with '\\'
@@ -85,7 +85,7 @@ class Folders:
         #print(self.ignore)
         #dbgWait()
  
-        self.cache = _configDirPath(jsonconfig.get('cache',self.configdir + '..\\mo2git.cache\\'),self.configdir,jsonconfig)
+        self.cache = _configDirPath(jsonconfig.get('cache',self.configdir + '..\\mo2gitlib.cache\\'),self.configdir,jsonconfig)
         self.tmp = _configDirPath(jsonconfig.get('tmp',self.configdir + '..\\mo2git.tmp\\'),self.configdir,jsonconfig)
         self.github=_configDirPath(jsonconfig.get('github',self.configdir),self.configdir,jsonconfig)
         #print(self.__dict__)

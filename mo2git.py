@@ -3,23 +3,31 @@ import time
 import os
 import json
 
-from mo2git.folders import Folders
-from mo2git.common import isEslFlagged,scriptDirFrom__file__
-from mo2git.commands.cmdcommon import _openCache,_csAndMasterModList,enabledModSizes,_loadUserConfig
-import mo2git.commands.mo2git as mo2git
-import mo2git.commands.git2mo as git2mo
+sys.path.append(os.path.split(os.path.abspath(__file__))[0])
 
-if not sys.version_info >= (3, 10):
-    print('Sorry, mo2git needs at least Python 3.10')
-    sys.exit(4) # why not?
-    
-def run(configfilepath):
-    with open(configfilepath,'rt',encoding='utf-8') as rf:
-        config = _loadUserConfig(rf)
-        
+from mo2gitlib.common import *
+from mo2gitlib.folders import Folders
+from mo2gitlib.cmdcommon import _openCache,_csAndMasterModList,enabledModSizes,_loadUserConfig
+import mo2gitlib.mo2git as mo2git
+import mo2gitlib.git2mo as git2mo
+
+if __name__ == '__main__':
+    if not sys.version_info >= (3, 10):
+        print('Sorry, mo2git needs at least Python 3.10')
+        sys.exit(4) # why not 4?
+
     argv = sys.argv
     argc = len(argv)
     # print(argv)
+
+    thisscriptcalledas = os.path.split(argv[0])[1]
+    configfilepath = os.path.abspath(argv[1])
+    argv = argv[1:]
+    argc -= 1
+        
+    with open(configfilepath,'rt',encoding='utf-8') as rf:
+        config = _loadUserConfig(rf)
+        
     ok = False
     started = time.perf_counter()    
     if argc >= 2:
@@ -46,13 +54,13 @@ def run(configfilepath):
                     print(sizes)
                     ok = True
 
-    exe = os.path.split(argv[0])[1]
     if ok:
         elapsed = round(time.perf_counter()-started,2)
-        print(exe+' took '+str(elapsed)+' sec')
+        print(thisscriptcalledas+' took '+str(elapsed)+' sec')
     else:
         print('Usage:\n\t'
-               +exe+' mo2git\n\t'
-               +exe+' debug.dumpwjdb <target-folder>\n\t'
-               +exe+' debug.modsizes\n'
+               +thisscriptcalledas+' <project-config> mo2git\n\t'
+               +thisscriptcalledas+' <project-config> git2mo\n\t'
+               +thisscriptcalledas+' <project-config> debug.dumpwjdb <target-folder>\n\t'
+               +thisscriptcalledas+' <project-config> debug.modsizes\n'
              )

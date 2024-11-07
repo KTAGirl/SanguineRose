@@ -1,6 +1,6 @@
 import zipfile
 
-from mo2git.pluginhandler import ArchivePluginBase
+from mo2gitlib.pluginhandler import ArchivePluginBase
 
 class ZipArchivePlugin(ArchivePluginBase):
     def extensions(self):
