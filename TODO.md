@@ -2,8 +2,7 @@
 
 ### MAINSTREAM:
 - remove PROJECT.py (in project there should be only 2 configs PROJECT.json and PROJECT-user.json, and .bat files such as PROJECT.bat, PROJECT-debug.bat, and shortcuts PROJECT-mo2git.bat, PROJECT-git2mo.bat etc.)
-- replace assert() with common.always_assert() wherever modder's/user's errors are expected (mostly in Folders)
-- targetgithub dir->filecache, rm wjHash() from master.py
+- cache targetgithub dir in filecache, rm wjHash() from master.py
 - git2mo.changestofolder and git2mo.discardchanges: restore according to master.json
 - better and more systemic logging
 - fix ESXS stats
@@ -16,7 +15,7 @@
 - masterjson -> under _microCache()
 - reading masterjson -> Tasks
 - Folders -> SharedPublish, proc-level memoizing
-- Cache in a monitoring daemon?
+- Cache in noui.py, with a monitoring daemon
 - hashing -> Tasks
 - unpacking archives -> Tasks
 - jsonfiles (all) -> sharedmem
