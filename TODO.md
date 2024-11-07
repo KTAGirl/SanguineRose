@@ -1,9 +1,9 @@
 ## TODO:
 
 ### MAINSTREAM:
-- remove PROJECT.py (in project there should be only 2 configs PROJECT.json and PROJECT-user.json, and .bat files such as PROJECT.bat, PROJECT-debug.bat, and shortcuts PROJECT-mo2git.bat, PROJECT-git2mo.bat etc.)
-- cache targetgithub dir in filecache, rm wjHash() from master.py
 - git2mo.changestofolder and git2mo.discardchanges: restore according to master.json
+- cache targetgithub dir in filecache, rm wjHash() from master.py
+- noui.py
 - better and more systemic logging
 - fix ESXS stats
 - mo.genprofiles command-line param
