@@ -2,8 +2,12 @@
 
 ### MAINSTREAM:
 - git2mo.changestofolder and git2mo.discardchanges: restore according to master.json
-- cache targetgithub dir in filecache, rm wjHash() from master.py
 - noui.py
+- install.py and install plugins (dependency-driven): currently install MSVC runtime, pip, MO2.exe->zip
+- download plugins: github, nexus, mega?, LL later (with an emphasis on equal treatment of Nexus and LL modders)
+
+### IMPROVEMENTS:
+- cache targetgithub dir in filecache, rm wjHash() from master.py
 - better and more systemic logging
 - fix ESXS stats
 - mo.genprofiles command-line param
