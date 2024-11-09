@@ -8,8 +8,8 @@ sys.path.append(os.path.split(os.path.abspath(__file__))[0])
 from mo2gitlib.common import *
 from mo2gitlib.folders import Folders
 from mo2gitlib.cmdcommon import _openCache,_csAndMasterModList,enabledModSizes,_loadUserConfig
-import mo2gitlib.mo2git as mo2git
-import mo2gitlib.git2mo as git2mo
+import mo2gitlib.cmdmo2git as cmdmo2git
+import mo2gitlib.cmdgit2mo as cmdgit2mo
 
 if __name__ == '__main__':
     if not sys.version_info >= (3, 10):
@@ -34,11 +34,11 @@ if __name__ == '__main__':
         match argv[1].lower():
             case 'mo2git':
                 if argc == 2:
-                   mo2git._mo2git(configfilepath,config)
+                   cmdmo2git._mo2git(configfilepath,config)
                    ok = True 
             case 'git2mo':
                 if argc == 2:
-                   git2mo._git2mo(configfilepath,config)
+                   cmdgit2mo._git2mo(configfilepath,config)
                    ok = True
             case 'debug.dumpwjdb':
                 if argc == 3:
