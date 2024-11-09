@@ -7,6 +7,7 @@ from mo2gitlib.installfile import installfileModidManualUrlAndPrompt
 from mo2gitlib.folders import Folders
 from mo2gitlib.modlist import ModList
 import mo2gitlib.cache as cache
+import mo2gitlib.mo2compat as mo2compat
 
 def _loadUserConfig(rf): #don't use for anything except for hand-editable user configs! Very slow for any other purpose
     try:
@@ -29,9 +30,7 @@ def _csAndMasterModList(config):
     masterprofilename=compiler_settings['Profile']
     return compiler_settings_fname,compiler_settings,masterprofilename,ModList(mo2+'profiles\\'+masterprofilename+'\\')
 
-def _openCache(jsonconfigname,config,mastermodlist,ignore,dbgdumpwjdb=None):
-    folders = Folders(jsonconfigname,config,ignore)
-    
+def _openCache(jsonconfigname,config,mastermodlist,folders,dbgdumpwjdb=None):
     allarchivenames = []
     for mod in mastermodlist.allEnabled():
         if folders.isOwnMod(mod.lower()):
