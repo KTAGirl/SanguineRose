@@ -350,6 +350,7 @@ class Parallel:
         maintwait = 0.
         maintown = 0.
         maintschedule = 0.
+        owntaskstats = {}
         while True:
             # place items in process queues, until each has 2 tasks, or until there are no tasks
             sch0 = time.perf_counter()
@@ -357,7 +358,7 @@ class Parallel:
                 pass
             maintschedule += (time.perf_counter()-sch0)
 
-            (overallstatus,towntasks) = self._runOwnTasks() #ATTENTION: own tasks may call addLateTask() within
+            (overallstatus,towntasks) = self._runOwnTasks(owntaskstats) #ATTENTION: own tasks may call addLateTask() within
             maintown += towntasks
             if overallstatus == 3:
                 break # while True
@@ -414,8 +415,11 @@ class Parallel:
         print(_printTime()+'Parallel: main thread: waited+owntasks+scheduler+unaccounted=elapsed '
                           +str(round(maintwait,2))+'+'+str(round(maintown,2))+'+'+str(round(maintschedule,2))
                           +'+'+str(round(maintelapsed-maintwait-maintown-maintschedule,2))+'='+str(round(maintelapsed,2))+'s, '
-                          +str(100-round(100*maintwait/maintelapsed,2))+'% load') 
-        self.isrunning = False 
+                          +str(100-round(100*maintwait/maintelapsed,2))+'% load')
+        print("Parallel: breakdown per task type (task name before '.'):")
+        for key,val in owntaskstats.items():
+            print('  '+key+': '+str(val[0])+', took '+str(round(val[1],2))+'/'+str(round(val[2],2))+'s')
+        self.isrunning = False
 
     def _scheduleBestTask(self):
         node = self._findBestCandidate()
@@ -456,7 +460,7 @@ class Parallel:
             assert(name not in self.doneowntasks)
         return done
         
-    def _runOwnTasks(self): # returns overall status: 1: work to do, 2: all running, 3: all done
+    def _runOwnTasks(self,owntaskstats): # returns overall status: 1: work to do, 2: all running, 3: all done
         towntasks = 0.
         for ot in self.owntasks:
             #print('task: '+ot.task.name)
@@ -487,6 +491,11 @@ class Parallel:
             cpu = time.process_time() - tp0
             print(_printTime()+'Parallel: done own task '+ot.task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
             towntasks += elapsed
+            
+            keystr = ot.task.name.split('.')[0]
+            oldstat = owntaskstats.get(keystr,(0,0.,0.))
+            owntaskstats[keystr] = (oldstat[0]+1,oldstat[1]+cpu,oldstat[2]+elapsed)
+            
             self._updateWeight(ot.task.name,elapsed)
             self.doneowntasks[ot.task.name] = (ot,out)
         
