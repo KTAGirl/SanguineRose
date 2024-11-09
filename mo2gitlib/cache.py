@@ -289,7 +289,7 @@ def _loadJsonFilesTaskFunc(param):
     info(str(len(jsonfilesbypath))+' JSON files')
     return (jsonfilesbypath,)
     
-def _ownJsonFiles2SelfTaskFunc(cache,out):
+def _ownJsonFiles2SelfTaskFunc(cache,parallel,out):
     (jsonfilesbypath,) = out
     cache.jsonfilesbypath = {}
     cache.filteredjsonfiles = []
@@ -299,7 +299,8 @@ def _ownJsonFiles2SelfTaskFunc(cache,out):
             cache.jsonfilesbypath[key] = val
         else:
             cache.filteredjsonfiles.append(val)
-    return (cache.jsonfilesbypath,)
+    cache.pubjsonfilesbypath = tasks.SharedPublication(parallel,cache.jsonfilesbypath)
+    return (tasks.makeSharedPublicationParam(cache.pubjsonfilesbypath),)
 
 def _loadJsonArchiveEntriesTaskFunc(param):
     (cachedir,) = param
@@ -432,17 +433,27 @@ def _ownScanDownloads2SelfTaskFunc(cache,out):
           +str(len(cache.jsonarchives))+' JSON archives')
 
 _cachedFilesByPath = None #it is constant, so we can memoize it
+_cachedJsonFilesByPath = None
 
 def _scanMo2TaskFunc(param,fromhc2toself,fromjsonfiles2self):
     (dir,folders) = param
     (_,pubfilesbypath) = fromhc2toself
-    (jsonfilesbypath,) = fromjsonfiles2self
+    (pubjsonfilesbypath,) = fromjsonfiles2self
+    
     global _cachedFilesByPath
     if _cachedFilesByPath is None:
         filesbypath = tasks.fromPublication(pubfilesbypath)
         _cachedFilesByPath = filesbypath
     else:
         filesbypath = _cachedFilesByPath
+    
+    global _cachedJsonFilesByPath
+    if _cachedJsonFilesByPath is None:
+        jsonfilesbypath = tasks.fromPublication(pubjsonfilesbypath)
+        _cachedJsonFilesByPath = jsonfilesbypath
+    else:
+        jsonfilesbypath = _cachedJsonFilesByPath
+    
     nmodified = Val(0)
     ldout = _LoadDirOut()
     nscanned = Cache._loadDir(ldout,dir,
@@ -510,7 +521,7 @@ class Cache:
                                         lambda _,out: _ownJsonArchives2SelfTaskFunc(self,out),
                                         None,['jsonarchives'])
             owntaskjsonfiles2self = tasks.Task('ownjsonfiles2self',
-                                        lambda _,out: _ownJsonFiles2SelfTaskFunc(self,out),
+                                        lambda _,out: _ownJsonFiles2SelfTaskFunc(self,parallel,out),
                                         None,['jsonfiles'])
             owntaskjsonarchiveentries2self = tasks.Task('ownjsonarchiveentries2self',
                                         lambda _,out: _ownJsonArchiveEntries2SelfTaskFunc(self,out),

@@ -61,7 +61,7 @@ class SharedReturn:
         
     def __del__(self):
         self.close()
-                        
+
 class SharedPublication:
     def __init__(self,parallel,item):
         data = pickle.dumps(item)
@@ -69,6 +69,7 @@ class SharedPublication:
         shared = self.shm.buf
         shared[:]=data
         name = self.shm.name
+        print('SharedPublication: '+name)
         assert(name not in parallel.publications)
         parallel.publications[name] = self.shm
         self.closed = False
@@ -344,6 +345,8 @@ class Parallel:
         self.runningtasks = {} # name->(procnum,started,node)
         self.donetasks = {} # name->(node,out)        
         self.doneowntasks = {} # name->(node,out)
+        maintstarted = time.perf_counter()
+        maintwait = 0
         while True:
             # place items in process queues, until each has 2 tasks, or until there are no tasks
             while self._scheduleBestTask():
@@ -377,6 +380,7 @@ class Parallel:
                 
             dwait = time.perf_counter() - waitt0
             strwait=str(round(dwait,2))+'s'
+            maintwait += dwait
             if dwait < 0.005:
                 strwait += '[MAIN THREAD SERIALIZATION]'
             
@@ -396,6 +400,9 @@ class Parallel:
             assert(self.processesload[procnum] > 0)
             self.processesload[procnum] -= 1
             
+        maintelapsed = time.perf_counter()-maintstarted
+        print(_printTime()+'Parallel: main thread: waited/elapsed '+str(round(maintwait,2))+'/'+str(round(maintelapsed,2))+'s, '
+                          +str(100-round(100*maintwait/maintelapsed,2))+'% load') 
         self.isrunning = False 
 
     def _scheduleBestTask(self):
