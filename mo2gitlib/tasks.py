@@ -42,6 +42,9 @@ _started = time.perf_counter()
 
 def _printTime():
     return str(round(time.perf_counter()-_started,2))+': '
+    
+def _printDt(dt):
+    return str(round(dt,2))
 
 class SharedReturn:
     def __init__(self,item):
@@ -152,7 +155,7 @@ def _procFunc(parentstarted,num,inq,outq):
             taskplus = inq.get()
             dwait = time.perf_counter() - waitt0
             # print(dwait)
-            waitstr = str(round(dwait,2))+'s'
+            waitstr = _printDt(dwait)+'s'
             
             if taskplus is None:
                 break #while True
@@ -174,7 +177,7 @@ def _procFunc(parentstarted,num,inq,outq):
             out = _runTask(task,taskplus[2:])
             elapsed = time.perf_counter() - t0
             cpu = time.process_time() - tp0
-            print(_printTime()+'Process #'+str(num+1)+': done task '+task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
+            print(_printTime()+'Process #'+str(num+1)+': done task '+task.name+', cpu/elapsed='+_printDt(cpu)+'/'+_printDt(elapsed)+'s')
             outq.put((num,task.name,(cpu,elapsed),out))
     except Exception as e:
         print('Process #'+str(num+1)+': exception: '+str(e))
@@ -390,7 +393,7 @@ class Parallel:
                 continue #while True
                 
             dwait = time.perf_counter() - waitt0
-            strwait=str(round(dwait,2))+'s'
+            strwait=_printDt(dwait)+'s'
             maintwait += dwait
             if dwait < 0.005:
                 strwait += '[MAIN THREAD SERIALIZATION]'
@@ -403,7 +406,7 @@ class Parallel:
             dt = time.perf_counter() - started
             print(_printTime()+'Parallel: after waiting for '+strwait+
                   ', received results of task '+taskname+' elapsed/task/cpu='
-                  +str(round(dt,2))+'/'+str(round(taskt,2))+'/'+str(round(cput,2))+'s')
+                  +_printDt(dt)+'/'+_printDt(taskt)+'/'+_printDt(cput)+'s')
             self._updateWeight(taskname,taskt)
             del self.runningtasks[taskname]
             assert(taskname not in self.donetasks)
@@ -413,12 +416,12 @@ class Parallel:
             
         maintelapsed = time.perf_counter()-maintstarted
         print(_printTime()+'Parallel: main thread: waited+owntasks+scheduler+unaccounted=elapsed '
-                          +str(round(maintwait,2))+'+'+str(round(maintown,2))+'+'+str(round(maintschedule,2))
-                          +'+'+str(round(maintelapsed-maintwait-maintown-maintschedule,2))+'='+str(round(maintelapsed,2))+'s, '
+                          +_printDt(maintwait)+'+'+_printDt(maintown)+'+'+_printDt(maintschedule)
+                          +'+'+_printDt(maintelapsed-maintwait-maintown-maintschedule)+'='+_printDt(maintelapsed)+'s, '
                           +str(100-round(100*maintwait/maintelapsed,2))+'% load')
         print("Parallel: breakdown per task type (task name before '.'):")
         for key,val in owntaskstats.items():
-            print('  '+key+': '+str(val[0])+', took '+str(round(val[1],2))+'/'+str(round(val[2],2))+'s')
+            print('  '+key+': '+str(val[0])+', took '+_printDt(val[1])+'/'+_printDt(val[2])+'s')
         self.isrunning = False
 
     def _scheduleBestTask(self):
@@ -489,7 +492,7 @@ class Parallel:
             out = _runTask(ot.task,params)
             elapsed = time.perf_counter() - t0
             cpu = time.process_time() - tp0
-            print(_printTime()+'Parallel: done own task '+ot.task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
+            print(_printTime()+'Parallel: done own task '+ot.task.name+', cpu/elapsed='+_printDt(cpu)+'/'+_printDt(elapsed)+'s')
             towntasks += elapsed
             
             keystr = ot.task.name.split('.')[0]

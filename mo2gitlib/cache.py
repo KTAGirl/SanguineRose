@@ -358,9 +358,14 @@ def _findArByName(dict1,dict2,arname):
     return None
 
 def _ownFilterTaskFunc(cache,parallel,folders,fromloadvfs):
+    t0 = time.perf_counter()
+
     (sharedparam,cachedataoverwrites) = fromloadvfs
     cache.cachedata |= cachedataoverwrites
+    
+    tsh0 = time.perf_counter()
     unfilteredarchiveentries = tasks.receivedSharedReturn(parallel,sharedparam)
+    tsh = time.perf_counter()-tsh0
 
     allarchivehashes = {}
     #print(dbgFirst(cache.archivesbypath).__dict__)
@@ -382,8 +387,14 @@ def _ownFilterTaskFunc(cache,parallel,folders,fromloadvfs):
             #print(ae.toJSON())
             #dbgWait()
             cache.archiveentries[ae.file_hash] = ae
+
     cache.publishedarchiveentries = tasks.SharedPublication(parallel,cache.archiveentries)
+
+    tsh0 = time.perf_counter()
     print('Filtering VFS: '+str(len(cache.archiveentries))+' survived out of '+str(len(unfilteredarchiveentries)))
+    tsh += time.perf_counter()-tsh0
+    print('Filtering took '+str(round(time.perf_counter()-t0,2))+'s, including '+str(round(tsh,2))+'s working with shared memory (pickling/unpickling)')
+    #dbgWait()
     
 ### Scanning
 
