@@ -6,6 +6,7 @@ import json
 import traceback
 import pickle
 from multiprocessing import Process, Queue as PQueue, shared_memory
+import sys
 
 _procnum = -1 # number of child process
 def thisProcNum():
@@ -346,22 +347,31 @@ class Parallel:
         self.donetasks = {} # name->(node,out)        
         self.doneowntasks = {} # name->(node,out)
         maintstarted = time.perf_counter()
-        maintwait = 0
+        maintwait = 0.
+        maintown = 0.
+        maintschedule = 0.
         while True:
             # place items in process queues, until each has 2 tasks, or until there are no tasks
+            sch0 = time.perf_counter()
             while self._scheduleBestTask():
                 pass
+            maintschedule += (time.perf_counter()-sch0)
 
-            overallstatus = self._runOwnTasks() #ATTENTION: own tasks may call addLateTask() within
+            (overallstatus,towntasks) = self._runOwnTasks() #ATTENTION: own tasks may call addLateTask() within
+            maintown += towntasks
             if overallstatus == 3:
                 break # while True
 
+            sch0 = time.perf_counter()
             while self._scheduleBestTask(): #late tasks may have been added, need to check again
                 pass
+            maintschedule += (time.perf_counter()-sch0)
 
             # waiting for other processes to finish
             waitt0 = time.perf_counter()
             got = self.outq.get()
+            if __debug__:
+                print('Parallel: response size:'+str(len(pickle.dumps(got))))
             if isinstance(got,Exception):
                 print('Parallel: An exception within child process reported. Shutting down')
                 
@@ -401,7 +411,9 @@ class Parallel:
             self.processesload[procnum] -= 1
             
         maintelapsed = time.perf_counter()-maintstarted
-        print(_printTime()+'Parallel: main thread: waited/elapsed '+str(round(maintwait,2))+'/'+str(round(maintelapsed,2))+'s, '
+        print(_printTime()+'Parallel: main thread: waited+owntasks+scheduler+unaccounted=elapsed '
+                          +str(round(maintwait,2))+'+'+str(round(maintown,2))+'+'+str(round(maintschedule,2))
+                          +'+'+str(round(maintelapsed-maintwait-maintown-maintschedule,2))+'='+str(round(maintelapsed,2))+'s, '
                           +str(100-round(100*maintwait/maintelapsed,2))+'% load') 
         self.isrunning = False 
 
@@ -421,6 +433,8 @@ class Parallel:
                 assert(len(taskplus)==2+len(node.task.dependencies))
                 self.inqueues[pidx].put(taskplus)
                 print(_printTime()+'Parallel: assigned task '+node.task.name+' to process #'+str(pidx+1))
+                if __debug__:
+                    print('Parallel: request size:'+str(len(pickle.dumps(taskplus))))
                 self.runningtasks[node.task.name] = (pidx,time.perf_counter(),node)
                 self.processesload[pidx] += 1
                 return True
@@ -442,7 +456,8 @@ class Parallel:
             assert(name not in self.doneowntasks)
         return done
         
-    def _runOwnTasks(self): # returns overall status: 1: work to do, 2: all running, 3: all done            
+    def _runOwnTasks(self): # returns overall status: 1: work to do, 2: all running, 3: all done
+        towntasks = 0.
         for ot in self.owntasks:
             #print('task: '+ot.task.name)
             if ot.task.name in self.doneowntasks:
@@ -471,10 +486,11 @@ class Parallel:
             elapsed = time.perf_counter() - t0
             cpu = time.process_time() - tp0
             print(_printTime()+'Parallel: done own task '+ot.task.name+', cpu/elapsed='+str(round(cpu,2))+'/'+str(round(elapsed,2))+'s')
+            towntasks += elapsed
             self._updateWeight(ot.task.name,elapsed)
             self.doneowntasks[ot.task.name] = (ot,out)
         
-        # status must run after own tasks, because they may call addLateTask() and addLateOwnTask()
+        # status calculation must run after own tasks, because they may call addLateTask() and addLateOwnTask()
         allrunningordone = True
         alldone = True
         for node in self.owntasks:
@@ -489,8 +505,8 @@ class Parallel:
                         allrunningordone = False
                         break
         if not alldone:
-            return 2 if allrunningordone else 1
-        return 3
+            return (2,towntasks) if allrunningordone else (1,towntasks)
+        return (3,towntasks)
         
     def addLateTask(self,task): #to be called from owntask.f()
         assert(self.isrunning)
