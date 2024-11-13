@@ -41,7 +41,7 @@ class _HashedFile:
         n = br.ReadInt32()
         assert(n>=0)
         self.children = []
-        for i in range(0,n):
+        for i in range(n):
             self.children.append(_HashedFile(br))
             
     def dbgString(self):
@@ -142,43 +142,15 @@ def hcFile():
     home_dir = os.path.expanduser("~")
     return home_dir+'\\AppData\\Local\\Wabbajack\\GlobalHashCache2.sqlite'
 
-def loadHC(dirs):
-    print(dirs)
-    lodirs = []
-    for dir in dirs:
-        dir0 = dir[0]
-        assert(dir0.lower() == dir0)
-        lodirs.append(dir0)
-        for d2 in lodirs:
-            if d2 == dir0:
-                break
-            assert(not dir0.startswith(d2)) # if folders are overlapping, smaller one MUST go first
-            if d2.startswith(dir0):
-                info('loadHC(): overlapping dirs, '+d2+' will be excluded from '+dir0)
-    
+def loadHC(dst):    
     con = sqlite3.connect(hcFile())
     cur = con.cursor()
     nn = 0
     nfiltered = 0
     for row in cur.execute('SELECT Path,LastModified,Hash FROM HashCache'):
-        nn += 1
-        idx = -1
-        for i in range(0,len(lodirs)):
-            if row[0].startswith(lodirs[i]):
-                idx = i
-                break
-        if idx < 0:
-            nfiltered += 1
-            continue
-        hash = _normalizeHash(row[2])
-        
-        newa = File(hash,_wjTimestampToPythonTimestamp(row[1]),row[0])
+        hash = _normalizeHash(row[2])        
+        fi = File(hash,_wjTimestampToPythonTimestamp(row[1]),row[0])
         # olda = out[idx].get(hash)
-        dirs[idx][1](newa)
+        dst(fi)
     con.close()
     print('loadHC: nn='+str(nn)+' filtered out:'+str(nfiltered))
-
-
-
-
-     

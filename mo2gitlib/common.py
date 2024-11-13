@@ -100,6 +100,7 @@ def allEsxs(mod,mo2):
     esxs = esxs + glob.glob(mo2+'mods/' + mod + '/*.esm')
     return esxs
 
+'''
 class Elapsed:
     def __init__(self):
         self.t0 = time.perf_counter()
@@ -108,6 +109,7 @@ class Elapsed:
         t1 = time.perf_counter()
         print(where+' took '+str(round(t1-self.t0,2))+'s')
         self.t0 = t1
+'''
 
 class Val:
     def __init__(self,initval):

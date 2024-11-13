@@ -171,7 +171,7 @@ class Master:
         mo2len = len(mo2)
         self.files = []
         for fpath0 in files:
-            assert(fpath0.lower() == fpath0)
+            assert(fpath0.islower())
             assert(fpath0.startswith(mo2))
             fpath = fpath0[mo2len:]
 

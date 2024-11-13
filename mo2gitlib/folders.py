@@ -11,8 +11,8 @@ def _normalizeDirPath(path):
     assert(not path.endswith('\\'))
     return path.lower()+'\\'
 
-def _assertNormalizedDirPath(path):
-    assert(path == os.path.abspath(path).lower()+'\\')
+def _isNormalizedDirPath(path):
+    return path == os.path.abspath(path).lower()+'\\'
 
 def _normalizeFilePath(path):
     assert(not path.endswith('\\') and not path.endswith('/'))
@@ -20,27 +20,24 @@ def _normalizeFilePath(path):
     assert('/' not in path)
     return path.lower()
 
-def _assertNormalizedFilePath(path):
-    assert(path == os.path.abspath(path).lower())
+def _isNormalizedFilePath(path):
+    return path == os.path.abspath(path).lower()
 
 def _toShortPath(base,path):
     assert(path.startswith(base))
     return path[len(base):]
 
-def _assertShortFilePath(fpath):
-    assert(fpath == fpath.lower())
+def _isShortFilePath(fpath):
     assert(not fpath.endswith('\\') and not fpath.endswith('/'))
-    assert(not os.path.isabs(fpath))
+    if not fpath.islower(): return False
+    return not os.path.isabs(fpath)
 
-def _assertShortDirPath(fpath):
-    assert(fpath == fpath.lower())
-    assert(fpath.endswith('\\'))
-    assert(not os.path.isabs(fpath))
+def _isShortDirPath(fpath):
+    return fpath.islower() and fpath.endswith('\\')) and not os.path.isabs(fpath)
     
-def _assertNormalizedFileName(fname):
-    assert('/' not in fname)
-    assert('\\' not in fname)
-    assert(fname.lower()==fname)
+def _isNormalizedFileName(fname):
+    if '/' in fname or '\\' in fname: return False
+    return fname.islower()
     
 def _normalizeConfigDirPath(path,configdir): #relative to config dir
     if os.path.isabs(path):
@@ -120,11 +117,11 @@ class Folders:
         return arname in self.allarchivenames
         
     def isOwnMod(self,mod):
-        _assertNormalizedFileName(mod)
+        assert(_isNormalizedFileName(mod))
         return mod in self.ownmods
         
     def isOwnModsFile(self,fpath):
-        _assertNormalizedFilePath(fpath)
+        assert(_isNormalizedFilePath(fpath))
         for ownmod in self.ownmods:
             ownpath = self.mo2+'mods\\'+ownmod+'\\'
             if fpath.startswith(ownpath):
@@ -134,28 +131,28 @@ class Folders:
     def allOwnMods(self):
         for ownmod in self.ownmods:
             yield ownmod
-   
+    
     def isMo2ExactDirIncluded(self,dirpath):
         # returns: None if ignored, False if mo2excluded, 1 if regular (not excluded)
         # unlike isMo2FilePathIncluded(), does not return 2; instead, on receiving False, caller should call getReinclusions()
         #print(dirpath)
-        _assertNormalizedDirPath(dirpath)
+        assert(_isNormalizedDirPath(dirpath))
         assert(dirpath.startswith(self.mo2))
         if dirpath in self.ignore:
             return None
         return False if dirpath in self.mo2excludes else 1
-        
+    '''
     def allReinclusionsForIgnoredOrExcluded(self,dirpath):
-        _assertNormalizedDirPath(dirpath)
+        assert(_isNormalizedDirPath(dirpath))
         assert(dirpath in self.ignore or dirpath in self.mo2excludes)
         out = []
         for rein in self.mo2reincludes:
             if rein.startswith(dirpath):
                 yield rein
-        
+    '''
     def isMo2FilePathIncluded(self,fpath): 
         # returns: None if ignored, False if mo2excluded, 1 if regular (not excluded), 2 if mo2reincluded
-        _assertNormalizedFilePath(fpath)
+        assert(_isNormalizedFilePath(fpath))
         assert(fpath.startswith(self.mo2))
         included = True
         for ig in self.ignore:
@@ -175,31 +172,37 @@ class Folders:
         return included
 
     def filePathToShortPath(self,fpath):
-        _assertNormalizedFilePath(fpath)
+        assert(_isNormalizedFilePath(fpath))
         return _renormalizeToShortPath(self.mo2,dirpath)
 
     def dirPathToShortPath(self,dirpath):
-        _assertNormalizedDirPath(dirpath)
+        assert(_isNormalizedDirPath(dirpath))
         return _renormalizeToShortPath(self.mo2,dirpath)
             
     def shortFilePathToPath(self,fpath):
-        _assertShortFilePath(fpath)
+        assert(_isShortFilePath(fpath))
         return self.mo2+fpath
         
     def shortDirPathToPath(self,dirpath):
-        _assertShortDirPath(dirpath)
+        assert(_isShortDirPath(dirpath))
         return self.mo2+dirpath
         
     def normalizeFileName(fname):
         assert('\\' not in fname and '/' not in fname)
         return fname.lower()
+
+    def isNormalizedFilePath(fpath):
+        return _isNormalizedFilePath(fpath)
         
     def normalizeFilePath(fpath):
         return _normalizeFilePath(fpath)
         
     def normalizeDirPath(fpath):
         return _normalizeDirPath(fpath)
-        
+
+    def isNormalizedDirPath(fpath):
+        return _isNormalizedDirPath(fpath)
+                
     def normalizeArchiveIntraPath(fpath):
-        _assertShortFilePath(fpath.lower())
+        assert(_isShortFilePath(fpath.lower()))
         return fpath.lower()
