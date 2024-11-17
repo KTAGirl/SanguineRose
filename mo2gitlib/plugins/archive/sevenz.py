@@ -28,7 +28,7 @@ class SevenzArchivePlugin(ArchivePluginBase):
         print('Extraction done')
         return out
         
-    def extractAll(self,archive,targetpath):
+    def extract_all(self, archive, targetpath):
         print('Extracting from '+archive+'...')
         sevenz = py7zr.SevenZipFile(archive)
         sevenz.extractall(path=targetpath)

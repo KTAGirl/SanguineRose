@@ -1,318 +1,406 @@
-from mo2gitlib.common import *
-import mo2gitlib.tasks as tasks
-from mo2gitlib.files import File
+import pathlib
+import pickle
+import stat
+import time
 
-def _getFileTimestamp(s):
+import mo2gitlib.tasks as tasks
+from mo2gitlib.common import *
+from mo2gitlib.files import File, calculate_file_hash, compare_timestamp_with_wj
+from mo2gitlib.folders import Folders
+
+
+def _get_file_timestamp(fname: str) -> float:
     path = pathlib.Path(fname)
     return path.lstat().st_mtime
 
-def _getFileTimestampFromSt(st):
+
+def _get_file_timestamp_from_st(st: os.stat_result) -> float:
     return st.st_mtime
 
-def _getFromOneOfDicts(dicttolook,dicttolook2,key):
+
+def _get_from_one_of_dicts(dicttolook: dict[any, any], dicttolook2: dict[any, any], key: any) -> any:
     found = dicttolook.get(key)
     if found is not None:
         return found
     return dicttolook2.get(key)
 
-def _allValuesInBothDicts(dicttoscan,dicttoscan2):
-    for key,val in dicttoscan.items():
+
+def _all_values_in_both_dicts(dicttoscan: dict[any, any], dicttoscan2: dict[any, any]) -> Generator[any]:
+    for key, val in dicttoscan.items():
         yield val
-    for key,val in dicttoscan2.items():
+    for key, val in dicttoscan2.items():
         yield val
 
-def _dictOfFilesFromJsonFile(path):
-    out = {}
-    with openModTxtFile(path) as rfile:
-        for line in rfile:
-            ar = File.fromJSON(line)
-            assert(out.get(ar.file_path) is None)
-            out[ar.file_path] = ar
-    return out
 
-def _dictOfFilesToJsonFile(path,files,filteredfiles):
-    with openModTxtFileW(path) as wfile:
+def _read_dict_of_files(dirpath: str, name: str) -> dict[str, File]:
+    assert Folders.is_normalized_dir_path(dirpath)
+    fpath = dirpath + name + '.pickle'
+    # out = {}
+    with open(fpath, 'rb') as rfile:
+        out = pickle.load(rfile)
+        return out
+
+
+def _write_dict_of_files(dirpath: str, name: str, files: dict[str, File], filteredfiles: dict[str, File]) -> None:
+    assert Folders.is_normalized_dir_path(dirpath)
+    fpath = dirpath + name + '.pickle'
+    with open(fpath, 'wb') as wfile:
+        pickle.dump(files | filteredfiles, wfile)
+
+    fpath2 = dirpath + name + '.njson'
+    with open_3rdparty_txt_file_w(fpath2) as wfile:
         for key in sorted(files):
             fi = files[key]
-            wfile.write(File.toJSON(fi)+'\n')
-        for fi in filteredfiles:
-            wfile.write(File.toJSON(fi)+'\n')
+            wfile.write(fi.to_json() + '\n')
+        for key in filteredfiles:
+            fi = files[key]
+            wfile.write(fi.to_json() + '\n')
+
 
 class FolderScanStats:
-    def __init__(self):
+    nmodified: int
+    nscanned: int
+    ndel: 0
+
+    def __init__(self) -> None:
         self.nmodified = 0
         self.nscanned = 0
         self.ndel = 0
-        
-    def add(self,stats2):
+
+    def add(self, stats2: "FolderScanStats") -> None:
         self.nmodified += stats2.nmodified
         self.nscanned += stats2.nscanned
 
+
 class FolderScanDirOut:
-    def __init__(self):
+    filesbypath: dict[str, File]
+    scanned_files: dict[str, File]
+    requested_dirs: list[str]
+
+    def __init__(self) -> None:
         self.filesbypath = {}
-        self.scannedfiles = {}
-        
+        self.scanned_files = {}
+        self.requested_dirs = []
+
+
 class FolderScanFilter:
-    def __init__(self,dirPathIsOk,filePathIsOk):
-        assert(isinstance(filePathIsOk,tasks.LambdaReplacement) and isinstance(dirPathIsOk,tasks.LambdaReplacement))        
-        self.dirPathIsOk = dirPathIsOk
-        self.filePathIsOk = filePathIsOk
+    dir_path_is_ok: tasks.LambdaReplacement
+    file_path_is_ok: tasks.LambdaReplacement
+
+    def __init__(self, dir_path_is_ok: tasks.LambdaReplacement, file_path_is_ok: tasks.LambdaReplacement) -> None:
+        assert (isinstance(file_path_is_ok, tasks.LambdaReplacement) and isinstance(dir_path_is_ok,
+                                                                                    tasks.LambdaReplacement))
+        self.dir_path_is_ok = dir_path_is_ok
+        self.file_path_is_ok = file_path_is_ok
+
 
 # heuristics to enable splitting/merging tasks
 
-def _shouldSplit(t):  
+def _should_split(t: float) -> bool:
     return t > 0.5
-    
-def _shouldMerge(t):
+
+
+def _should_merge(t: float) -> bool:
     return t < 0.3
 
+
 class _TaskNode:
-    def __init__(self,parent,path,t):
+    parent: "_TaskNode"
+    path: str
+    t: float
+    children: list["_TaskNode"]
+
+    def __init__(self, parent: "_TaskNode|None", path: str, t: float | None) -> None:
         self.parent = parent
         self.path = path
         self.t = t
         self.children = []
-        
-    def addChild(self,chpath):
-        child = _TaskNode(self,chpath)
-        self.children = child
+
+    def add_child(self, chpath: str, t: float) -> "_TaskNode":
+        child = _TaskNode(self, chpath, t)
+        self.children.append(child)
         return child
-        
-def _mergeNode(node): #recursive
+
+
+def _merge_node(node: _TaskNode) -> float:  # recursive
     t = node.t
     if t is None:
-        return
+        return 0.
     for ch in node.children:
-        t += _mergeNode(ch)
-    if _shouldMerge(t):
-        children = []
+        t += _merge_node(ch)
+    if _should_merge(t):
+        node.children = []
         node.t = t
     return t
-    
-def _allNodes(allnodes2,node): #recursive
+
+
+def _all_nodes(allnodes2: list[_TaskNode], node: _TaskNode) -> None:  # recursive
     allnodes2.append(node)
     for ch in node.children:
-        _allNodes(ch)
-        
-def _scannedTaskName(name,dirpath):
-    assert(Folders.isNormalizedDirPath(dirpath))
-    return 'mo2gitlib.foldercache.'+name+'.'+dirpath
+        _all_nodes(allnodes2, ch)
 
-def _scannedOwnTaskName(name,dirpath):
-    assert(Folders.isNormalizedDirPath(dirpath))
-    return 'mo2gitlib.foldercache.own.'+name+'.'+dirpath
 
-def _reconcileOwnTaskName(name):
-    return 'mo2gitlib.foldercache.reconcile.'+name
-    
+def _scanned_task_name(cachename: str, dirpath: str) -> str:
+    assert Folders.is_normalized_dir_path(dirpath)
+    return 'mo2gitlib.foldercache.' + cachename + '.' + dirpath
+
+
+def _scanned_own_task_name(cachename: str, dirpath: str) -> str:
+    assert Folders.is_normalized_dir_path(dirpath)
+    return 'mo2gitlib.foldercache.own.' + cachename + '.' + dirpath
+
+
+def _reconcile_own_task_name(name: str) -> str:
+    return 'mo2gitlib.foldercache.reconcile.' + name
+
+
 ### Tasks
-    
-def _loadFilesTaskFunc(param):
-    (cachedir,name) = param
-    filesbypath = {}
+
+def _load_files_task_func(param: tuple[str, str]) -> tuple[dict[str, File]]:
+    (cachedir, name) = param
+    # filesbypath = {}
     try:
-        filesbypath = _dictOfFilesFromJsonFile(cachedir+name+'.njson')
+        filesbypath = _read_dict_of_files(cachedir, name)
     except Exception as e:
-        warn('error loading JSON cache '+name+'.njson: '+str(e)+'. Will continue w/o respective JSON cache')
-        filesbypath = {} # just in case  
+        warn('error loading JSON cache ' + name + '.njson: ' + str(e) + '. Will continue w/o respective JSON cache')
+        filesbypath = {}  # just in case
 
     return (filesbypath,)
 
-def _loadFilesOwnTaskFunc(out,foldercache):
+
+def _load_files_own_task_func(out, foldercache: "FolderCache", parallel: tasks.Parallel) -> tuple[tasks.SharedPubParam]:
     (filesbypath,) = out
-    foldercache.filesbypath = {}
+    foldercache.files_by_path = {}
     foldercache.filteredfiles = {}
-    for key,val in filesbypath.items():
-        assert(key==val.file_path)
-        if foldercache.filter.filePathIsOk.call(key):
-            foldercache.filesbypath[key] = val
+    for key, val in filesbypath.items():
+        assert (key == val.file_path)
+        if foldercache.scan_filter.file_path_is_ok.call(key):
+            foldercache.files_by_path[key] = val
         else:
-            foldercache.filteredfiles.append(val)
+            foldercache.filteredfiles[key] = val
 
-    scannedfiles |= sdout.scannedfiles
-    stats.add(gotstats)
-    foldercache.filesbypath |= sdout.filesbypath
-    self.pubfilesbypath = tasks.SharedPublication(parallel,self.underlyingfilesbypath)
-    return (self.pubfilesbypath,)
+    foldercache.pubfilesbypath = tasks.SharedPublication(parallel, foldercache.underlyingfilesbypath)
+    pubparam = tasks.make_shared_publication_param(foldercache.pubfilesbypath)
+    return (pubparam,)
 
-def _scanFolderTaskFunc(param,fromownload):
-    (taskroot,exdirs,name,filter,pubunderlying) = param
+
+def _scan_folder_task_func(param: tuple[str, list[str], str, FolderScanFilter, tasks.SharedPubParam, dict[str, float]],
+                           fromownload: tuple[tasks.SharedPubParam]) -> tuple[
+    list[str], FolderScanStats, FolderScanDirOut]:
+    (taskroot, exdirs, name, scan_filter, pubunderlying, estimates) = param
     (pubfilesbypath,) = fromownload
     sdout = FolderScanDirOut()
     stats = FolderScanStats()
-    filesbypath = tasks.fromPublication(pubfilesbypath)
-    underlying = tasks.fromPublication(pubunderlying)
+    filesbypath = tasks.from_publication(pubfilesbypath)
+    underlying = tasks.from_publication(pubunderlying)
     started = time.perf_counter()
-    _scanDir(started,sdout,stats,taskroot,filesbypath,underlying,pubunderlying,exdirs,name,filter)
-    return (stats,sdout)
-    
-def _scanFolderOwnTaskFunc(out,foldercache,scannedfiles,stats):
-    (gotstats,sdout) = out
-    scannedfiles |= sdout.scannedfiles
+    FolderCache._scan_dir(started, sdout, stats, taskroot, filesbypath, underlying, pubunderlying, exdirs, name,
+                          scan_filter,
+                          estimates)
+    return exdirs, stats, sdout
+
+
+def _scan_folder_own_task_func(out: tuple[list[str], FolderScanStats, FolderScanDirOut],
+                               foldercache: "FolderCache", parallel: tasks.Parallel, scannedfiles: dict[str, File],
+                               stats: FolderScanStats) -> None:
+    (exdirs, gotstats, sdout) = out
+    scannedfiles |= sdout.scanned_files
     stats.add(gotstats)
-    foldercache.filesbypath |= sdout.filesbypath
+    foldercache.files_by_path |= sdout.filesbypath
 
-def _ownReconcileTaskFunc(foldercache,parallel,scannedfiles):
-        info('FolderCache('+rootfolder+'): '+str(len(scannedfiles))+' files scanned')
-        ndel = 0
-        for file in _allValuesInBothDicts(foldercache.filesbypath,foldercache.underlyingfilesbypath):
-            fpath = file.file_path
-            assert(Folders.isNormalizedFilePath(fpath))
-            if scannedfiles.get(fpath) is None:
-                inhere = foldercache.filesbypath.get(fpath)
-                #print(injson)
-                if inhere is not None and inhere.file_hash is None: #special record is already present
-                    continue
-                info(fpath+' was deleted')
-                #dbgWait()
-                foldercache.filesbypath[fpath] = File(None,None,fpath)
-                ndel += 1
-        info('FolderCache reconcile: '+str(ndel)+' files were deleted')
-        timer.printAndReset('Reconciling dicts with scannedfiles')
-        #dbgWait()
-        
-        savetaskname = 'mo2git.foldercache.save.'+self.name
-        savetask = tasks.Task(savetaskname,_saveFilesTaskFunc,
-                              (foldercache.cachedir,foldercache.name,foldercache.filesbypath,foldercache.filteredfiles),[])
-        parallel.addLateTask(savetask) # we won't explicitly wait for savetask, it will be handled in Parallel.__exit__
+    scannedfiles |= sdout.scanned_files
+    stats.add(gotstats)
+    foldercache.files_by_path |= sdout.filesbypath
 
-def _saveFilesTaskFunc(param):
-    (cachedir,name,filesbypath,filteredfiles) = param
-    _dictOfFilesToJsonFile(cachedir+name+'.njson',filesbypath,filteredfiles)
-    
-class FolderCache: #single (recursive) folder cache
-    def __init__(self,cachedir,name,rootfolder,externalfilesbypath,filter):
-        assert(isinstance(filter,FolderScanFilter))
-        
+    # new tasks
+    for fpath in sdout.requested_dirs:
+        taskname = _scanned_task_name(foldercache.name, fpath)
+        task = tasks.Task(taskname, _scan_folder_task_func,
+                          (fpath, exdirs, foldercache.name, foldercache.scan_filter,
+                           foldercache.pubunderlyingfilesbypath, parallel.copy_estimates()),
+                          [])
+        owntaskname = _scanned_own_task_name(foldercache.name, fpath)
+        owntask = tasks.Task(owntaskname,
+                             lambda _, o: _scan_folder_own_task_func(o, foldercache, parallel, scannedfiles, stats),
+                             None, [taskname])
+        parallel.add_late_task(task)
+        parallel.add_late_own_task(owntask)
+
+
+def _own_reconcile_task_func(foldercache: "FolderCache", parallel: tasks.Parallel,
+                             scannedfiles: dict[str, File]) -> None:
+    info('FolderCache(' + foldercache.root_folder + '): ' + str(len(scannedfiles)) + ' files scanned')
+    ndel = 0
+    for file in _all_values_in_both_dicts(foldercache.files_by_path, foldercache.underlyingfilesbypath):
+        fpath = file.file_path
+        assert (Folders.is_normalized_file_path(fpath))
+        if scannedfiles.get(fpath) is None:
+            inhere = foldercache.files_by_path.get(fpath)
+            # print(injson)
+            if inhere is not None and inhere.file_hash is None:  # special record is already present
+                continue
+            info(fpath + ' was deleted')
+            # dbgWait()
+            foldercache.files_by_path[fpath] = File(None, None, fpath)
+            ndel += 1
+    info('FolderCache reconcile: ' + str(ndel) + ' files were deleted')
+    # dbgWait()
+
+    savetaskname = 'mo2git.foldercache.save.' + foldercache.name
+    savetask = tasks.Task(savetaskname, _save_files_task_func,
+                          (foldercache.cache_dir, foldercache.name, foldercache.files_by_path,
+                           foldercache.filteredfiles),
+                          [])
+    parallel.add_late_task(savetask)  # we won't explicitly wait for savetask, it will be handled in Parallel.__exit__
+
+
+def _save_files_task_func(param: tuple[str, str, dict[str, File], dict[str, File]]) -> None:
+    (cachedir, name, filesbypath, filteredfiles) = param
+    _write_dict_of_files(cachedir, name, filesbypath, filteredfiles)
+
+
+class FolderCache:  # single (recursive) folder cache
+    cache_dir: str
+    undelyingfilesbypath: dict[str, File]
+    name: str
+    root_folder: str
+    files_by_path: dict[str, File]
+    filteredfiles: list[File]
+    scan_filter: FolderScanFilter
+    pubunderlyingfilesbypath: tasks.SharedPublication | None
+
+    def __init__(self, cachedir: str, name: str, rootfolder: str, externalfilesbypath: dict[str, File],
+                 scan_filter: FolderScanFilter) -> None:
+        assert (isinstance(scan_filter, FolderScanFilter))
+
         self.underlyingfilesbypath = {}
-        assert(isinstance(externalfilesbypath,dict))
-        for key,val in externalfilesbypath.items():
-            assert(val.file_path == key)
-            if filter.filePathIsOk.call(key):
+        assert (isinstance(externalfilesbypath, dict))
+        for key, val in externalfilesbypath.items():
+            assert (val.file_path == key)
+            if scan_filter.file_path_is_ok.call(key):
                 self.underlyingfilesbypath[key] = val
-            
+
+        self.cache_dir = cachedir
         self.name = name
-        self.rootfolder = rootfolder
-        self.filesbypath = {}
-        self.filteredjsonfiles = []
-        self.filter = filter
-        
-        self.pubunderlyingfilesbypath = tasks.SharedPublication(parallel,self.underlyingfilesbypath)
-        
-    def startTasks(self,parallel):
-        #building tree of known tasks
-        rootnode = _TaskNode(None,'',None)
-        allnodes = [('',rootnode)] #sorted in ascending order (but we'll scan it in reverse)
-        for est in sorted(parallel.allEstimatesForPrefix(_scannedTaskName(self.name,self.rootfolder))):
-            (path,t) = est
-            parent = None
+        self.root_folder = rootfolder
+        self.files_by_path = {}
+        self.filteredfiles = []
+        self.scan_filter = scan_filter
+        self.pubunderlyingfilesbypath = None
+
+    def start_tasks(self, parallel: tasks.Parallel) -> None:
+        self.pubunderlyingfilesbypath = tasks.SharedPublication(parallel, self.underlyingfilesbypath)
+
+        # building tree of known tasks
+        rootnode = _TaskNode(None, '', None)
+        allnodes = [('', rootnode)]  # sorted in ascending order (but we'll scan it in reverse)
+        for est in sorted(parallel.all_estimates_for_prefix(_scanned_task_name(self.name, self.root_folder))):
+            (path, t) = est
             for an in reversed(allnodes):
-                (p,node) = an
+                (p, node) = an
                 if path.startswith(p):
                     if path == p:
-                        assert(node==rootnode)
+                        assert (node == rootnode)
                         rootnode.t = t
                     else:
-                        ch = node.addChild(path,t)
-                        allnodes.append( (path,ch) )
-                        break #for an
-        #task tree is complete, now we can try merging nodes
-        _mergeNode(rootnode) #recursive
-        
-        #merged, starting tasks
-        allnodes2 = [] #after merging, unsorted
-        _allNodes(allnodes2,rootnode) #recursive
-        
-        alldirs = [self.rootfolder+n.path for n in allnodes2]
+                        ch = node.add_child(path, t)
+                        allnodes.append((path, ch))
+                        break  # for an
+        # task tree is complete, now we can try merging nodes
+        _merge_node(rootnode)  # recursive
+
+        # merged, starting tasks
+        allnodes2 = []  # after merging, unsorted
+        _all_nodes(allnodes2, rootnode)  # recursive
+
+        alldirs = [self.root_folder + n.path for n in allnodes2]
 
         scannedfiles = {}
         stats = FolderScanStats()
-        
-        loadtaskname = 'mo2git.foldercache.load.'+self.name
-        loadtask = tasks.Task(loadtaskname,_loadFilesTaskFunc,(self.cachedir,self.name),[])
-        parallel.addLateTask(loadtask)
-        
-        loadowntaskname = 'mo2git.foldercache.loadown.'+self.name
-        loadowntask = tasks.Task(loadowntaskname,lambda _,out: _loadFilesTaskFunc(out,self),None,[loadtaskname])
-        parallel.addLateOwnTask(loadowntask)
+
+        loadtaskname = 'mo2git.foldercache.load.' + self.name
+        loadtask = tasks.Task(loadtaskname, _load_files_task_func, (self.cache_dir, self.name), [])
+        parallel.add_late_task(loadtask)
+
+        loadowntaskname = 'mo2git.foldercache.loadown.' + self.name
+        loadowntask = tasks.Task(loadowntaskname, lambda _, out: _load_files_own_task_func(out, self, parallel), None,
+                                 [loadtaskname])
+        parallel.add_late_own_task(loadowntask)
 
         for node in allnodes2:
-            fullpath = self.rootfolder + node.path
-            taskname = _scannedTaskName(self.name,path)
-            alldirexthisone = [d for d in alldirs if d != fullpath]
-            assert(len(alldirexthisone)==len(alldirs)-1)
-            task = tasks.Task(taskname,_scanFolderTaskFunc,
-                              (fullpath,alldirsexthisone,self.name,self.filter,makeSharedPublicationParam(self.pubunderlyingfilesbypath)),
+            fullpath = self.root_folder + node.path
+            taskname = _scanned_task_name(self.name, fullpath)
+            alldirsexthisone = [d for d in alldirs if d != fullpath]
+            assert (len(alldirsexthisone) == len(alldirs) - 1)
+            task = tasks.Task(taskname, _scan_folder_task_func,
+                              (fullpath, alldirsexthisone, self.name, self.scan_filter,
+                               tasks.make_shared_publication_param(self.pubunderlyingfilesbypath),
+                               parallel.copy_estimates()),
                               [loadowntaskname])
-            owntaskname = _scannedOwnTaskName(self.name,fullpath)
+            owntaskname = _scanned_own_task_name(self.name, fullpath)
             owntask = tasks.Task(owntaskname,
-                                 lamda _,out: _scanFolderOwnTaskFunc(out,self,scannedfiles,stats),
+                                 lambda _, out: _scan_folder_own_task_func(out, self, parallel, scannedfiles, stats),
                                  None, [taskname])
-                                 
-            parallel.addLateTask(task)
-            parallel.addLateOwnTask(owntask)
-        
-        reconciletask = tasks.Task(_reconcileOwnTaskName(self.name),
-                                   lambda _,_1: _ownReconcileTaskFunc(self,parallel,scannedfiles),
-                                   None, [_scannedOwnTaskName(self.name,self.rootfolder)+'*'])
-        parallel.addLateOwnTask(reconciletask)
-    
-    def readyTaskName(self):
-        return _reconcileOwnTaskName(self.name)
-        
-    def _scanDir(started,sdout,stats,dir,filesbypath,underlying,pubunderlying,exdirs,name,filter): #recursive over dir
-        assert(Folders.isNormalizedDirPath(dir))
+
+            parallel.add_late_task(task)
+            parallel.add_late_own_task(owntask)
+
+        reconciletask = tasks.Task(_reconcile_own_task_name(self.name),
+                                   lambda _, _1: _own_reconcile_task_func(self, parallel, scannedfiles),
+                                   None, [_scanned_own_task_name(self.name, self.root_folder) + '*'])
+        parallel.add_late_own_task(reconciletask)
+
+    def ready_task_name(self) -> str:
+        return _reconcile_own_task_name(self.name)
+
+    @staticmethod
+    def _scan_dir(started: float, sdout: FolderScanDirOut, stats: FolderScanStats, dirpath: str,
+                  filesbypath: dict[str, File], underlying: dict[str, File], pubunderlying: tasks.SharedPubParam,
+                  exdirs: list[str], name: str,
+                  scanfilter: FolderScanFilter, estimates: dict[str, float]) -> None:  # recursive over dir
+        assert (Folders.is_normalized_dir_path(dirpath))
         # recursive implementation: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
         # still, after recent performance fix seems to win like 1.5x over os.walk-based one
-        for f in os.listdir(dir):
-            fpath = dir+Folders.normalizeFileName(f)
+        for f in os.listdir(dirpath):
+            fpath = dirpath + Folders.normalize_file_name(f)
             st = os.lstat(fpath)
             fmode = st.st_mode
             if stat.S_ISREG(fmode):
-                assert(not stat.S_ISLNK(fmode))
-                assert(Folders.isNormalizedFilePath(fpath))
+                assert not stat.S_ISLNK(fmode)
+                assert Folders.is_normalized_file_path(fpath)
 
-                #if(not filter.filePathIsOk.call(fpath)):
+                # if(not filter.filePathIsOk.call(fpath)):
                 #    continue
-                assert(filter.filePathIsOk.call(fpath))
+                assert scanfilter.file_path_is_ok.call(fpath)
 
                 stats.nscanned += 1
-                tstamp = _getFileTimestampFromSt(st)
+                tstamp = _get_file_timestamp_from_st(st)
                 # print(fpath)
-                found = _getFromOneOfDicts(filesbypath,underlying,fpath)
-                sdout.scannedfiles.append(fpath)
+                found = _get_from_one_of_dicts(filesbypath, underlying, fpath)
                 matched = False
                 if found is not None:
-                    if found.file_hash is not None:#file in cache marked as deleted, re-adding
+                    assert found.calculate_file_hash == fpath
+                    sdout.scanned_files[fpath] = found
+                    if found.calculate_file_hash is not None:  # file in cache marked as deleted, re-adding
                         tstamp2 = found.file_modified
                         # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
-                        if wjdb.compareTimestampWithWj(tstamp,tstamp2)==0:
+                        if compare_timestamp_with_wj(tstamp, tstamp2) == 0:
                             matched = True
                 if not matched:
-                    sdout.filesbypath[fpath] = File(wjHash(fpath),tstamp,fpath)
+                    sdout.filesbypath[fpath] = File(calculate_file_hash(fpath), tstamp, fpath)
             elif stat.S_ISDIR(fmode):
-                newdir=fpath+'\\'
-                assert(Folders.isNormalizedDirPath(newdir))
+                newdir = fpath + '\\'
+                assert (Folders.is_normalized_dir_path(newdir))
                 if newdir in exdirs:
-                    continue 
-                if filter.dirPathIsOk.call(newdir):
-                    est = parallels.estimatedTime(_scannedTaskName(name,newdir),1.)
+                    continue
+                if scanfilter.dir_path_is_ok.call(newdir):
+                    est = tasks.Parallel.estimated_time_from_estimates(estimates, _scanned_task_name(name, newdir), 1.)
                     elapsed = time.perf_counter() - started
-                    if _shouldSplit(elapsed + est):
-                        # new task
-                        taskname = _scannedTaskName(fpath)
-                        task = tasks.Task(taskname,_scanFolderTaskFunc,
-                                          (fpath,exdirs,name,filter,pubunderlying),
-                                          [])
-                        owntaskname = _scannedOwnTaskName(fpath)
-                        owntask = tasks.Task(owntaskname,
-                                             lamda _,out: _scanFolderOwnTaskFunc(out,foldercache,scannedfiles,stats),
-                                             None, [taskname])
-                        parallel.addLateTask(task)
-                        parallel.addLateOwnTask(owntask)
+                    if _should_split(elapsed + est):
+                        sdout.requested_dirs.append(newdir)
                     else:
-                        _scanDir(started,sdout,stats,fpath,filesbypath,underlying,pubunderlying,exdirs,name,filter)
+                        FolderCache._scan_dir(started, sdout, stats, fpath, filesbypath, underlying, pubunderlying,
+                                              exdirs, name, scanfilter, estimates)
             else:
-                critical(fpath+' is neither dir or file, aborting')
-                aAssert(False)
+                critical(fpath + ' is neither dir or file, aborting')
+                aassert(False)

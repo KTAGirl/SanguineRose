@@ -1,95 +1,96 @@
-from mo2gitlib.common import *
+# def trace_reader(x):
+#    # print("'"+str(x)+"'")
+#    pass
 
-def traceReader(x):
-    # print("'"+str(x)+"'")
-    pass
-    
+
 class BinaryReader:
-    def __init__(self,contents):
+    contents: bytes
+    offset: int
+
+    def __init__(self, contents:bytes) -> None:
         self.contents = contents
         self.offset = 0
 
-    def ReadString(self):
-        len = int(self.contents[self.offset])
+    def read_string(self) -> str:
+        l = int(self.contents[self.offset])
         self.offset += 1
-        traceReader("len="+str(len))
-        if len & 0x80:
-            len = len & 0x7F
+        # trace_reader('len=' + str(l))
+        if l & 0x80:
+            l = l & 0x7F
             len2 = int(self.contents[self.offset])
             self.offset += 1
-            traceReader("len2="+str(len2))
-            assert(len2&0x80==0)
-            len += len2 << 7
+            # trace_reader('len2=' + str(len2))
+            assert (len2 & 0x80 == 0)
+            l += len2 << 7
         # print(len)
-        bytes = self.contents[self.offset:self.offset+len]
-        self.offset += len
-        s = bytes.decode('cp1252','replace')
-        traceReader(str(len)+":"+s)
+        b = self.contents[self.offset:self.offset + l]
+        self.offset += l
+        s = b.decode('cp1252', 'replace')
+        # trace_reader(str(l) + ":" + s)
         return s
 
-    def ReadInt16(self):
-        bytes = self.contents[self.offset:self.offset+2]
+    def read_int16(self) -> int:
+        b = self.contents[self.offset:self.offset + 2]
         self.offset += 2
-        i = int.from_bytes(bytes,byteorder='little',signed=True)
-        traceReader(i)
+        i = int.from_bytes(b, byteorder='little', signed=True)
+        # trace_reader(i)
         return i
-        
-    def ReadUint16(self):
-        bytes = self.contents[self.offset:self.offset+2]
+
+    def read_uint16(self) -> int:
+        b = self.contents[self.offset:self.offset + 2]
         self.offset += 2
-        i = int.from_bytes(bytes,byteorder='little',signed=False)
-        traceReader(i)
+        i = int.from_bytes(b, byteorder='little', signed=False)
+        # trace_reader(i)
         return i
-        
-    def ReadInt32(self):
-        bytes = self.contents[self.offset:self.offset+4]
+
+    def read_int32(self) -> int:
+        b = self.contents[self.offset:self.offset + 4]
         self.offset += 4
-        i = int.from_bytes(bytes,byteorder='little',signed=True)
-        traceReader(i)
+        i = int.from_bytes(b, byteorder='little', signed=True)
+        # trace_reader(i)
         return i
 
-    def ReadUint32(self):
-        bytes = self.contents[self.offset:self.offset+4]
+    def read_uint32(self) -> int:
+        b = self.contents[self.offset:self.offset + 4]
         self.offset += 4
-        i = int.from_bytes(bytes,byteorder='little',signed=False)
-        traceReader(i)
+        i = int.from_bytes(b, byteorder='little', signed=False)
+        # trace_reader(i)
         return i
 
-    def ReadInt64(self):
-        bytes = self.contents[self.offset:self.offset+8]
+    def read_int64(self) -> int:
+        b = self.contents[self.offset:self.offset + 8]
         self.offset += 8
-        i = int.from_bytes(bytes,byteorder='little',signed=True)
-        traceReader(i)
+        i = int.from_bytes(b, byteorder='little', signed=True)
+        # trace_reader(i)
         return i
 
-    def ReadUint64(self):
-        bytes = self.contents[self.offset:self.offset+8]
+    def read_uint64(self) -> int:
+        b = self.contents[self.offset:self.offset + 8]
         self.offset += 8
-        i = int.from_bytes(bytes,byteorder='little',signed=False)
-        traceReader(i)
+        i = int.from_bytes(b, byteorder='little', signed=False)
+        # trace_reader(i)
         return i
-        
-    def ReadBoolean(self):
+
+    def read_boolean(self) -> bool:
         b = self.contents[self.offset]
         self.offset += 1
-        traceReader(b)
+        # trace_reader(b)
         return bool(b)
 
-    def ReadByte(self):
+    def read_byte(self) -> int:
         b = self.contents[self.offset]
         self.offset += 1
-        traceReader(b)
+        # trace_reader(b)
         return b
 
-    def ReadBytes(self,n):
-        bytes = self.contents[self.offset:self.offset+n]
+    def read_bytes(self, n) -> bytes:
+        b = self.contents[self.offset:self.offset + n]
         self.offset += n
-        traceReader(bytes)
-        return bytes
-        
-    def isEOF(self):
+        # trace_reader(b)
+        return b
+
+    def is_eof(self) -> bool:
         return self.offset == len(self.contents)
-        
-    def dbg(self):
-        print(self.contents[self.offset:])
-        
+
+    # def dbg(self):
+    #    print(self.contents[self.offset:])

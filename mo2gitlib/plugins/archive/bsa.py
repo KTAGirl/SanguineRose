@@ -22,7 +22,7 @@ class BsaArchivePlugin(ArchivePluginBase):
         print('Extraction done')
         return out
         
-    def extractAll(self,archive,targetpath):
+    def extract_all(self, archive, targetpath):
         print('Extracting from '+archive+'...')
         bsa = BSAArchive.parse_file(archive)
         bsa.extract(targetpath)

@@ -44,7 +44,7 @@ if __name__ == '__main__':
                 if argc == 3:
                     compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)
                     ignore=compiler_settings['Ignore']
-                    dumpwjdb = Folders.normalizeDirPath(argv[2])
+                    dumpwjdb = Folders.normalize_dir_path(argv[2])
                     filecache = _openCache(configfilepath,config,mastermodlist,ignore,dumpwjdb)
                     ok = True
             case 'debug.modsizes':

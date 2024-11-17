@@ -1,11 +1,11 @@
-import os
-import glob
 import importlib
 import inspect
+from abc import abstractmethod
 
 from mo2gitlib.common import *
 
-def _loadPlugins(plugindir,basecls,found):
+
+def _load_plugins(plugindir : str, basecls:any, found:Callable[[any],None]) -> None:
     # plugindir is relative to the path of this very file
     thisdir = os.path.split(os.path.abspath(__file__))[0] + '/'
     # print(thisdir)
@@ -28,43 +28,44 @@ def _loadPlugins(plugindir,basecls,found):
                         found(plugin)
                         ok = True
         if not ok:
-            print('WARNING: no class derived from '+str(basecls)+' found in '+py)
+            warn('no class derived from '+str(basecls)+' found in '+py)
 
 ### archive plugins
 
 class ArchivePluginBase:
-    def __init__(self):
+    def __init__(self) -> None:
         pass
        
-    # @abstractmethod
-    def extensions(self):
+    @abstractmethod
+    def extensions(self) -> list[str]:
         pass
         
-    # @abstractmethod
-    def extract(self,archive,list_of_files,targetpath):
+    @abstractmethod
+    def extract(self,archive:str,list_of_files:list[str],targetpath:str) -> None:
         pass
         
-     # @abstractmethod
-    def extractAll(self,archive,targetpath):
+    @abstractmethod
+    def extract_all(self, archive:str, targetpath:str) -> None:
         pass
 
-def _foundArchivePlugin(archiveplugins,plugin):
+_archive_plugins: dict[str,ArchivePluginBase] = {} # file_extension -> ArchivePluginBase
+_archive_exts:list[str] = []
+
+def _found_archive_plugin(plugin:"ArchivePluginBase"):
+    global _archive_plugins
+    global _archive_exts
     for ext in plugin.extensions():
-        archiveplugins[ext]=plugin  
+        _archive_plugins[ext]=plugin
+        assert ext not in _archive_exts
+        _archive_exts.append(ext)
 
-archiveplugins = {} # file_extension -> ArchivePluginBase
-archiveexts = []
-_loadPlugins('plugins/archive/',ArchivePluginBase,lambda plugin: _foundArchivePlugin(archiveplugins,plugin))
-#print(archiveplugins)
-for ext in archiveplugins:
-    assert(ext not in archiveexts)
-    archiveexts.append(ext)
-#print(archiveexts)
-# dbgWait()
+_load_plugins('plugins/archive/', ArchivePluginBase, lambda plugin: _found_archive_plugin(plugin))
 
-def archivePluginFor(path):
+def archive_plugin_for(path:str) -> ArchivePluginBase:
+    global _archive_plugins
     ext=os.path.splitext(path)[1].lower()
-    return archiveplugins.get(ext)
+    return _archive_plugins.get(ext)
     
-def allArchivePluginsExtensions():
-    return archiveexts
+def all_archive_plugins_extensions() -> list[str]:
+    global _archive_exts
+    return _archive_exts

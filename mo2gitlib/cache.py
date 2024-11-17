@@ -1,17 +1,12 @@
-import os
-import stat
-import pathlib
-import pickle
-import json
-import shutil
+import time
 
 from mo2gitlib.common import *
-from mo2gitlib.files import File,ArchiveEntry,wjHash
+from mo2gitlib.files import File,ArchiveEntry,calculate_file_hash
 import mo2gitlib.wjcompat.wjdb as wjdb
 import mo2gitlib.pluginhandler as pluginhandler
 import mo2gitlib.tasks as tasks
 from mo2gitlib.folders import Folders
-from mo2gitlib.pickledcache import pickledCache
+from mo2gitlib.pickledcache import pickled_cache
 from mo2gitlib.foldercache import FolderCache,FolderScanFilter
 
 ZEROHASH = 17241709254077376921 #xxhash for 0 size
@@ -21,9 +16,9 @@ ZEROHASH = 17241709254077376921 #xxhash for 0 size
 def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plugin,archivepath):
     if not os.path.isdir(tmppath):
         os.makedirs(tmppath)
-    plugin.extractAll(archivepath,tmppath)
+    plugin.extract_all(archivepath, tmppath)
     #dbgWait()
-    pluginexts = pluginhandler.allArchivePluginsExtensions()
+    pluginexts = pluginhandler.all_archive_plugins_extensions()
     for root, dirs, files in os.walk(tmppath):
         nf = 0
         for f in files:
@@ -31,36 +26,19 @@ def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plu
             fpath = os.path.join(root, f)
             assert(os.path.isfile(fpath))
             # print(fpath)
-            hash = wjHash(fpath)
+            hash = calculate_file_hash(fpath)
             assert(fpath.startswith(tmppath))
             new_intra_path = cur_intra_path.copy()
-            new_intra_path.append(Folders.normalizeArchiveIntraPath(fpath[len(tmppath):]))
+            new_intra_path.append(Folders.normalize_archive_intra_path(fpath[len(tmppath):]))
             ae = ArchiveEntry(archive_hash,new_intra_path,os.path.getsize(fpath),hash)
             # print(ae.__dict__)
             jsonarchiveentries[ae.file_hash]=ae
 
             ext = os.path.split(fpath)[1].lower()
             if ext in pluginexts:
-                nested_plugin = pluginhandler.archivePluginFor(fpath)
+                nested_plugin = pluginhandler.archive_plugin_for(fpath)
                 assert(nested_plugin is not None)
                 _archiveToEntries(jsonarchiveentries,archive_hash,tmppath + str(nf) + '\\',new_intra_path,nested_plugin,fpath)
-
-#### JSON loading helpers
-
-def _dictOfArEntriesFromJsonFile(path):
-    out = {}
-    with openModTxtFile(path) as rfile:
-        for line in rfile:
-            ae = ArchiveEntry.fromJSON(line)
-            # print(ar.__dict__)
-            out[ae.file_hash] = ae
-    return out
-
-def _dictOfArEntriesToJsonFile(path,aes):
-    with openModTxtFileW(path) as wfile:
-        for key in sorted(aes):
-            ae = aes[key]
-            wfile.write(ArchiveEntry.toJSON(ae)+'\n')
 
 ############# Parallelizable Tasks
 
@@ -69,7 +47,7 @@ def _dictOfArEntriesToJsonFile(path,aes):
 def _loadHCAddFi(dls,mo2s,folders,fi):    
     fpath = fi.file_path
     
-    if folders.isKnownArchive(fpath):
+    if folders.is_known_archive(fpath):
         for dl in folders.downloads:
             if fpath.startswith(dl):
                 assert(fpath not in dls)
@@ -85,13 +63,13 @@ def _loadHC(params):
     dls = {}
     mo2s = {}
 
-    wjdb.loadHC( lambda fi:_loadHCAddFi(dls,mo2s,folders,fi) )
+    wjdb.load_hc(lambda fi:_loadHCAddFi(dls, mo2s, folders, fi))
     return (dls,mo2s)
 
 def _loadHCTaskFunc(param):
     (folders,cachedata) = param
-    return pickledCache(folders.cache,cachedata,'wjdb.hcfile',[wjdb.hcFile()],
-                        _loadHC,(folders,))
+    return pickled_cache(folders.cache, cachedata, 'wjdb.hcfile', [wjdb.hc_file_path()],
+                         _loadHC, (folders,))
     
 def _ownHC2SelfTaskFunc(cache,parallel,taskout):
     (hcout,cachedataoverwrites) = taskout
@@ -102,47 +80,47 @@ def _ownHC2SelfTaskFunc(cache,parallel,taskout):
     cache.archivesbypath = dls
     cache.archivesbyhash = {}
     for key,val in cache.archivesbypath:
-        h = val.file_hash
+        h = val.calculate_file_hash
         if h in cache.archivesbyhash:
             ndup += 1
         else:
-            cache.archivesbyhash[val.file_hash] = val
+            cache.archivesbyhash[val.calculate_file_hash] = val
     
-    cache.filesbypath = mo2s
-    info(str(len(cache.archives))+' archives ('+str(ndup)+' duplicates), '
-         +str(len(cache.filesbypath))+' files')
+    cache.files_by_path = mo2s
+    info(str(len(cache.archives)) +' archives (' + str(ndup) +' duplicates), '
+         + str(len(cache.files_by_path)) + ' files')
 
     cache.publishedarchives = tasks.SharedPublication(parallel,cache.archives)
 
     cache.downloads = []
     for i in range(len(cache.folders.downloads)):
-        fc = FolderCache(cache.folders.cachedir,'downloads'+str(i),cache.folders.downloads[i],cache.archivesbypath,
+        fc = FolderCache(cache.folders.cache_dir, 'downloads' + str(i), cache.folders.downloads[i], cache.archivesbypath,
                          FilterForDownloads(cache.folders)
-                        )
-        fc.startTasks(parallel)
+                         )
+        fc.start_tasks(parallel)
         cache.downloads.append(fc)
         #cache.taskstowait.append(fc.readyTaskName())
 
-    cache.mo2cache = FolderCache(cache.cachedir,'mo2',cache.folders.mo2,{},
+    cache.mo2cache = FolderCache(cache.cache_dir, 'mo2', cache.folders.mo2, {},
                                  FilterForMo2(cache.folders)
-                                )
-    cache.mo2cache.startTasks(parallel)
+                                 )
+    cache.mo2cache.start_tasks(parallel)
     #cache.taskstowait.append(cache.mo2cache.readyTaskName())
     
 ### Loading VFS
         
 def _loadVFS0(dbgfile):
     unfilteredarchiveentries = []
-    for ae in wjdb.loadVFS(dbgfile):
+    for ae in wjdb.load_vfs(dbgfile):
         unfilteredarchiveentries.append(ae)    
     return unfilteredarchiveentries
 
 def _loadVFS(cachedir,cachedata,dbgfile):
-    (unfilteredarchiveentries,cachedataoverwrites) = pickledCache(cachedir,cachedata,'wjdb.vfsfile',[wjdb.vfsFile()],
-                                                                  lambda _: _loadVFS0(dbgfile))
+    (unfilteredarchiveentries,cachedataoverwrites) = pickled_cache(cachedir, cachedata, 'wjdb.vfsfile', [wjdb.vfs_file_path()],
+                                                                   lambda _: _loadVFS0(dbgfile))
 
     shared = tasks.SharedReturn(unfilteredarchiveentries)
-    return (tasks.makeSharedReturnParam(shared),cachedataoverwrites)
+    return (tasks.make_shared_return_param(shared), cachedataoverwrites)
 
 def _loadVFSTaskFunc(param):
     (cachedir,cachedata,dbgfolder) = param
@@ -166,12 +144,12 @@ def _ownFilterTaskFunc(cache,parallel,fromloadvfs):
     cache.cachedata |= cachedataoverwrites
     
     tsh0 = time.perf_counter()
-    unfilteredarchiveentries = tasks.receivedSharedReturn(parallel,sharedparam)
+    unfilteredarchiveentries = tasks.received_shared_return(parallel, sharedparam)
     tsh = time.perf_counter()-tsh0
 
     allarchivehashes = {}
     #print(dbgFirst(cache.archivesbypath).__dict__)
-    for arname in folders.allArchiveNames():
+    for arname in folders.all_archive_names():
         assert(arname.islower())
         #print(arname)
         #ar = _getFromOneOfDicts(cache.jsonarchivesbypath,cache.archivesbypath,arname)
@@ -188,7 +166,7 @@ def _ownFilterTaskFunc(cache,parallel,fromloadvfs):
         if allarchivehashes.get(ahash) is not None:
             #print(ae.toJSON())
             #dbgWait()
-            cache.archiveentries[ae.file_hash] = ae
+            cache.archiveentries[ae.calculate_file_hash] = ae
 
     tsh0 = time.perf_counter()
     info('Filtering VFS: '+str(len(cache.archiveentries))+' survived out of '+str(len(unfilteredarchiveentries)))
@@ -209,7 +187,7 @@ class FilterForDownloads(FolderScanFilter):
     def _filePathIsOk(capture, param):
         (folders,) = capture
         fpath = param
-        return folders.isKnownArchive(fpath)
+        return folders.is_known_archive(fpath)
 
 class FilterForMo2(FolderScanFilter):
     def __init__(self,folders):
@@ -219,12 +197,12 @@ class FilterForMo2(FolderScanFilter):
     def _dirPathIsOk(capture, param):
         (folders,) = capture
         dirpath = param
-        return folders.isMo2ExactDirIncluded(dirpath)
+        return folders.is_mo2_exact_dir_included(dirpath)
     
     def _filePathIsOk(capture, param):
         (folders,) = capture
         fpath = param
-        return folders.isMo2FilePathIncluded(fpath)
+        return folders.is_mo2_file_path_included(fpath)
 
 #### Cache itself
 
@@ -272,7 +250,7 @@ class Cache:
             wf.write(JsonEncoder(indent=4).encode(self.cachedata))
         
     def findArchiveByName(self,fname):
-        assert(Folders.normalizeFileName(fname)==fname)
+        assert(Folders.normalize_file_name(fname) == fname)
         #ar = self.archivesbypath.get(fpath.lower())
         ar = None
         for a in _allValuesInBothDicts(self.jsonarchivesbypath,self.archivesbypath):
@@ -292,11 +270,11 @@ class Cache:
         if fi is None:
             return None,None,None
 
-        if fi.file_hash==ZEROHASH: 
-            ae=ArchiveEntry(None,None,0,fi.file_hash)
+        if fi.calculate_file_hash==ZEROHASH:
+            ae=ArchiveEntry(None, None, 0, fi.calculate_file_hash)
             return ae,None,None #there is no archive, size=0 is enough to restore the file
 
-        hash=fi.file_hash
+        hash=fi.calculate_file_hash
         if hash is None:#file was deleted
             return None,None,fi
         #print(fi.__dict__)
@@ -542,52 +520,52 @@ def _ownScanMo22SelfTaskFunc(cache,parallel,scannedfiles,out):
                              None,[taskname])
         parallel.addLateOwnTask(owntask)
 '''
-    ''' from class Cache
-    def _loadDir(ldout,dir,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile):
-        # print(excludefolders)
-        # print(reincludefolders)
-        nscanned = 0
-        # recursive implementation: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
-        # still, after recent performance fix seems to win like 1.5x over os.walk-based one
-        for f in os.listdir(dir):
-            fpath = dir+Folders.normalizeFileName(f)
-            st = os.lstat(fpath)
-            fmode = st.st_mode
-            if stat.S_ISREG(fmode):
-                #assert(not os.path.islink(fpath))
-                assert(not stat.S_ISLNK(fmode))
-                assert(Folders.normalizeFilePath(fpath)==fpath)
-                nscanned += 1
-                if foundfile:
-                    foundfile.call((ldout,fpath))
-                tstamp = _getFileTimestampFromSt(st)
-                # print(fpath)
-                found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath)
-                if found:
-                    if found.file_hash is None:#file in cache marked as deleted
-                        _diffFound(folders,ldout,fpath,tstamp,addfi,False) #False as we probably can treat 're-added' as 'added'
-                    else:
-                        tstamp2 = found.file_modified
-                        # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
-                        if wjdb.compareTimestampWithWj(tstamp,tstamp2)!=0:
-                            _diffFound(folders,ldout,fpath,tstamp,addfi,True)
+''' from class Cache
+def _loadDir(ldout,dir,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile):
+    # print(excludefolders)
+    # print(reincludefolders)
+    nscanned = 0
+    # recursive implementation: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
+    # still, after recent performance fix seems to win like 1.5x over os.walk-based one
+    for f in os.listdir(dir):
+        fpath = dir+Folders.normalizeFileName(f)
+        st = os.lstat(fpath)
+        fmode = st.st_mode
+        if stat.S_ISREG(fmode):
+            #assert(not os.path.islink(fpath))
+            assert(not stat.S_ISLNK(fmode))
+            assert(Folders.normalizeFilePath(fpath)==fpath)
+            nscanned += 1
+            if foundfile:
+                foundfile.call((ldout,fpath))
+            tstamp = _getFileTimestampFromSt(st)
+            # print(fpath)
+            found = _getFromOneOfDicts(dicttolook,dicttolook2,fpath)
+            if found:
+                if found.file_hash is None:#file in cache marked as deleted
+                    _diffFound(folders,ldout,fpath,tstamp,addfi,False) #False as we probably can treat 're-added' as 'added'
                 else:
-                    _diffFound(folders,ldout,fpath,tstamp,addfi,False)
-            elif stat.S_ISDIR(fmode):
-                newdir=fpath+'\\'
-                included = folders.isMo2ExactDirIncluded(newdir)
-                if not included: #ignored or mo2excluded
-                    # print('Excluding '+newdir)
-                    for newdir2 in folders.allReinclusionsForIgnoredOrExcluded(newdir):
-                        assert(Folders.normalizeDirPath(newdir2) == newdir2) 
-                        if ldout is not None:
-                            ldout.requested.append(newdir2)
-                        else:
-                            nscanned += Cache._loadDir(None,newdir2,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile)
-                else:
-                    nscanned += Cache._loadDir(ldout,newdir,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile)
+                    tstamp2 = found.file_modified
+                    # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
+                    if wjdb.compareTimestampWithWj(tstamp,tstamp2)!=0:
+                        _diffFound(folders,ldout,fpath,tstamp,addfi,True)
             else:
-                print(fpath+' is neither dir or file, aborting')
-                aAssert(False)
-        return nscanned
-    '''
+                _diffFound(folders,ldout,fpath,tstamp,addfi,False)
+        elif stat.S_ISDIR(fmode):
+            newdir=fpath+'\\'
+            included = folders.isMo2ExactDirIncluded(newdir)
+            if not included: #ignored or mo2excluded
+                # print('Excluding '+newdir)
+                for newdir2 in folders.allReinclusionsForIgnoredOrExcluded(newdir):
+                    assert(Folders.normalizeDirPath(newdir2) == newdir2) 
+                    if ldout is not None:
+                        ldout.requested.append(newdir2)
+                    else:
+                        nscanned += Cache._loadDir(None,newdir2,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile)
+            else:
+                nscanned += Cache._loadDir(ldout,newdir,dicttolook,dicttolook2,pdicttolook2,folders,addfi,foundfile)
+        else:
+            print(fpath+' is neither dir or file, aborting')
+            aAssert(False)
+    return nscanned
+'''

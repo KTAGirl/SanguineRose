@@ -19,20 +19,20 @@ def _git2mo(jsonconfigfname,config):
         masterjsonfname = srcgithub + 'master.json'
         masterjson = Master()
         with open(masterjsonfname, 'rt',encoding='utf-8') as rf:
-            masterjson.constructFromFile(rf)
+            masterjson.construct_from_file(rf)
             
         mo2 = filecache.folders.mo2
         needtorestore = {}
         needzerosize = []
         needtocopy = []
-        for fimaster in masterjson.allFiles():
+        for fimaster in masterjson.all_files():
             fpath = mo2+fimaster.file_path
             if fimaster.gitpath is not None:
                 needtocopy.append(fpath)
                 continue
-            fimasterhash = cache.ZEROHASH if fimaster.file_size == 0 else fimaster.file_hash
+            fimasterhash = cache.ZEROHASH if fimaster.file_size == 0 else fimaster.calculate_file_hash
             ficache = filecache.findFileOnly(fpath)
-            if ficache is not None and ficache.file_hash == fimasterhash:
+            if ficache is not None and ficache.calculate_file_hash == fimasterhash:
                 #print(fimaster.file_path)
                 #dbgWait()
                 continue
@@ -43,12 +43,12 @@ def _git2mo(jsonconfigfname,config):
                 if ae.file_size == 0:
                     needzerosize.append(fpath)
                 else:
-                    addToDictOfLists(needtorestore,archive.file_path,ae)
+                    add_to_dict_of_lists(needtorestore, archive.file_path, ae)
             
-        dbgWait()
+        dbgwait()
         print('zerosize:'+str(needzerosize))
-        dbgWait()
+        dbgwait()
         #print('copy:'+str(needtocopy))
         #dbgWait()
         print('restore:'+str(needtorestore))
-        dbgWait()
+        dbgwait()
