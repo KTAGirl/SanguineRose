@@ -4,30 +4,30 @@ import logging
 import os
 import traceback
 import typing
-
 from collections.abc import Callable as _Callable, Generator as _Generator
-from typing import Type as _Type
 from types import TracebackType as _TracebackType
+from typing import Type as _Type
 
-# stubs for importing from other modules
+# stubs for importing from other modules, while preventing import optimizer from optimizing it out
 Callable = _Callable
 Generator = _Generator
 Type = _Type
 TracebackType = _TracebackType
 
+
 def dbgwait() -> None:
     input("Press Enter to continue.")
 
 
-def dbgfirst(data:any) -> any:
+def dbgfirst(data: any) -> any:
     if isinstance(data, list):
         print(len(data))
         return data[0]
     elif isinstance(data, dict):
-        #print(len(data))
+        # print(len(data))
         it = iter(data)
         key = next(it)
-        #print(key)
+        # print(key)
         return data[key]
     else:
         return data
@@ -42,8 +42,9 @@ class Mo2gitError(Exception):
     pass
 
 
-def aassert(cond:bool,
-            f:Callable[[],str]=None):  # 'always assert', even if __debug__ is False. f is a lambda printing error message before throwing
+def aassert(cond: bool,
+            f: Callable[
+                [], str] = None):  # 'always assert', even if __debug__ is False. f is a lambda printing error message before throwing
     if not cond:
         msg = 'aassert() failed'
         if f is not None:
@@ -57,17 +58,17 @@ _logger = logging.getLogger('mo2git')
 logging.basicConfig(level=logging.DEBUG)
 
 
-def warn(msg:str) -> None:
+def warn(msg: str) -> None:
     global _logger
     _logger.warning(msg)
 
 
-def info(msg:str) -> None:
+def info(msg: str) -> None:
     global _logger
     _logger.info(msg)
 
 
-def critical(msg:str):
+def critical(msg: str):
     global _logger
     _logger.critical(msg)
 
@@ -75,14 +76,14 @@ def critical(msg:str):
 ###
 
 class JsonEncoder(json.JSONEncoder):
-    def default(self, o:any) -> any:
+    def default(self, o: any) -> any:
         if isinstance(o, object):
             return o.__dict__
         else:
             return o
 
 
-def open_3rdparty_txt_file(fname:str) -> typing.TextIO:
+def open_3rdparty_txt_file(fname: str) -> typing.TextIO:
     return open(fname, 'rt', encoding='cp1252', errors='replace')
 
 
@@ -90,17 +91,17 @@ def open_3rdparty_txt_file_w(fname) -> typing.TextIO:
     return open(fname, 'wt', encoding='cp1252')
 
 
-def escape_json(s:any) -> str:
+def escape_json(s: any) -> str:
     return json.dumps(s)
 
 
-def is_esl_flagged(filename:str) -> bool:
+def is_esl_flagged(filename: str) -> bool:
     with open(filename, 'rb') as f:
         buf = f.read(10)
         return (buf[0x9] & 0x02) == 0x02
 
 
-def add_to_dict_of_lists(dicttolook : dict[list[any]], key:any, val:any) -> None:
+def add_to_dict_of_lists(dicttolook: dict[list[any]], key: any, val: any) -> None:
     if key not in dicttolook:
         dicttolook[key] = [val]
     else:
@@ -133,7 +134,8 @@ class Elapsed:
 
 class Val:
     val: any
-    def __init__(self, initval:any) -> None:
+
+    def __init__(self, initval: any) -> None:
         self.val = initval
 
     def __str__(self) -> str:

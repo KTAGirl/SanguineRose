@@ -3,7 +3,6 @@ import time
 from mo2gitlib.common import *
 from mo2gitlib.files import File,ArchiveEntry,calculate_file_hash
 import mo2gitlib.wjcompat.wjdb as wjdb
-import mo2gitlib.pluginhandler as pluginhandler
 import mo2gitlib.tasks as tasks
 from mo2gitlib.folders import Folders
 from mo2gitlib.pickledcache import pickled_cache
@@ -13,32 +12,6 @@ ZEROHASH = 17241709254077376921 #xxhash for 0 size
 
 ##### hashing archive file into ArchiveEntries
 
-def _archiveToEntries(jsonarchiveentries,archive_hash,tmppath,cur_intra_path,plugin,archivepath):
-    if not os.path.isdir(tmppath):
-        os.makedirs(tmppath)
-    plugin.extract_all(archivepath, tmppath)
-    #dbgWait()
-    pluginexts = pluginhandler.all_archive_plugins_extensions()
-    for root, dirs, files in os.walk(tmppath):
-        nf = 0
-        for f in files:
-            nf += 1
-            fpath = os.path.join(root, f)
-            assert(os.path.isfile(fpath))
-            # print(fpath)
-            hash = calculate_file_hash(fpath)
-            assert(fpath.startswith(tmppath))
-            new_intra_path = cur_intra_path.copy()
-            new_intra_path.append(Folders.normalize_archive_intra_path(fpath[len(tmppath):]))
-            ae = ArchiveEntry(archive_hash,new_intra_path,os.path.getsize(fpath),hash)
-            # print(ae.__dict__)
-            jsonarchiveentries[ae.file_hash]=ae
-
-            ext = os.path.split(fpath)[1].lower()
-            if ext in pluginexts:
-                nested_plugin = pluginhandler.archive_plugin_for(fpath)
-                assert(nested_plugin is not None)
-                _archiveToEntries(jsonarchiveentries,archive_hash,tmppath + str(nf) + '\\',new_intra_path,nested_plugin,fpath)
 
 ############# Parallelizable Tasks
 
@@ -109,26 +82,7 @@ def _ownHC2SelfTaskFunc(cache,parallel,taskout):
     
 ### Loading VFS
         
-def _loadVFS0(dbgfile):
-    unfilteredarchiveentries = []
-    for ae in wjdb.load_vfs(dbgfile):
-        unfilteredarchiveentries.append(ae)    
-    return unfilteredarchiveentries
 
-def _loadVFS(cachedir,cachedata,dbgfile):
-    (unfilteredarchiveentries,cachedataoverwrites) = pickled_cache(cachedir, cachedata, 'wjdb.vfsfile', [wjdb.vfs_file_path()],
-                                                                   lambda _: _loadVFS0(dbgfile))
-
-    shared = tasks.SharedReturn(unfilteredarchiveentries)
-    return (tasks.make_shared_return_param(shared), cachedataoverwrites)
-
-def _loadVFSTaskFunc(param):
-    (cachedir,cachedata,dbgfolder) = param
-    if dbgfolder:
-        with open(dbgfolder+'loadvfs.txt','wt',encoding='utf-8') as dbgfile:
-            return _loadVFS(cachedir,cachedata,dbgfile)
-    else:
-        return _loadVFS(cachedir,cachedata,None)
 
 def _findArByName(dict1,dict2,arname):
     arname1 = '\\'+arname
@@ -137,54 +91,30 @@ def _findArByName(dict1,dict2,arname):
             return ar
     return None
 
-def _ownFilterTaskFunc(cache,parallel,fromloadvfs):
-    t0 = time.perf_counter()
-
-    (sharedparam,cachedataoverwrites) = fromloadvfs
-    cache.cachedata |= cachedataoverwrites
-    
-    tsh0 = time.perf_counter()
-    unfilteredarchiveentries = tasks.received_shared_return(parallel, sharedparam)
-    tsh = time.perf_counter()-tsh0
-
+def TODO():
     allarchivehashes = {}
-    #print(dbgFirst(cache.archivesbypath).__dict__)
-    for arname in folders.all_archive_names():
-        assert(arname.islower())
-        #print(arname)
-        #ar = _getFromOneOfDicts(cache.jsonarchivesbypath,cache.archivesbypath,arname)
-        ar = _findArByName(cache.jsonarchivesbypath,cache.archivesbypath,arname)
+    # print(dbgFirst(cache.archivesbypath).__dict__)
+    for arname in aecache.folders.all_archive_names():
+        assert (arname.islower())
+        # print(arname)
+        # ar = _getFromOneOfDicts(cache.jsonarchivesbypath,cache.archivesbypath,arname)
+        ar = _findArByName(aecache.jsonarchivesbypath, aecache.archivesbypath, arname)
         if ar:
             allarchivehashes[ar.file_hash] = 1
         else:
-            warn('no archive hash found for '+arname)
-    
-    cache.archiveentries = {}
-    for ae in unfilteredarchiveentries:
-        ahash = ae.archive_hash
-        assert(ahash>=0)
-        if allarchivehashes.get(ahash) is not None:
-            #print(ae.toJSON())
-            #dbgWait()
-            cache.archiveentries[ae.calculate_file_hash] = ae
-
-    tsh0 = time.perf_counter()
-    info('Filtering VFS: '+str(len(cache.archiveentries))+' survived out of '+str(len(unfilteredarchiveentries)))
-    tsh += time.perf_counter()-tsh0
-    info('Filtering took '+str(round(time.perf_counter()-t0,2))+'s, including '+str(round(tsh,2))+'s working with shared memory (pickling/unpickling)')
-    #dbgWait()
+            warn('no archive hash found for ' + arname)
     
 #### Filters for FolderCaches
 
 class FilterForDownloads(FolderScanFilter):
     def __init__(self,folders):
-        super().__init__(tasks.LambdaReplacement( _dirPathIsOk, None ),  
-                         tasks.LambdaReplacement( _filePathIsOk, (folders,) ))
+        super().__init__(tasks.LambdaReplacement( _dir_path_is_ok, None ),
+                         tasks.LambdaReplacement( _file_path_is_ok, (folders,) ))
 
-    def _dirPathIsOk(capture, param):
+    def _dir_path_is_ok(capture, param):
         return True
     
-    def _filePathIsOk(capture, param):
+    def _file_path_is_ok(capture, param):
         (folders,) = capture
         fpath = param
         return folders.is_known_archive(fpath)
@@ -224,15 +154,12 @@ class Cache:
             unfilteredarchiveentries = Val(None)
             
             hctask = tasks.Task('loadhc',_loadHCTaskFunc,(self.folders,self.cachedata),[])
-            vfstask = tasks.Task('loadvfs',_loadVFSTaskFunc,(self.folders.cache,self.cachedata,dbgfolder),[])
-            
+
             owntaskhc2self = tasks.Task('ownhc2self',
                                         lambda _,out: _ownHC2SelfTaskFunc(self,parallel,out), #creates and launches cache.downloads[] FolderCaches 
                                         None,['loadhc']) 
                         
-            ownfiltertask = tasks.Task('filteraes',
-                                        lambda _,fromloadvfs,_2,_3: _ownFilterTaskFunc(self,parallel,fromloadvfs),
-                                        None,['loadvfs','loadhc','ownjsonarchives2self'])
+
             
             parallel.run([hctask,vfstask],
                          [owntaskhc2self,ownfiltertask])

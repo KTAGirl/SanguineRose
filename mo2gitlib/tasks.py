@@ -658,7 +658,7 @@ class Parallel:
                 besti = i
         return besti
 
-    def received_shared_return(self, sharedparam: tuple[str, int]) -> None:
+    def received_shared_return(self, sharedparam: SharedReturnParam) -> any:
         (name, sender) = sharedparam
         shm = shared_memory.SharedMemory(name)
         out = pickle.loads(shm.buf)
@@ -761,4 +761,5 @@ class Parallel:
             if self.json_fname is not None:
                 sortedw = dict(sorted(self.updated_json_weights.items(), key=lambda item: -item[1]))
                 with open(self.json_fname, 'wt', encoding='utf-8') as wf:
+                    # noinspection PyTypeChecker
                     json.dump(sortedw, wf, indent=2)

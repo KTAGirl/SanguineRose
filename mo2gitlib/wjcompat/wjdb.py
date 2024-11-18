@@ -97,7 +97,7 @@ def _normalize_hash(h:int) -> int:
         return h
 
 
-def _archive_entries(paths:list[str], hf:_HashedFile, root_archive_hash:int):
+def _archive_entries(paths:list[str], hf:_HashedFile, root_archive_hash:int) -> list[ArchiveEntry]:
     aes = []
     for child in hf.children:
         cp = paths + [child.path]
@@ -113,7 +113,7 @@ def vfs_file_path() -> str:
     return home_dir + '\\AppData\\Local\\Wabbajack\\GlobalVFSCache5.sqlite'
 
 
-def load_vfs(dbgfile=None) -> None:
+def load_vfs() -> Generator[ArchiveEntry]:
     con = sqlite3.connect(vfs_file_path())
     cur = con.cursor()
     # rowi = -1
@@ -126,11 +126,8 @@ def load_vfs(dbgfile=None) -> None:
         nn += 1
         if hf is None:
             nx += 1
-            if dbgfile:
-                dbgfile.write('WARNING: CANNOT PARSE' + str(contents) + ' FOR hash=' + str(hash) + '\n')
+            warn('VFS: CANNOT PARSE' + str(contents) + ' FOR hash=' + str(hash) + '\n')
         else:
-            if dbgfile:
-                dbgfile.write(str(hf.file_hash) + ':' + hf.dbg_string() + '\n')
             aes = _archive_entries([], hf, hf.file_hash)
             for ae in aes:
                 yield ae

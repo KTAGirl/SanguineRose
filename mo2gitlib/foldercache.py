@@ -36,25 +36,24 @@ def _read_dict_of_files(dirpath: str, name: str) -> dict[str, File]:
     assert Folders.is_normalized_dir_path(dirpath)
     fpath = dirpath + name + '.pickle'
     # out = {}
-    with open(fpath, 'rb') as rfile:
-        out = pickle.load(rfile)
+    with open(fpath, 'rb') as rf:
+        out = pickle.load(rf)
         return out
 
 
 def _write_dict_of_files(dirpath: str, name: str, files: dict[str, File], filteredfiles: dict[str, File]) -> None:
     assert Folders.is_normalized_dir_path(dirpath)
     fpath = dirpath + name + '.pickle'
-    with open(fpath, 'wb') as wfile:
-        pickle.dump(files | filteredfiles, wfile)
+    outfiles:dict[str, File] = files | filteredfiles
+    with open(fpath, 'wb') as wf:
+        # noinspection PyTypeChecker
+        pickle.dump(outfiles, wf)
 
     fpath2 = dirpath + name + '.njson'
-    with open_3rdparty_txt_file_w(fpath2) as wfile:
-        for key in sorted(files):
-            fi = files[key]
-            wfile.write(fi.to_json() + '\n')
-        for key in filteredfiles:
-            fi = files[key]
-            wfile.write(fi.to_json() + '\n')
+    with open_3rdparty_txt_file_w(fpath2) as wf2:
+        srt:list[tuple[str,File]] = sorted(outfiles.items())
+        for item in srt:
+            wf2.write(item[1].to_json() + '\n')
 
 
 class FolderScanStats:
@@ -162,7 +161,7 @@ def _load_files_task_func(param: tuple[str, str]) -> tuple[dict[str, File]]:
     try:
         filesbypath = _read_dict_of_files(cachedir, name)
     except Exception as e:
-        warn('error loading JSON cache ' + name + '.njson: ' + str(e) + '. Will continue w/o respective JSON cache')
+        warn('error loading cache ' + name + '.pickle: ' + str(e) + '. Will continue w/o respective cache')
         filesbypath = {}  # just in case
 
     return (filesbypath,)
