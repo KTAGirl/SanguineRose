@@ -53,11 +53,11 @@ def _ownHC2SelfTaskFunc(cache,parallel,taskout):
     cache.archivesbypath = dls
     cache.archivesbyhash = {}
     for key,val in cache.archivesbypath:
-        h = val.calculate_file_hash
+        h = val.file_hash
         if h in cache.archivesbyhash:
             ndup += 1
         else:
-            cache.archivesbyhash[val.calculate_file_hash] = val
+            cache.archivesbyhash[val.file_hash] = val
     
     cache.files_by_path = mo2s
     info(str(len(cache.archives)) +' archives (' + str(ndup) +' duplicates), '
@@ -197,11 +197,11 @@ class Cache:
         if fi is None:
             return None,None,None
 
-        if fi.calculate_file_hash==ZEROHASH:
-            ae=ArchiveEntry(None, None, 0, fi.calculate_file_hash)
+        if fi.file_hash==ZEROHASH:
+            ae=ArchiveEntry(None, None, 0, fi.file_hash)
             return ae,None,None #there is no archive, size=0 is enough to restore the file
 
-        hash=fi.calculate_file_hash
+        hash=fi.file_hash
         if hash is None:#file was deleted
             return None,None,fi
         #print(fi.__dict__)

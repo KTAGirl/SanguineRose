@@ -76,18 +76,20 @@ def _load_aentries_task_func(param: tuple[str]) -> tuple[dict[str, ArchiveEntry]
     return (archive_entries,)
 
 
-def _load_aentries_own_task_func(out: tuple[dict[str, ArchiveEntry]], aecache: "ArchiveEntriesCache") -> None:
+def _load_aentries_own_task_func(out: tuple[dict[str, ArchiveEntry]], aecache: "ArchiveEntriesCache",
+                                 is_archive_hash_known: Callable[[int], bool], ) -> None:
     (archive_entries,) = out
     assert len(aecache.archive_entries) == 0
     for ae in archive_entries.values():
         ahash = ae.archive_hash
         assert (ahash >= 0)
-        if aecache.is_archive_hash_known(ahash):
+        if is_archive_hash_known(ahash):
             aecache.archive_entries[ae.file_hash] = ae
         else:
             aecache.filtered_archive_entries[ae.file_hash] = ae
     info('Filtering aentries: ' + str(len(aecache.archive_entries)) + ' survived out of ' + str(
         len(archive_entries)))
+
 
 def _load_vfs() -> list[ArchiveEntry]:
     unfilteredarchiveentries = []
@@ -107,6 +109,7 @@ def _load_vfs_task_func(param: tuple[str, dict[str, any]]) -> tuple[tasks.Shared
 
 
 def _own_filter_task_func(aecache: "ArchiveEntriesCache", parallel: tasks.Parallel,
+                          is_archive_hash_known: Callable[[int], bool],
                           fromloadvfs: tuple[tasks.SharedReturnParam, dict[str, any]]) -> None:
     t0 = time.perf_counter()
 
@@ -121,7 +124,7 @@ def _own_filter_task_func(aecache: "ArchiveEntriesCache", parallel: tasks.Parall
     for ae in unfilteredarchiveentries:
         ahash = ae.archive_hash
         assert (ahash >= 0)
-        if aecache.is_archive_hash_known(ahash):
+        if is_archive_hash_known(ahash):
             aecache.wj_archive_entries[ae.file_hash] = ae
         else:
             aecache.filtered_wj_archive_entries[ae.file_hash] = ae
@@ -142,28 +145,25 @@ class ArchiveEntriesCache:
     filtered_wj_archive_entries: dict[int, ArchiveEntry]
     filtered_archive_entries: dict[int, ArchiveEntry]
     cache_data: dict[str, any]
-    is_archive_hash_known: Callable[[int], bool]
-    task_name_enabling_is_archive_hash_known: str
 
-    def __init__(self, cache_dir, cache_data: dict[str, any], is_archive_hash_known: Callable[[int], bool],
-                 task_name_enabling_is_archive_hash_known) -> None:
+    def __init__(self, cache_dir, cache_data: dict[str, any]) -> None:
         self.cache_dir = cache_dir
         self.wj_archive_entries = {}
         self.archive_entries = {}
         self.filtered_wj_archive_entries = {}
         self.filtered_archive_entries = {}
         self.cache_data = cache_data
-        self.is_archive_hash_known = is_archive_hash_known
-        self.task_name_enabling_is_archive_hash_known = task_name_enabling_is_archive_hash_known
 
-    def start_tasks(self, parallel: tasks.Parallel) -> None:
+    def start_tasks(self, parallel: tasks.Parallel, is_archive_hash_known: Callable[[int], bool],
+                    task_name_enabling_is_archive_hash_known: str) -> None:
         loadtaskname = 'mo2gitlib.aentriescache.load'
         loadtask = tasks.Task(loadtaskname, _load_aentries_task_func,
                               (self.cache_dir,), [])
         parallel.add_late_task(loadtask)
         loadowntaskname = 'mo2gitlib.aentriescache.loadown'
-        loadowntask = tasks.Task(loadowntaskname, lambda _, out: _load_aentries_own_task_func(out, self), None,
-                                 [loadtaskname,self.task_name_enabling_is_archive_hash_known])
+        loadowntask = tasks.Task(loadowntaskname,
+                                 lambda _, out: _load_aentries_own_task_func(out, self, is_archive_hash_known), None,
+                                 [loadtaskname, task_name_enabling_is_archive_hash_known])
         parallel.add_late_own_task(loadowntask)
 
         loadvfstaskname = 'mo2gitlib.aentriescache.loadvfs'
@@ -172,9 +172,11 @@ class ArchiveEntriesCache:
         parallel.add_late_task(vfstask)
 
         ownfiltertask = tasks.Task('mo2gitlib.aentriescache.ownfilter',
-                                   lambda _, fromloadvfs, _2, _3: _own_filter_task_func(self, parallel, fromloadvfs),
+                                   lambda _, fromloadvfs, _2, _3: _own_filter_task_func(self, parallel,
+                                                                                        is_archive_hash_known,
+                                                                                        fromloadvfs),
                                    None,
-                                   [loadvfstaskname, self.task_name_enabling_is_archive_hash_known, loadowntaskname])
+                                   [loadvfstaskname, task_name_enabling_is_archive_hash_known, loadowntaskname])
         parallel.add_late_own_task(ownfiltertask)
 
     def find_entry_by_hash(self, h: int):

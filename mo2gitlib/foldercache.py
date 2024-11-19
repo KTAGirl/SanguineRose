@@ -44,14 +44,14 @@ def _read_dict_of_files(dirpath: str, name: str) -> dict[str, File]:
 def _write_dict_of_files(dirpath: str, name: str, files: dict[str, File], filteredfiles: dict[str, File]) -> None:
     assert Folders.is_normalized_dir_path(dirpath)
     fpath = dirpath + name + '.pickle'
-    outfiles:dict[str, File] = files | filteredfiles
+    outfiles: dict[str, File] = files | filteredfiles
     with open(fpath, 'wb') as wf:
         # noinspection PyTypeChecker
         pickle.dump(outfiles, wf)
 
     fpath2 = dirpath + name + '.njson'
     with open_3rdparty_txt_file_w(fpath2) as wf2:
-        srt:list[tuple[str,File]] = sorted(outfiles.items())
+        srt: list[tuple[str, File]] = sorted(outfiles.items())
         for item in srt:
             wf2.write(item[1].to_json() + '\n')
 
@@ -183,6 +183,16 @@ def _load_files_own_task_func(out, foldercache: "FolderCache", parallel: tasks.P
     return (pubparam,)
 
 
+def _underlying_own_task_func(foldercache: "FolderCache", parallel: tasks.Parallel,
+                              underlyingfilesbypath_generator: Generator[tuple[str, File]]) -> None:
+    assert len(foldercache.underlyingfilesbypath) == 0
+    for key, val in underlyingfilesbypath_generator:
+        assert (val.file_path == key)
+        if foldercache.scan_filter.file_path_is_ok.call(key):
+            foldercache.underlyingfilesbypath[key] = val
+    foldercache.pubunderlyingfilesbypath = tasks.SharedPublication(parallel, foldercache.underlyingfilesbypath)
+
+
 def _scan_folder_task_func(param: tuple[str, list[str], str, FolderScanFilter, tasks.SharedPubParam, dict[str, float]],
                            fromownload: tuple[tasks.SharedPubParam]) -> tuple[
     list[str], FolderScanStats, FolderScanDirOut]:
@@ -268,27 +278,22 @@ class FolderCache:  # single (recursive) folder cache
     scan_filter: FolderScanFilter
     pubunderlyingfilesbypath: tasks.SharedPublication | None
 
-    def __init__(self, cachedir: str, name: str, rootfolder: str, externalfilesbypath: dict[str, File],
+    def __init__(self, cachedir: str, name: str, rootfolder: str,
                  scan_filter: FolderScanFilter) -> None:
         assert (isinstance(scan_filter, FolderScanFilter))
-
-        self.underlyingfilesbypath = {}
-        assert (isinstance(externalfilesbypath, dict))
-        for key, val in externalfilesbypath.items():
-            assert (val.file_path == key)
-            if scan_filter.file_path_is_ok.call(key):
-                self.underlyingfilesbypath[key] = val
-
         self.cache_dir = cachedir
         self.name = name
         self.root_folder = rootfolder
         self.files_by_path = {}
         self.filteredfiles = []
         self.scan_filter = scan_filter
+
+        self.underlyingfilesbypath = {}
         self.pubunderlyingfilesbypath = None
 
-    def start_tasks(self, parallel: tasks.Parallel) -> None:
-        self.pubunderlyingfilesbypath = tasks.SharedPublication(parallel, self.underlyingfilesbypath)
+    def start_tasks(self, parallel: tasks.Parallel,
+                    underlyingfilesbypath_generator: Generator[tuple[str, File]],
+                    task_name_enabling_underlyingfilesbypath_generator) -> None:
 
         # building tree of known tasks
         rootnode = _TaskNode(None, '', None)
@@ -326,6 +331,13 @@ class FolderCache:  # single (recursive) folder cache
                                  [loadtaskname])
         parallel.add_late_own_task(loadowntask)
 
+        underlyingowntaskname = 'mo2git.foldercache.underlyingown.' + self.name
+        underlyingowntask = tasks.Task(underlyingowntaskname, lambda _, _1: _underlying_own_task_func(self, parallel,
+                                                                                                      underlyingfilesbypath_generator),
+                                       None,
+                                       [task_name_enabling_underlyingfilesbypath_generator])
+        parallel.add_late_own_task(underlyingowntask)
+
         for node in allnodes2:
             fullpath = self.root_folder + node.path
             taskname = _scanned_task_name(self.name, fullpath)
@@ -335,7 +347,7 @@ class FolderCache:  # single (recursive) folder cache
                               (fullpath, alldirsexthisone, self.name, self.scan_filter,
                                tasks.make_shared_publication_param(self.pubunderlyingfilesbypath),
                                parallel.copy_estimates()),
-                              [loadowntaskname])
+                              [loadowntaskname, underlyingowntaskname])
             owntaskname = _scanned_own_task_name(self.name, fullpath)
             owntask = tasks.Task(owntaskname,
                                  lambda _, out: _scan_folder_own_task_func(out, self, parallel, scannedfiles, stats),
@@ -378,9 +390,9 @@ class FolderCache:  # single (recursive) folder cache
                 found = _get_from_one_of_dicts(filesbypath, underlying, fpath)
                 matched = False
                 if found is not None:
-                    assert found.calculate_file_hash == fpath
+                    assert found.file_hash == fpath
                     sdout.scanned_files[fpath] = found
-                    if found.calculate_file_hash is not None:  # file in cache marked as deleted, re-adding
+                    if found.file_hash is not None:  # file in cache marked as deleted, re-adding
                         tstamp2 = found.file_modified
                         # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
                         if compare_timestamp_with_wj(tstamp, tstamp2) == 0:

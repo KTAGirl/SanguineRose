@@ -104,7 +104,7 @@ def _mo2git(jsonconfigfname,config):
             if ar is not None:
                 assert(ar.file_path.endswith(arname))
                 #print(ar.file_hash)
-                allinstallfiles[ar.calculate_file_hash] = ar.file_path
+                allinstallfiles[ar.file_hash] = ar.file_path
             else:
                 warn('no archive found for '+arname)
         #print(allinstallfiles)

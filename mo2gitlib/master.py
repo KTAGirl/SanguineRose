@@ -218,7 +218,7 @@ class Master:
 
                 if not processed:
                     if fi is not None:
-                        self.files.append(MasterFileItem(fpath, fi.calculate_file_hash, warning='NF'))
+                        self.files.append(MasterFileItem(fpath, fi.file_hash, warning='NF'))
                     else:
                         self.files.append(MasterFileItem(fpath, None, warning='NF'))
                     nwarn.val += 1
@@ -227,7 +227,7 @@ class Master:
                     assert (ae.file_size == 0)
                     self.files.append(MasterFileItem(fpath, None, file_size=0))
                 else:
-                    fi = MasterFileItem(fpath, ae.calculate_file_hash, file_size=ae.file_size,
+                    fi = MasterFileItem(fpath, ae.file_hash, file_size=ae.file_size,
                                         archive_hash=ae.archive_hash, intra_path=[])
                     for path in ae.intra_path:
                         fi.intra_path.append(path)

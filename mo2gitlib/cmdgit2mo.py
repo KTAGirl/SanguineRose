@@ -30,9 +30,9 @@ def _git2mo(jsonconfigfname,config):
             if fimaster.gitpath is not None:
                 needtocopy.append(fpath)
                 continue
-            fimasterhash = cache.ZEROHASH if fimaster.file_size == 0 else fimaster.calculate_file_hash
+            fimasterhash = cache.ZEROHASH if fimaster.file_size == 0 else fimaster.file_hash
             ficache = filecache.findFileOnly(fpath)
-            if ficache is not None and ficache.calculate_file_hash == fimasterhash:
+            if ficache is not None and ficache.file_hash == fimasterhash:
                 #print(fimaster.file_path)
                 #dbgWait()
                 continue
