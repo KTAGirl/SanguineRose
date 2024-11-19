@@ -5,7 +5,7 @@ from mo2gitlib.common import *
 from mo2gitlib.folders import Folders
 
 
-def installfile_and_modid(mod:str, mo2:str):
+def installfile_and_modid(mod: str, mo2: str):
     assert Folders.is_normalized_dir_path(mo2)
     modmetaname = mo2 + 'mods\\' + mod + '\\meta.ini'
     # print(modmetaname)
@@ -15,7 +15,8 @@ def installfile_and_modid(mod:str, mo2:str):
     except Exception as e:
         warn('cannot read' + modmetaname + ': ' + str(e))
         return None, None
-    installfiles = [fname.replace('/','\\').lower() for fname in list(filter(lambda s: re.search('^installationFile *= *', s), modmetalines))]
+    installfiles = [fname.replace('/', '\\').lower() for fname in
+                    list(filter(lambda s: re.search('^installationFile *= *', s), modmetalines))]
     assert (len(installfiles) <= 1)
     if len(installfiles) == 0:
         # print('#2:'+mod)
@@ -50,7 +51,7 @@ class HowToDownloadReturn(Enum):
     NonNexusNonManual = 4
 
 
-def how_to_download(installfname :str, mo2: str) -> tuple[HowToDownloadReturn,str|None,str|None]:
+def how_to_download(installfname: str, mo2: str) -> tuple[HowToDownloadReturn, str | None, str | None]:
     assert Folders.is_normalized_dir_path(mo2)
     filemetaname = mo2 + 'downloads\\' + installfname + '.meta'
     try:
@@ -85,7 +86,7 @@ def how_to_download(installfname :str, mo2: str) -> tuple[HowToDownloadReturn,st
             return HowToDownloadReturn.NexusOk, None, None
 
 
-def manual_url_and_prompt(installfile : str, mo2:str):
+def manual_url_and_prompt(installfile: str, mo2: str):
     flag, manualurl, prompt = how_to_download(installfile, mo2)
     match flag:
         case HowToDownloadReturn.NoMeta:
@@ -100,10 +101,10 @@ def manual_url_and_prompt(installfile : str, mo2:str):
             return None, None
 
 
-def installfile_modid_manual_url_and_prompt(mod :str, mo2:str):
+def installfile_modid_manual_url_and_prompt(mod: str, mo2: str):
     installfile, modid = installfile_and_modid(mod, mo2)
 
-    #manualurl = None
+    # manualurl = None
     if not installfile:
         print('WARNING: no installedFiles= found for mod ' + mod)
         return None, None, None, None

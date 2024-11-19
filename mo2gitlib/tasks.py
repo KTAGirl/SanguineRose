@@ -142,14 +142,18 @@ def _run_task(task: Task, depparams: list[any]) -> any:
             assert False
     return out
 
+
 type SharedReturnParam = tuple[str, int]
+
 
 def make_shared_return_param(shared: SharedReturn) -> SharedReturnParam:
     # assert _proc_num>=0
     global _proc_num
     return shared.name(), _proc_num
 
+
 type SharedPubParam = str
+
 
 def make_shared_publication_param(shared: SharedPublication) -> str:
     return shared.name()

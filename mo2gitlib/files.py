@@ -27,7 +27,8 @@ class File:
     file_modified: float
     file_size: int | None
 
-    def __init__(self, file_hash: int|None, file_modified: float|None, file_path: str, file_size: int | None = None):
+    def __init__(self, file_hash: int | None, file_modified: float | None, file_path: str,
+                 file_size: int | None = None):
         assert (file_path is not None)
         self.file_hash = file_hash
         self.file_modified = file_modified

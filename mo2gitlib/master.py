@@ -12,7 +12,7 @@ from mo2gitlib.files import calculate_file_hash
 #  2. minor. we want to keep these files as small as feasible (while keeping it more or less readable), 
 #            hence JSON5 quote-less names, and path and elements "compression". It was seen to save 3.8x (2x for default pcompression=0), for a 50M file it is quite a bit
 
-def _to_json_hash(h:int) -> str:
+def _to_json_hash(h: int) -> str:
     assert (isinstance(h, int))
     assert (h >= 0)
     assert (h < 2 ** 64)
@@ -25,7 +25,7 @@ def _to_json_hash(h:int) -> str:
     return s
 
 
-def _from_json_hash(s:str) -> int:
+def _from_json_hash(s: str) -> int:
     ntopad = (3 - (len(s) % 3)) % 3
     # print(ntopad)
     s += '=='[:ntopad]
@@ -35,15 +35,15 @@ def _from_json_hash(s:str) -> int:
     return h
 
 
-def _to_json_fpath(fpath:str) -> str:
+def _to_json_fpath(fpath: str) -> str:
     return urlparse.quote(fpath, safe=" /+()'&#$[];,!@")
 
 
-def _from_json_fpath(fpath:str) -> str:
+def _from_json_fpath(fpath: str) -> str:
     return urlparse.unquote(fpath)
 
 
-def _compress_json_path(prevn:Val|None, prevpath:Val|None, path:str, level:int=2):
+def _compress_json_path(prevn: Val | None, prevpath: Val | None, path: str, level: int = 2):
     assert '/' not in path
     # assert('>' not in path)
     path = path.replace('\\', '/')
@@ -84,7 +84,7 @@ def _compress_json_path(prevn:Val|None, prevpath:Val|None, path:str, level:int=2
     return path + '"'
 
 
-def _decompress_json_path(prevpath:Val, path:str, level:int=2):
+def _decompress_json_path(prevpath: Val, path: str, level: int = 2):
     path = _from_json_fpath(path)
     if level == 0:
         return path.replace('/', '\\')
@@ -111,14 +111,14 @@ def _decompress_json_path(prevpath:Val, path:str, level:int=2):
     return out.replace('/', '\\')
 
 
-def _append_json_s(prevs:Val, s:int) -> str:
+def _append_json_s(prevs: Val, s: int) -> str:
     if prevs.val == s:
         return ''
     prevs.val = s
     return ',s:' + str(s)
 
 
-def _append_json_a(preva : Val, a:str):
+def _append_json_a(preva: Val, a: str):
     if preva.val == a:
         return ''
     preva.val = a
@@ -128,7 +128,8 @@ def _append_json_a(preva : Val, a:str):
 class MasterArchiveItem:
     name: str
     item_hash: int
-    def __init__(self, name:str, item_hash:int) -> None:
+
+    def __init__(self, name: str, item_hash: int) -> None:
         self.name = name
         self.item_hash = item_hash
 
@@ -142,15 +143,15 @@ class MasterArchiveItem:
 
 class MasterFileItem:
     file_path: str
-    file_hash: int|None
-    file_size: int|None
-    archive_hash: int|None
-    intra_path: list[str]|None
-    gitpath: str|None
-    warning: str|None
+    file_hash: int | None
+    file_size: int | None
+    archive_hash: int | None
+    intra_path: list[str] | None
+    gitpath: str | None
+    warning: str | None
 
-    def __init__(self, path:str, file_hash:int|None, file_size:int|None=None, archive_hash:int|None=None,
-                intra_path:list[str]|None=None, gitpath:str|None=None, warning:str|None=None) -> None:
+    def __init__(self, path: str, file_hash: int | None, file_size: int | None = None, archive_hash: int | None = None,
+                 intra_path: list[str] | None = None, gitpath: str | None = None, warning: str | None = None) -> None:
         self.file_path = path
         self.file_hash = file_hash
         self.file_size = file_size
@@ -159,7 +160,7 @@ class MasterFileItem:
         self.gitpath = gitpath
         self.warning = warning
 
-    def eq(self, b:"MasterFileItem") -> bool:
+    def eq(self, b: "MasterFileItem") -> bool:
         if self.file_path != b.file_path:
             return False
         if self.file_hash != b.file_hash:
@@ -183,7 +184,7 @@ class Master:
         self.archives = []
         self.files = []
 
-    def construct_from_cache(self, nesx:Val, nwarn:Val, filecache:Cache, allinstallfiles:dict[int,str]) -> None:
+    def construct_from_cache(self, nesx: Val, nwarn: Val, filecache: Cache, allinstallfiles: dict[int, str]) -> None:
         aif = []
         for h, path in allinstallfiles.items():
             fname = os.path.split(path)[1]
@@ -241,7 +242,7 @@ class Master:
         for fi in self.files:
             yield fi
 
-    def write(self, wfile : typing.TextIO, masterconfig:dict[str,any]) -> None:
+    def write(self, wfile: typing.TextIO, masterconfig: dict[str, any]) -> None:
         level = masterconfig.get('pcompression', 0) if masterconfig is not None else 0
         assert (isinstance(level, int))
 
@@ -263,7 +264,7 @@ class Master:
         lasts = Val(None)
         lasta = Val(None)
         lastf = Val([])
-        lasti = [Val(None)] * 2 # increasing it here will need adding more patterns to constructFromFile()
+        lasti = [Val(None)] * 2  # increasing it here will need adding more patterns to constructFromFile()
         nlasti = 0
         lastpn = Val(0)
         for fi in self.files:
@@ -339,7 +340,7 @@ class Master:
         lastp = Val([])
         lasts = Val(None)
         lasta = Val(None)
-        #lastf = Val([])
+        # lastf = Val([])
         lasti = [Val(None)] * 2
         nlasti = Val(0)
         lastf = Val([])
@@ -496,7 +497,8 @@ class Master:
         assert (state == 3)
 
 
-def _read_phsaii(p:str, h:str, s:int|None, a:str|None, i1:str|None, i2:str|None, lastp:Val, lasts:Val, lasta:Val, nlasti:Val, lasti:list[Val], level:int|None):
+def _read_phsaii(p: str, h: str, s: int | None, a: str | None, i1: str | None, i2: str | None, lastp: Val, lasts: Val,
+                 lasta: Val, nlasti: Val, lasti: list[Val], level: int | None):
     fi = MasterFileItem(_decompress_json_path(lastp, p, level), _from_json_hash(h) if h is not None else None)
 
     if s is None:
