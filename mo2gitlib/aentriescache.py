@@ -138,6 +138,13 @@ def _own_filter_task_func(aecache: "ArchiveEntriesCache", parallel: tasks.Parall
     info('Filtering took ' + str(round(time.perf_counter() - t0, 2)) + 's, including ' + str(
         round(tsh, 2)) + 's working with shared memory (pickling/unpickling)')
 
+    savetaskname = 'mo2git.aentriescache.save'
+    savetask = tasks.Task(savetaskname, _save_aentries_task_func,
+                          (aecache.cache_dir, aecache.archive_entries, aecache.filtered_archive_entries),
+                          [])
+    parallel.add_late_task(
+        savetask)  # we won't explicitly wait for savetask, it will be waited for in Parallel.__exit__
+
 
 def _save_aentries_task_func(param: tuple[str, dict[str, ArchiveEntry], dict[str, ArchiveEntry]]) -> None:
     (cachedir, archive_entries, filtered_archive_entries) = param
@@ -185,13 +192,6 @@ class ArchiveEntriesCache:
                                    None,
                                    [loadvfstaskname, task_name_enabling_is_archive_hash_known, loadowntaskname])
         parallel.add_late_own_task(ownfiltertask)
-
-        savetaskname = 'mo2git.aentriescache.save'
-        savetask = tasks.Task(savetaskname, _save_aentries_task_func,
-                              (self.cache_dir, self.archive_entries, self.filtered_archive_entries),
-                              [])
-        parallel.add_late_task(
-            savetask)  # we won't explicitly wait for savetask, it will be waited for in Parallel.__exit__
 
     def find_entry_by_hash(self, h: int):
         assert h >= 0
