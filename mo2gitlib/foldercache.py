@@ -260,7 +260,8 @@ def _own_reconcile_task_func(foldercache: "FolderCache", parallel: tasks.Paralle
                           (foldercache.cache_dir, foldercache.name, foldercache.files_by_path,
                            foldercache.filteredfiles),
                           [])
-    parallel.add_late_task(savetask)  # we won't explicitly wait for savetask, it will be handled in Parallel.__exit__
+    parallel.add_late_task(
+        savetask)  # we won't explicitly wait for savetask, it will be waited for in Parallel.__exit__
 
 
 def _save_files_task_func(param: tuple[str, str, dict[str, File], dict[str, File]]) -> None:
