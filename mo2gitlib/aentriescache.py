@@ -79,13 +79,19 @@ def _load_aentries_task_func(param: tuple[str]) -> tuple[dict[str, ArchiveEntry]
 
 
 def _load_aentries_own_task_func(out: tuple[dict[str, ArchiveEntry]], aecache: "ArchiveEntriesCache",
-                                 is_archive_hash_known: Callable[[int], bool], ) -> None:
+                                 all_used_archives: Generator[tuple[str, int]]) -> None:
     (archive_entries,) = out
-    assert len(aecache.archive_entries) == 0
+    assert aecache.archive_entries is None
+    aecache.archive_entries = {}
+
+    allarchives: dict[int, bool] = {}  # have to do it here, cannot fill it before task_func is called
+    for a in all_used_archives:
+        allarchives[a[1]] = False  # allarchives here is actually a set, value doesn't matter
+
     for ae in archive_entries.values():
         ahash = ae.archive_hash
         assert (ahash >= 0)
-        if is_archive_hash_known(ahash):
+        if ahash in allarchives:
             aecache.archive_entries[ae.file_hash] = ae
         else:
             aecache.filtered_archive_entries[ae.file_hash] = ae
@@ -110,8 +116,31 @@ def _load_vfs_task_func(param: tuple[str, dict[str, any]]) -> tuple[tasks.Shared
     return tasks.make_shared_return_param(shared), cachedataoverwrites
 
 
+def _archive_hashing_task_func(param: tuple[str, int, str]) -> tuple[dict[int, ArchiveEntry]]:
+    (arpath, arhash, tmppath,) = param
+    archive_entries: dict[int, ArchiveEntry] = {}
+    plugin = pluginhandler.archive_plugin_for(arpath)
+    assert plugin is not None
+    _archive_to_entries(archive_entries, arhash, tmppath, [], plugin, arpath)
+    return (archive_entries,)
+
+
+def _archive_hashing_own_task_func(out: tuple[dict[int, ArchiveEntry]], aecache: "ArchiveEntriesCache"):
+    (archive_entries,) = out
+    aecache.archive_entries |= archive_entries
+    for ae in archive_entries.values():
+        if ae.file_hash in aecache.archive_entries:
+            warn('file_hash ' + str(ae.file_hash) + ' already present in archive_entries')
+            # do nothing here, will still overwrite it below
+        if ae.file_hash in aecache.filtered_archive_entries:
+            warn('file_hash ' + str(ae.file_hash) + ' already present in filtered_archive_entries')
+            del aecache.filtered_archive_entries[ae.file_hash]
+        # we probably do not care too much about collisions with WJ, will simply overwrite them
+        aecache.archive_entries[ae.file_hash] = ae
+
+
 def _own_filter_task_func(aecache: "ArchiveEntriesCache", parallel: tasks.Parallel,
-                          is_archive_hash_known: Callable[[int], bool],
+                          all_used_archives: Generator[tuple[str, int]],
                           fromloadvfs: tuple[tasks.SharedReturnParam, dict[str, any]]) -> None:
     t0 = time.perf_counter()
 
@@ -122,12 +151,18 @@ def _own_filter_task_func(aecache: "ArchiveEntriesCache", parallel: tasks.Parall
     unfilteredarchiveentries: list[ArchiveEntry] = parallel.received_shared_return(sharedparam)
     tsh = time.perf_counter() - tsh0
 
+    allarchives: dict[int, tuple[str, Val]] = {}  # have to do it here, cannot fill it before task_func is called
+    for a in all_used_archives:
+        allarchives[a[1]] = (a[0], Val(False))  # False means 'not found yet'
+
     assert (len(aecache.wj_archive_entries) == 0)
     for ae in unfilteredarchiveentries:
         ahash = ae.archive_hash
         assert (ahash >= 0)
-        if is_archive_hash_known(ahash):
+        if ahash in allarchives:
             aecache.wj_archive_entries[ae.file_hash] = ae
+            allarchives[ahash][
+                1].val = True  # if we see at least one aentry for archive - we assume that the whole archive has been hashed
         else:
             aecache.filtered_wj_archive_entries[ae.file_hash] = ae
 
@@ -137,6 +172,32 @@ def _own_filter_task_func(aecache: "ArchiveEntriesCache", parallel: tasks.Parall
     tsh += time.perf_counter() - tsh0
     info('Filtering took ' + str(round(time.perf_counter() - t0, 2)) + 's, including ' + str(
         round(tsh, 2)) + 's working with shared memory (pickling/unpickling)')
+
+    # Reconciling
+    # allarchives[ahash] is already set to True for wj_archive_entries
+    assert aecache.archive_entries is not None
+    for ae in aecache.archive_entries.values():
+        ahash = ae.archive_hash
+        assert (ahash >= 0)
+        if ahash in allarchives:
+            allarchives[ahash][
+                1].val = True  # if we see at least one aentry for archive - we assume that the whole archive has been hashed
+    # now, we marked allarchives[ahash] as used for all the hashed archives
+    numhashing = 0
+    for arhash, ar in allarchives.items():
+        if not ar[1].val:
+            # found unhashed archive
+            info('need to hash ' + ar[0] + ', scheduling archive hashing task')
+            numhashing += 1
+            hashingtaskname = 'mo2gitlib.aentriescache.hash.' + ar[0]
+            hashingtask = tasks.Task(hashingtaskname, _archive_hashing_task_func,
+                                     (ar[0], arhash, aecache.tmp_dir + str(numhashing) + '\\'), [])
+            parallel.add_late_task(hashingtask)
+            hashingowntaskname = 'mo2gitlib.aentriescache.hashingown.' + ar[0]
+            hashingowntask = tasks.Task(hashingowntaskname,
+                                        lambda _, out: _archive_hashing_own_task_func(out, aecache), None,
+                                        [hashingtaskname])
+            parallel.add_late_own_task(hashingowntask)
 
     savetaskname = 'mo2git.aentriescache.save'
     savetask = tasks.Task(savetaskname, _save_aentries_task_func,
@@ -154,30 +215,33 @@ def _save_aentries_task_func(param: tuple[str, dict[str, ArchiveEntry], dict[str
 ### class itself
 
 class ArchiveEntriesCache:
+    cache_dir: str
+    tmp_dir: str
     wj_archive_entries: dict[int, ArchiveEntry]
-    archive_entries: dict[int, ArchiveEntry]
+    archive_entries: dict[int, ArchiveEntry] | None
     filtered_wj_archive_entries: dict[int, ArchiveEntry]
     filtered_archive_entries: dict[int, ArchiveEntry]
     cache_data: dict[str, any]
 
-    def __init__(self, cache_dir, cache_data: dict[str, any]) -> None:
+    def __init__(self, cache_dir, base_tmp_dir, cache_data: dict[str, any]) -> None:
         self.cache_dir = cache_dir
+        self.tmp_dir = base_tmp_dir  + 'aecache\\'
         self.wj_archive_entries = {}
-        self.archive_entries = {}
+        self.archive_entries = None
         self.filtered_wj_archive_entries = {}
         self.filtered_archive_entries = {}
         self.cache_data = cache_data
 
-    def start_tasks(self, parallel: tasks.Parallel, is_archive_hash_known: Callable[[int], bool],
-                    task_name_enabling_is_archive_hash_known: str) -> None:
+    def start_tasks(self, parallel: tasks.Parallel, all_used_archives: Generator[tuple[str, int]],
+                    task_name_enabling_all_used_archives: str) -> None:
         loadtaskname = 'mo2gitlib.aentriescache.load'
         loadtask = tasks.Task(loadtaskname, _load_aentries_task_func,
                               (self.cache_dir,), [])
         parallel.add_late_task(loadtask)
         loadowntaskname = 'mo2gitlib.aentriescache.loadown'
         loadowntask = tasks.Task(loadowntaskname,
-                                 lambda _, out: _load_aentries_own_task_func(out, self, is_archive_hash_known), None,
-                                 [loadtaskname, task_name_enabling_is_archive_hash_known])
+                                 lambda _, out, _1: _load_aentries_own_task_func(out, self, all_used_archives), None,
+                                 [loadtaskname, task_name_enabling_all_used_archives])
         parallel.add_late_own_task(loadowntask)
 
         loadvfstaskname = 'mo2gitlib.aentriescache.loadvfs'
@@ -187,10 +251,10 @@ class ArchiveEntriesCache:
 
         ownfiltertask = tasks.Task('mo2gitlib.aentriescache.ownfilter',
                                    lambda _, fromloadvfs, _2, _3: _own_filter_task_func(self, parallel,
-                                                                                        is_archive_hash_known,
+                                                                                        all_used_archives,
                                                                                         fromloadvfs),
                                    None,
-                                   [loadvfstaskname, task_name_enabling_is_archive_hash_known, loadowntaskname])
+                                   [loadvfstaskname, task_name_enabling_all_used_archives, loadowntaskname])
         parallel.add_late_own_task(ownfiltertask)
 
     def find_entry_by_hash(self, h: int):
