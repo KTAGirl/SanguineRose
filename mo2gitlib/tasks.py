@@ -195,37 +195,45 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue) 
         outq.put(_Started(_proc_num))
         while True:
             waitt0 = time.perf_counter()
-            taskplus = inq.get()
+            msg = inq.get()
+            if msg is None:
+                break  # while True
+
             dwait = time.perf_counter() - waitt0
-            # print(dwait)
             waitstr = _str_dt(dwait) + 's'
 
-            if taskplus is None:
-                break  # while True
-            task = taskplus[0]
-            processedshm = taskplus[1]
-            assert task is None or processedshm is None
-            assert task is not None or processedshm is not None
+            (tasks, processedshm) = msg
             if processedshm is not None:
-                assert task is None
+                assert tasks is None
                 info('Process #' + str(
                     proc_num + 1) + ': after waiting for ' + waitstr + ', releasing shm=' + processedshm)
                 _pool_of_shared_returns.done_with(processedshm)
                 continue  # while True
 
-            ndep = len(task.dependencies)
-            assert len(taskplus) == 2 + ndep
-            t0 = time.perf_counter()
-            tp0 = time.process_time()
-            info(_str_time() + 'Process #' + str(
-                proc_num + 1) + ': after waiting for ' + waitstr + ', starting task ' + task.name)
-            out = _run_task(task, taskplus[2:])
-            elapsed = time.perf_counter() - t0
-            cpu = time.process_time() - tp0
-            info(
-                _str_time() + 'Process #' + str(proc_num + 1) + ': done task ' + task.name + ', cpu/elapsed=' + _str_dt(
-                    cpu) + '/' + _str_dt(elapsed) + 's')
-            outq.put((proc_num, task.name, (cpu, elapsed), out))
+            assert tasks is not None
+            assert isinstance(tasks, list)
+            for tplus in tasks:
+                task = tplus[0]
+                ndep = len(task.dependencies)
+                assert len(tplus) == 1 + ndep
+                t0 = time.perf_counter()
+                tp0 = time.process_time()
+                if waitstr is not None:
+                    info(_str_time() + 'Process #' + str(
+                        proc_num + 1) + ': after waiting for ' + waitstr + ', starting task ' + task.name)
+                    waitstr = None
+                else:
+                    info(_str_time() + 'Process #' + str(
+                        proc_num + 1) + ': starting task ' + task.name)
+                out = _run_task(task, tplus[1:])
+                elapsed = time.perf_counter() - t0
+                cpu = time.process_time() - tp0
+                info(
+                    _str_time() + 'Process #' + str(
+                        proc_num + 1) + ': done task ' + task.name + ', cpu/elapsed=' + _str_dt(
+                        cpu) + '/' + _str_dt(elapsed) + 's')
+                outq.put((proc_num, task.name, (cpu, elapsed), out))
+
     except Exception as e:
         critical('Process #' + str(proc_num + 1) + ': exception: ' + str(e))
         critical(traceback.format_exc())
@@ -427,7 +435,7 @@ class Parallel:
         while True:
             # place items in process queues, until each has 2 tasks, or until there are no tasks
             sch0 = time.perf_counter()
-            while self._schedule_best_task():
+            while self._schedule_best_tasks():
                 pass
             maintschedule += (time.perf_counter() - sch0)
 
@@ -438,7 +446,7 @@ class Parallel:
                 break  # while True
 
             sch0 = time.perf_counter()
-            while self._schedule_best_task():  # late tasks may have been added, need to check again
+            while self._schedule_best_tasks():  # late tasks may have been added, need to check again
                 pass
             maintschedule += (time.perf_counter() - sch0)
 
@@ -497,33 +505,46 @@ class Parallel:
             info('  ' + key + ': ' + str(val[0]) + ', took ' + _str_dt(val[1]) + '/' + _str_dt(val[2]) + 's')
         self.is_running = False
 
-    def _schedule_best_task(self) -> bool:
-        node = self._find_best_candidate()
-        if node is not None:
-            pidx = self._find_best_process()
-            if pidx >= 0:
-                taskplus = [node.task, None]
-                assert len(node.task.dependencies) == len(node.parents)
-                for parent in node.parents:
-                    # print(parent.task.name)
-                    # assert parent.task.name in self.donetasks
-                    donetask = self._done_parent(parent)
-                    assert donetask is not None
-                    if donetask is not True:
-                        assert isinstance(donetask, Task)
-                        taskplus.append(donetask)
-                assert len(taskplus) == 2 + len(node.task.dependencies)
+    def _schedule_best_tasks(self) -> bool:  # may schedule multiple tasks as one meta-task
+        pidx = self._find_best_process()
+        if pidx < 0:
+            return False
+        taskpluses = []
+        total_time = 0.
+        tasksstr = '['
+        t0 = time.perf_counter()
+        while total_time < 0.1:  # heuristics: <0.1s is not worth jerking around
+            node = self._find_best_candidate()
+            if node is None:
+                break
+            taskplus = [node.task]
+            assert len(node.task.dependencies) == len(node.parents)
+            for parent in node.parents:
+                donetask = self._done_parent(parent)
+                assert donetask is not None
+                if donetask is not True:
+                    assert isinstance(donetask, Task)
+                    taskplus.append(donetask)
+            assert len(taskplus) == 1 + len(node.task.dependencies)
 
-                assert node.task.name in self.pending_task_nodes
-                del self.pending_task_nodes[node.task.name]
+            assert node.task.name in self.pending_task_nodes
+            del self.pending_task_nodes[node.task.name]
+            self.running_task_nodes[node.task.name] = (pidx, t0, node)
 
-                self.inqueues[pidx].put(taskplus)
-                info(_str_time() + 'Parallel: assigned task ' + node.task.name + ' to process #' + str(pidx + 1))
-                debug('Parallel: request size:' + str(len(pickle.dumps(taskplus))))
-                self.running_task_nodes[node.task.name] = (pidx, time.perf_counter(), node)
-                self.processesload[pidx] += 1
-                return True
-        return False
+            taskpluses.append(taskplus)
+            total_time += node.own_weight
+            tasksstr += ',+' + node.task.name
+
+        tasksstr += ']'
+        if len(taskpluses) == 0:
+            return False
+
+        msg = (taskpluses, None)
+        self.inqueues[pidx].put(msg)
+        info(_str_time() + 'Parallel: assigned tasks ' + tasksstr + ' to process #' + str(pidx + 1))
+        debug('Parallel: request size:' + str(len(pickle.dumps(msg))))
+        self.processesload[pidx] += 1
+        return True
 
     def _notify_sender_shm_done(self, pidx: int, name: str) -> None:
         if pidx < 0:
@@ -636,6 +657,8 @@ class Parallel:
     def _find_best_candidate(self) -> _TaskGraphNode:
         bestcandidate = None
         for node in self.pending_task_nodes.values():
+            if isinstance(node, OwnTask):
+                continue
             if bestcandidate is not None and bestcandidate.total_weight() > node.total_weight():
                 continue
             parentsok = True
