@@ -492,7 +492,7 @@ class Master:
                 continue
 
             print('unable to parse line #' + str(lineno) + ': ' + line)
-            aassert(False)
+            abort_if_not(False)
 
         assert (state == 3)
 

@@ -229,11 +229,10 @@ def _scan_folder_own_task_func(out: tuple[list[str], FolderScanStats, FolderScan
                            foldercache.pub_underlying_files_by_path, parallel.copy_estimates()),
                           [])
         owntaskname = _scanned_own_task_name(foldercache.name, fpath)
-        owntask = tasks.Task(owntaskname,
+        owntask = tasks.OwnTask(owntaskname,
                              lambda _, o: _scan_folder_own_task_func(o, foldercache, parallel, scannedfiles, stats),
                              None, [taskname])
-        parallel.add_late_task(task)
-        parallel.add_late_own_task(owntask)
+        parallel.add_late_tasks([task,owntask])
 
 
 def _own_reconcile_task_func(foldercache: "FolderCache", parallel: tasks.Parallel,
@@ -328,16 +327,16 @@ class FolderCache:  # single (recursive) folder cache
         parallel.add_late_task(loadtask)
 
         loadowntaskname = 'mo2git.foldercache.loadown.' + self.name
-        loadowntask = tasks.Task(loadowntaskname, lambda _, out: _load_files_own_task_func(out, self, parallel), None,
+        loadowntask = tasks.OwnTask(loadowntaskname, lambda _, out: _load_files_own_task_func(out, self, parallel), None,
                                  [loadtaskname])
-        parallel.add_late_own_task(loadowntask)
+        parallel.add_late_task(loadowntask)
 
         underlyingowntaskname = 'mo2git.foldercache.underlyingown.' + self.name
-        underlyingowntask = tasks.Task(underlyingowntaskname, lambda _, _1: _underlying_own_task_func(self, parallel,
+        underlyingowntask = tasks.OwnTask(underlyingowntaskname, lambda _, _1: _underlying_own_task_func(self, parallel,
                                                                                                       underlyingfilesbypath_generator),
                                        None,
                                        [task_name_enabling_underlyingfilesbypath_generator])
-        parallel.add_late_own_task(underlyingowntask)
+        parallel.add_late_task(underlyingowntask)
 
         for node in allnodes2:
             fullpath = self.root_folder + node.path
@@ -350,17 +349,16 @@ class FolderCache:  # single (recursive) folder cache
                                parallel.copy_estimates()),
                               [loadowntaskname, underlyingowntaskname])
             owntaskname = _scanned_own_task_name(self.name, fullpath)
-            owntask = tasks.Task(owntaskname,
+            owntask = tasks.OwnTask(owntaskname,
                                  lambda _, out: _scan_folder_own_task_func(out, self, parallel, scannedfiles, stats),
                                  None, [taskname])
 
-            parallel.add_late_task(task)
-            parallel.add_late_own_task(owntask)
+            parallel.add_late_tasks([task,owntask])
 
-        reconciletask = tasks.Task(_reconcile_own_task_name(self.name),
+        reconciletask = tasks.OwnTask(_reconcile_own_task_name(self.name),
                                    lambda _, _1: _own_reconcile_task_func(self, parallel, scannedfiles),
                                    None, [_scanned_own_task_name(self.name, self.root_folder) + '*'])
-        parallel.add_late_own_task(reconciletask)
+        parallel.add_late_task(reconciletask)
 
     def ready_task_name(self) -> str:
         return _reconcile_own_task_name(self.name)
@@ -415,4 +413,4 @@ class FolderCache:  # single (recursive) folder cache
                                               exdirs, name, scanfilter, estimates)
             else:
                 critical(fpath + ' is neither dir or file, aborting')
-                aassert(False)
+                abort_if_not(False)

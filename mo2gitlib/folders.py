@@ -99,9 +99,9 @@ class Folders:
 
     def __init__(self, jsonconfigfname: str, jsonconfig: dict[str, any], ignore: list[str]) -> None:
         self.configdir = _normalize_dir_path(os.path.split(jsonconfigfname)[0])
-        aassert('mo2' in jsonconfig, lambda: "'mo2' must be present in config")
+        abort_if_not('mo2' in jsonconfig, lambda: "'mo2' must be present in config")
         mo2 = jsonconfig['mo2']
-        aassert(isinstance(mo2, str), lambda: "config.'mo2' must be a string, got " + repr(mo2))
+        abort_if_not(isinstance(mo2, str), lambda: "config.'mo2' must be a string, got " + repr(mo2))
         self.mo2 = _config_dir_path(mo2, self.configdir, jsonconfig)
 
         if 'downloads' not in jsonconfig:
@@ -110,7 +110,7 @@ class Folders:
             dls = jsonconfig['downloads']
         if isinstance(dls, str):
             dls = [dls]
-        aassert(isinstance(dls, list), lambda: "'downloads' in config must be a string or a list, got " + repr(dls))
+        abort_if_not(isinstance(dls, list), lambda: "'downloads' in config must be a string or a list, got " + repr(dls))
         self.downloads = [_config_dir_path(dl, self.configdir, jsonconfig) for dl in dls]
 
         self.ignore = [_normalize_dir_path(self.mo2 + ig) for ig in ignore]

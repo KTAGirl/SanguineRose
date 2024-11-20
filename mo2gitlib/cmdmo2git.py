@@ -173,7 +173,7 @@ def _mo2git(jsonconfigfname,config):
         # shutil.copyfile(mo2+'profiles\\'+masterprofilename+'\\loadorder.txt',targetfdir+'loadorder.txt')
         _copyRestOfProfile(mo2,targetgithub + targetdir,masterprofilename)
         genprofiles = config.get('genprofiles')
-        aassert(genprofiles is None or isinstance(genprofiles, dict), lambda: "config.'genprofiles', when present, must be a dictionary, got " + repr(genprofiles))
+        abort_if_not(genprofiles is None or isinstance(genprofiles, dict), lambda: "config.'genprofiles', when present, must be a dictionary, got " + repr(genprofiles))
         # print(altmodlists)
         for profile in altmodlists:
             # print(profile)
@@ -250,7 +250,7 @@ def _mo2git(jsonconfigfname,config):
         if wjcompiled:
             _fillCompiledStats(stats, filecache.folders.normalize_config_file_path(wjcompiled))
         statsmods = config.get('statsmods')
-        aassert(statsmods is None or isinstance(statsmods, list), lambda: "config.'statsmods', when present, must be a list, got " + repr(statsmods))
+        abort_if_not(statsmods is None or isinstance(statsmods, list), lambda: "config.'statsmods', when present, must be a list, got " + repr(statsmods))
         if statsmods:
             for stmod in statsmods:
                 stats[stmod+'.SIZE']=_statsFolderSize(mo2+'mods/'+stmod)

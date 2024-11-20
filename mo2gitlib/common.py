@@ -33,20 +33,15 @@ def dbgfirst(data: any) -> any:
         return data
 
 
-def dbgprint(s) -> None:
-    if __debug__:
-        print(s)
-
-
 class Mo2gitError(Exception):
     pass
 
 
-def aassert(cond: bool,
-            f: Callable[
-                [], str] = None):  # 'always assert', even if __debug__ is False. f is a lambda printing error message before throwing
+def abort_if_not(cond: bool,
+                 f: Callable[
+                     [], str] = None):  # 'always assert', even if __debug__ is False. f is a lambda printing error message before throwing
     if not cond:
-        msg = 'aassert() failed'
+        msg = 'abort_if_not() failed'
         if f is not None:
             msg += ':' + f()
         where = traceback.extract_stack(limit=2)[0]
@@ -68,9 +63,14 @@ def info(msg: str) -> None:
     _logger.info(msg)
 
 
-def critical(msg: str):
+def critical(msg: str) -> None:
     global _logger
     _logger.critical(msg)
+
+
+def debug(msg: str) -> None:
+    global _logger
+    _logger.debug(msg)
 
 
 ###

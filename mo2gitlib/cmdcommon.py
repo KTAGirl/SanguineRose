@@ -18,12 +18,12 @@ def _loadUserConfig(rf): #don't use for anything except for hand-editable user c
         m=re.match(r'<string>:([0-9]*)',str(e))
         if m:
             msg += ' at line #'+m.group(1)
-        aassert(False, lambda: msg)
+        abort_if_not(False, lambda: msg)
 
 def _csAndMasterModList(config):
-    aassert('mo2' in config, lambda: "'mo2' must be present in config")
+    abort_if_not('mo2' in config, lambda: "'mo2' must be present in config")
     mo2=config['mo2']
-    aassert('compiler_settings' in config, lambda: "'compiler_settings' must be present in config")
+    abort_if_not('compiler_settings' in config, lambda: "'compiler_settings' must be present in config")
     compiler_settings_fname=config['compiler_settings']
     with open_3rdparty_txt_file(mo2 + compiler_settings_fname) as rfile:
         compiler_settings = json.load(rfile)

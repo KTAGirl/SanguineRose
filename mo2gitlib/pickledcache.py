@@ -46,10 +46,11 @@ def pickled_cache(cachedir: str, cachedata: dict[str, str], prefix: str, origfil
     out = calc(params)
 
     for f in files:
-        aassert(f[1] == os.path.getmtime(f[
+        abort_if_not(f[1] == os.path.getmtime(f[
                                              0]))  # if any of the files we depend on, has changed while calc() was calculated - something is really weird is going on here
 
     with open(cachedir + prefix + '.pickle', 'wb') as wf:
+        # noinspection PyTypeChecker
         pickle.dump(out, wf)
     cachedataoverwrites[prefix + '.files'] = files
     if params is not None:
