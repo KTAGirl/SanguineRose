@@ -25,6 +25,5 @@
 - identify and fix occasional problem with hanging when an exception occurs in child
 - make sure that all its shm are always released by child processes
 - handle wait() in child process
-- Parallel: auto-combine very small tasks
 - release from child-side memoizing cache
 - Parallel: switch to data as dependencies?
