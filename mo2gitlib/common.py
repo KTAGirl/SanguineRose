@@ -6,12 +6,11 @@ import traceback
 import typing
 from collections.abc import Callable as _Callable, Generator as _Generator
 from types import TracebackType as _TracebackType
-from typing import Type as _Type
 
 # stubs for importing from other modules, while preventing import optimizer from optimizing it out
 Callable = _Callable
 Generator = _Generator
-Type = _Type
+Type = typing.Type
 TracebackType = _TracebackType
 
 

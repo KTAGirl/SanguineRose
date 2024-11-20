@@ -72,14 +72,16 @@ class FolderScanStats:
 
 
 class FolderScanDirOut:
-    filesbypath: dict[str, File]
+    # filesbypath: dict[str, File]
     scanned_files: dict[str, File]
     requested_dirs: list[str]
+    requested_files: list[tuple[str, float, int]]
 
     def __init__(self) -> None:
-        self.filesbypath = {}
+        # self.filesbypath = {}
         self.scanned_files = {}
         self.requested_dirs = []
+        self.requested_files = []
 
 
 class FolderScanFilter:
@@ -153,6 +155,16 @@ def _reconcile_own_task_name(name: str) -> str:
     return 'mo2gitlib.foldercache.reconcile.' + name
 
 
+def _hashing_task_name(cachename: str, dirpath: str) -> str:
+    assert Folders.is_normalized_dir_path(dirpath)
+    return 'mo2gitlib.foldercache.hash.' + cachename + '.' + dirpath
+
+
+def _hashing_own_task_name(cachename: str, dirpath: str) -> str:
+    assert Folders.is_normalized_dir_path(dirpath)
+    return 'mo2gitlib.foldercache.hash.own.' + cachename + '.' + dirpath
+
+
 ### Tasks
 
 def _load_files_task_func(param: tuple[str, str]) -> tuple[dict[str, File]]:
@@ -209,17 +221,36 @@ def _scan_folder_task_func(param: tuple[str, list[str], str, FolderScanFilter, t
     return exdirs, stats, sdout
 
 
+def _calc_hash_task_func(param: tuple[str, float, int]) -> tuple[File]:
+    (fpath, tstamp, fsize) = param
+    h = calculate_file_hash(fpath)
+    return (File(h, tstamp, fpath, fsize),)
+
+
+def _own_calc_hash_task_func(out: tuple[File], foldercache: "FolderCache", scannedfiles: dict[str, File]) -> None:
+    (f,) = out
+    scannedfiles[f.file_path] = f
+    foldercache.files_by_path[f.file_path] = f
+
+
 def _scan_folder_own_task_func(out: tuple[list[str], FolderScanStats, FolderScanDirOut],
                                foldercache: "FolderCache", parallel: tasks.Parallel, scannedfiles: dict[str, File],
                                stats: FolderScanStats) -> None:
     (exdirs, gotstats, sdout) = out
-    scannedfiles |= sdout.scanned_files
     stats.add(gotstats)
-    foldercache.files_by_path |= sdout.filesbypath
-
     scannedfiles |= sdout.scanned_files
-    stats.add(gotstats)
-    foldercache.files_by_path |= sdout.filesbypath
+    # foldercache.files_by_path |= sdout.filesbypath
+    for f in sdout.requested_files:
+        (fpath, tstamp, fsize) = f
+        htaskname = _hashing_task_name(foldercache.name, fpath)
+        htask = tasks.Task(htaskname, _calc_hash_task_func,
+                           (fpath, tstamp, fsize),
+                           [])
+        howntaskname = _hashing_own_task_name(foldercache.name, fpath)
+        howntask = tasks.OwnTask(howntaskname,
+                                 lambda _, o: _own_calc_hash_task_func(o, foldercache, scannedfiles),
+                                 None, [htaskname])
+        parallel.add_late_tasks([htask, howntask])
 
     # new tasks
     for fpath in sdout.requested_dirs:
@@ -358,7 +389,8 @@ class FolderCache:  # single (recursive) folder cache
 
         reconciletask = tasks.OwnTask(_reconcile_own_task_name(self.name),
                                       lambda _, _1: _own_reconcile_task_func(self, parallel, scannedfiles),
-                                      None, [_scanned_own_task_name(self.name, self.root_folder) + '*'])
+                                      None, [_scanned_own_task_name(self.name, self.root_folder) + '*',
+                                             _hashing_own_task_name(self.name, self.root_folder) + '*'])
         parallel.add_late_task(reconciletask)
 
     def ready_task_name(self) -> str:
@@ -394,11 +426,10 @@ class FolderCache:  # single (recursive) folder cache
                     sdout.scanned_files[fpath] = found
                     if found.file_hash is not None:  # file in cache marked as deleted, re-adding
                         tstamp2 = found.file_modified
-                        # print(tstamp,tstamp2,_wjTimestampToPythonTimestamp(tstamp2))
                         if compare_timestamp_with_wj(tstamp, tstamp2) == 0:
                             matched = True
                 if not matched:
-                    sdout.filesbypath[fpath] = File(calculate_file_hash(fpath), tstamp, fpath)
+                    sdout.requested_files.append((fpath, tstamp, st.st_size))
             elif stat.S_ISDIR(fmode):
                 newdir = fpath + '\\'
                 assert (Folders.is_normalized_dir_path(newdir))
