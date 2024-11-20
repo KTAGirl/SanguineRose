@@ -370,8 +370,8 @@ class Parallel:
         assert t.name not in self.all_task_nodes
         islambda = callable(t.f) and t.f.__name__ == '<lambda>'
         if islambda:
-            print('lambda in task '+t.name)
-        assert isinstance(t,OwnTask) or not islambda
+            print('lambda in task ' + t.name)
+        assert isinstance(t, OwnTask) or not islambda
 
         taskparents = self._dependencies_to_parents(t.dependencies)
         if taskparents is None:
@@ -651,13 +651,16 @@ class Parallel:
 
     def _update_weight(self, taskname: str, dt: float) -> None:
         task = self.all_task_nodes[taskname].task
-        if task.w is not None:  # no sense in saving tasks with explicitly specified weights
+        if task.w is None:  # if not None - no sense in saving tasks with explicitly specified weights
             oldw = self.json_weights.get(taskname)
             if oldw is None:
                 self.updated_json_weights[taskname] = dt
             else:
                 self.updated_json_weights[taskname] = (
                                                               oldw + dt) / 2  # heuristics to get some balance between new value and history
+        else:
+            if abs(task.w - dt) > task.w * 0.3:  # ~30% tolerance
+                debug('Parallel: task ' + task.name + ': expected=' + str(task.w) + ', real=' + str(dt))
 
     def estimated_time(self, taskname: str, defaulttime: float) -> float:
         return self.updated_json_weights.get(taskname, self.json_weights.get(taskname, defaulttime))

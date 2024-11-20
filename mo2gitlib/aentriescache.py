@@ -10,6 +10,10 @@ from mo2gitlib.folders import Folders
 from mo2gitlib.pickledcache import pickled_cache
 
 
+def _processing_archive_time_estimate(fsize: int):
+    return float(fsize) / 1048576. / 10.  # 10 MByte/s
+
+
 def _read_dict_of_archive_entries(dirpath: str) -> dict[str, ArchiveEntry]:
     assert Folders.is_normalized_dir_path(dirpath)
     fpath = dirpath + 'aentries.pickle'
@@ -79,7 +83,7 @@ def _load_aentries_task_func(param: tuple[str]) -> tuple[dict[str, ArchiveEntry]
 
 
 def _load_aentries_own_task_func(out: tuple[dict[str, ArchiveEntry]], aecache: "ArchiveEntriesCache",
-                                 all_used_archives: Generator[tuple[str, int]]) -> None:
+                                 all_used_archives: Generator[tuple[str, int, int]]) -> None:
     (archive_entries,) = out
     assert aecache.archive_entries is None
     aecache.archive_entries = {}
@@ -140,7 +144,7 @@ def _archive_hashing_own_task_func(out: tuple[dict[int, ArchiveEntry]], aecache:
 
 
 def _own_filter_task_func(aecache: "ArchiveEntriesCache", parallel: tasks.Parallel,
-                          all_used_archives: Generator[tuple[str, int]],
+                          all_used_archives: Generator[tuple[str, int, int]],
                           fromloadvfs: tuple[tasks.SharedReturnParam, dict[str, any]]) -> None:
     t0 = time.perf_counter()
 
@@ -151,9 +155,10 @@ def _own_filter_task_func(aecache: "ArchiveEntriesCache", parallel: tasks.Parall
     unfilteredarchiveentries: list[ArchiveEntry] = parallel.received_shared_return(sharedparam)
     tsh = time.perf_counter() - tsh0
 
-    allarchives: dict[int, tuple[str, Val]] = {}  # have to do it here, cannot fill it before task_func is called
+    allarchives: dict[int, tuple[str, int, Val]] = {}  # fpath, size, Val(hashed);
+    # have to do it here, cannot fill it before task_func is called
     for a in all_used_archives:
-        allarchives[a[1]] = (a[0], Val(False))  # False means 'not found yet'
+        allarchives[a[1]] = (a[0], a[2], Val(False))  # False means 'not found yet'
 
     assert len(aecache.wj_archive_entries) == 0
     for ae in unfilteredarchiveentries:
@@ -162,7 +167,7 @@ def _own_filter_task_func(aecache: "ArchiveEntriesCache", parallel: tasks.Parall
         if ahash in allarchives:
             aecache.wj_archive_entries[ae.file_hash] = ae
             allarchives[ahash][
-                1].val = True  # if we see at least one aentry for archive - we assume that the whole archive has been hashed
+                2].val = True  # if we see at least one aentry for archive - we assume that the whole archive has been hashed
         else:
             aecache.filtered_wj_archive_entries[ae.file_hash] = ae
 
@@ -181,23 +186,23 @@ def _own_filter_task_func(aecache: "ArchiveEntriesCache", parallel: tasks.Parall
         assert ahash >= 0
         if ahash in allarchives:
             allarchives[ahash][
-                1].val = True  # if we see at least one aentry for archive - we assume that the whole archive has been hashed
+                2].val = True  # if we see at least one aentry for archive - we assume that the whole archive has been hashed
     # now, we marked allarchives[ahash] as used for all the hashed archives
     numhashing = 0
     for arhash, ar in allarchives.items():
-        if not ar[1].val:
+        if not ar[2].val:
             # found unhashed archive
             info('need to hash ' + ar[0] + ', scheduling archive hashing task')
             numhashing += 1
             hashingtaskname = 'mo2gitlib.aentriescache.hash.' + ar[0]
             hashingtask = tasks.Task(hashingtaskname, _archive_hashing_task_func,
-                                     (ar[0], arhash, aecache.tmp_dir + str(numhashing) + '\\'), [])
-            parallel.add_late_task(hashingtask)
+                                     (ar[0], arhash, aecache.tmp_dir + str(numhashing) + '\\'), [],
+                                     _processing_archive_time_estimate(ar[1]))
             hashingowntaskname = 'mo2gitlib.aentriescache.hashingown.' + ar[0]
             hashingowntask = tasks.OwnTask(hashingowntaskname,
-                                        lambda _, out: _archive_hashing_own_task_func(out, aecache), None,
-                                        [hashingtaskname])
-            parallel.add_late_task(hashingowntask)
+                                           lambda _, out: _archive_hashing_own_task_func(out, aecache), None,
+                                           [hashingtaskname], 0.001)  # should take negligible time
+            parallel.add_late_tasks([hashingtask, hashingowntask])
 
     savetaskname = 'mo2git.aentriescache.save'
     savetask = tasks.Task(savetaskname, _save_aentries_task_func,
@@ -232,7 +237,8 @@ class ArchiveEntriesCache:
         self.filtered_archive_entries = {}
         self.cache_data = cache_data
 
-    def start_tasks(self, parallel: tasks.Parallel, all_used_archives: Generator[tuple[str, int]],
+    def start_tasks(self, parallel: tasks.Parallel, all_used_archives: Generator[tuple[str, int, int]],
+                    # fpath, hash, size
                     task_name_enabling_all_used_archives: str) -> None:
         loadtaskname = 'mo2gitlib.aentriescache.load'
         loadtask = tasks.Task(loadtaskname, _load_aentries_task_func,
@@ -240,8 +246,8 @@ class ArchiveEntriesCache:
         parallel.add_late_task(loadtask)
         loadowntaskname = 'mo2gitlib.aentriescache.loadown'
         loadowntask = tasks.OwnTask(loadowntaskname,
-                                 lambda _, out, _1: _load_aentries_own_task_func(out, self, all_used_archives), None,
-                                 [loadtaskname, task_name_enabling_all_used_archives])
+                                    lambda _, out, _1: _load_aentries_own_task_func(out, self, all_used_archives), None,
+                                    [loadtaskname, task_name_enabling_all_used_archives])
         parallel.add_late_task(loadowntask)
 
         loadvfstaskname = 'mo2gitlib.aentriescache.loadvfs'
@@ -250,11 +256,11 @@ class ArchiveEntriesCache:
         parallel.add_late_task(vfstask)
 
         ownfiltertask = tasks.OwnTask('mo2gitlib.aentriescache.ownfilter',
-                                   lambda _, fromloadvfs, _2, _3: _own_filter_task_func(self, parallel,
-                                                                                        all_used_archives,
-                                                                                        fromloadvfs),
-                                   None,
-                                   [loadvfstaskname, task_name_enabling_all_used_archives, loadowntaskname])
+                                      lambda _, fromloadvfs, _2, _3: _own_filter_task_func(self, parallel,
+                                                                                           all_used_archives,
+                                                                                           fromloadvfs),
+                                      None,
+                                      [loadvfstaskname, task_name_enabling_all_used_archives, loadowntaskname])
         parallel.add_late_task(ownfiltertask)
 
     def find_entry_by_hash(self, h: int):
