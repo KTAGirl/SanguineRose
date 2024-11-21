@@ -253,7 +253,7 @@ class _TaskGraphNodeState(Enum):
 class _TaskGraphNode:
     task: Task
     children: list["_TaskGraphNode"]
-    parents: list["_TaskGraphNode"]
+    parents: list["_TaskGraphNode|str"]
     own_weight: float
     max_leaf_weight: float
     explicit_weight: bool
@@ -274,8 +274,8 @@ class _TaskGraphNode:
             if parent.state < _TaskGraphNodeState.Done:
                 self.waiting_for_n_deps += 1
 
-    def make_done(self, ready: dict[str, tuple["_TaskGraphNode", float]],
-                  ready_own: dict[str, tuple["_TaskGraphNode", float]]) -> None:
+    def is_done(self, ready: dict[str, tuple["_TaskGraphNode", float]],
+                ready_own: dict[str, tuple["_TaskGraphNode", float]]) -> None:
         assert self.state == _TaskGraphNodeState.Ready or self.state == _TaskGraphNodeState.Running
         self.state = _TaskGraphNodeState.Done
         for ch in self.children:
@@ -305,16 +305,6 @@ class _TaskGraphNode:
         return self.own_weight + self.max_leaf_weight
 
 
-class _TaskGraphPatternNode:
-    pattern: str
-
-    def __init__(self, pattern: str) -> None:
-        self.pattern = pattern
-
-    def _adjust_leaf_weight(self, w: float) -> None:
-        pass
-
-
 class Parallel:
     nprocesses: int
     json_fname: str
@@ -326,15 +316,13 @@ class Parallel:
     has_joined: bool
 
     publications: dict[str, shared_memory.SharedMemory]
-    # task_graph: list[_TaskGraphNode]  # graph is a forest
     all_task_nodes: dict[str, _TaskGraphNode]  # name->node
     pending_task_nodes: dict[str, _TaskGraphNode]  # name->node
     ready_task_nodes: dict[str, tuple[_TaskGraphNode, float]]  # name->node
     ready_own_task_nodes: dict[str, tuple[_TaskGraphNode, float]]  # name->node
     running_task_nodes: dict[str, tuple[int, float, _TaskGraphNode]]  # name->(procnum,started,node)
     done_task_nodes: dict[str, tuple[_TaskGraphNode, any]]  # name->(node,out)
-
-    # done_own_tasks: dict[str, tuple[_TaskGraphNode, any]]  # name->(node,out)
+    pending_patterns: list[tuple[str, _TaskGraphNode]]  # pattern, node
 
     def __init__(self, jsonfname: str, nproc: int = 0) -> None:
         assert nproc >= 0
@@ -361,14 +349,13 @@ class Parallel:
         self.has_joined = False
 
         self.publications = {}
-        # self.task_graph = []
 
         self.all_task_nodes = {}
         self.pending_task_nodes = {}
         self.ready_task_nodes = {}
         self.running_task_nodes = {}  # name->(procnum,started,node)
         self.done_task_nodes = {}  # name->(node,out)
-        # self.done_own_tasks = {}  # name->(node,out)
+        self.pending_patterns = []
 
     def __enter__(self) -> "Parallel":
         self.processes = []
@@ -390,43 +377,58 @@ class Parallel:
         assert len(self.inqueues) == len(self.processes)
         return self
 
-    def _dependencies_to_parents(self, dependencies: list[str]) -> list[_TaskGraphNode] | None:
+    def _dependencies_to_parents(self, dependencies: list[str]) -> tuple[list[_TaskGraphNode] | None, list[str] | None]:
         taskparents = []
+        patterns = []
         for d in dependencies:
             if d.endswith('*'):
-                pnode = _TaskGraphPatternNode(d)
-                taskparents.append(pnode)
+                patterns.append(d[:-1])
                 continue
             pnode = self.all_task_nodes.get(d)
             if pnode is None:
-                # print(d)
-                return None
+                return None, None
             else:
                 taskparents.append(pnode)
-        return taskparents
+        return taskparents, patterns
 
-    def _internal_add_task_if(self, t: Task) -> bool:
-        assert t.name not in self.all_task_nodes
-        islambda = callable(t.f) and t.f.__name__ == '<lambda>'
+    def _internal_add_task_if(self, task: Task) -> bool:
+        assert task.name not in self.all_task_nodes
+        islambda = callable(task.f) and task.f.__name__ == '<lambda>'
         if islambda:
-            print('lambda in task ' + t.name)
-        assert isinstance(t, OwnTask) or not islambda
+            print('lambda in task ' + task.name)
+        assert isinstance(task, OwnTask) or not islambda
 
-        taskparents = self._dependencies_to_parents(t.dependencies)
+        taskparents, patterns = self._dependencies_to_parents(task.dependencies)
         if taskparents is None:
+            assert patterns is None
             return False
+        assert patterns is not None
 
-        w = t.w
+        w = task.w
         explicitw = True
         if w is None:
             explicitw = False
-            w = 0.1 if isinstance(t,
+            w = 0.1 if isinstance(task,
                                   OwnTask) else 1.0  # 1 sec for non-owning tasks, and assuming that own tasks are shorter by default (they should be)
-            w = self.estimated_time(t.name, w)
-        node = _TaskGraphNode(t, taskparents, w, explicitw)
-        self.all_task_nodes[t.name] = node
+            w = self.estimated_time(task.name, w)
+        node = _TaskGraphNode(task, taskparents, w, explicitw)
+        self.all_task_nodes[task.name] = node
         assert node.state == _TaskGraphNodeState.Pending
-        self.pending_task_nodes[t.name] = node
+        self.pending_task_nodes[task.name] = node
+        for p in patterns:
+            for n in self.all_task_nodes.values():
+                if n.state < _TaskGraphNodeState.Done and n.task.name.startswith(p):
+                    node.waiting_for_n_deps += 1
+                    n.children.append(node)
+            node.parents.append(p)
+            self.pending_patterns.append((p, node))
+
+        for pp in self.pending_patterns:
+            (p, n) = pp
+            if task.name.startswith(p):
+                node.children.append(n)
+                n.waiting_for_n_deps += 1
+
         return True
 
     def _internal_add_tasks(self, tasks: list[Task]) -> None:
@@ -523,7 +525,7 @@ class Parallel:
             self._update_weight(taskname, taskt)
             del self.running_task_nodes[taskname]
             assert taskname not in self.done_task_nodes
-            node.make_done(self.ready_task_nodes, self.ready_own_task_nodes)
+            node.is_done(self.ready_task_nodes, self.ready_own_task_nodes)
             self.done_task_nodes[taskname] = (node, out)
             assert self.processesload[procnum] > 0
             self.processesload[procnum] -= 1
@@ -556,11 +558,11 @@ class Parallel:
             taskplus = [node.task]
             assert len(node.task.dependencies) == len(node.parents)
             for parent in node.parents:
-                donetask = self._done_parent(parent)
-                assert donetask is not None
-                if donetask is not True:
-                    assert isinstance(donetask, Task)
-                    taskplus.append(donetask)
+                if isinstance(parent, _TaskGraphNode):
+                    done = self.done_task_nodes[parent.task.name]
+                    taskplus.append(done[1])
+                else:
+                    assert isinstance(parent, str)
             assert len(taskplus) == 1 + len(node.task.dependencies)
 
             assert node.state == _TaskGraphNodeState.Ready
@@ -592,20 +594,6 @@ class Parallel:
         else:
             self.inqueues[pidx].put((None, name))
 
-    def _done_parent(self, parent: _TaskGraphNode | _TaskGraphPatternNode) -> _TaskGraphNode | None | True:
-        if isinstance(parent, _TaskGraphNode):
-            done = self.done_task_nodes.get(parent.task.name)
-            return done
-        else:
-            assert isinstance(parent, _TaskGraphPatternNode)
-            assert parent.pattern.endswith('*')
-            prefix = parent.pattern[:-1]
-            for name, node in self.pending_task_nodes.items():
-                assert name == node.task.name
-                if name.startswith(prefix):
-                    return None
-            return True
-
     def _run_own_tasks(self, owntaskstats: dict[str, tuple[int, float, float]]) -> tuple[int, float]:
         # returns overall status: 1: work to do, 2: all running, 3: all done
         towntasks = 0.
@@ -619,11 +607,11 @@ class Parallel:
                 params = []
                 assert len(ot.parents) == len(ot.task.dependencies)
                 for p in ot.parents:
-                    # print('parent: '+p.task.name)
-                    done = self._done_parent(p)
-                    assert done is not None
-                    if done is not True:
-                        params.append(done)
+                    if isinstance(p, _TaskGraphNode):
+                        param = self.done_task_nodes[p.task.name]
+                        params.append(param[1])
+                    else:
+                        assert isinstance(p, str)
 
                 assert len(params) <= len(ot.task.dependencies)
                 assert len(params) <= 3
@@ -648,7 +636,7 @@ class Parallel:
                 assert ot.state == _TaskGraphNodeState.Ready
                 assert ot.task.name in self.ready_task_nodes
                 del self.ready_task_nodes[ot.task.name]
-                ot.make_done(self.ready_task_nodes, self.ready_own_task_nodes)
+                ot.is_done(self.ready_task_nodes, self.ready_own_task_nodes)
                 ot.state = _TaskGraphNodeState.Done
                 self.done_task_nodes[ot.task.name] = (ot, out)
 
