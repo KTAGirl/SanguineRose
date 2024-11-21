@@ -609,44 +609,48 @@ class Parallel:
     def _run_own_tasks(self, owntaskstats: dict[str, tuple[int, float, float]]) -> tuple[int, float]:
         # returns overall status: 1: work to do, 2: all running, 3: all done
         towntasks = 0.
-        candidates = sorted(self.ready_own_task_nodes.values(), key=lambda tpl: -tpl[1])
-        for c in candidates:
-            ot = c[0]
-            assert isinstance(ot.task, OwnTask)
-            # print('task: '+ot.task.name)
-            params = []
-            assert len(ot.parents) == len(ot.task.dependencies)
-            for p in ot.parents:
-                # print('parent: '+p.task.name)
-                done = self._done_parent(p)
-                assert done is not None
-                if done is not True:
-                    params.append(done)
+        while len(
+                self.ready_own_task_nodes) > 0:  # new tasks might have been added by add_late_task(s), so we need to loop
+            candidates = sorted(self.ready_own_task_nodes.values(), key=lambda tpl: -tpl[1])
+            for c in candidates:
+                ot = c[0]
+                assert isinstance(ot.task, OwnTask)
+                # print('task: '+ot.task.name)
+                params = []
+                assert len(ot.parents) == len(ot.task.dependencies)
+                for p in ot.parents:
+                    # print('parent: '+p.task.name)
+                    done = self._done_parent(p)
+                    assert done is not None
+                    if done is not True:
+                        params.append(done)
 
-            assert len(params) <= len(ot.task.dependencies)
-            assert len(params) <= 3
+                assert len(params) <= len(ot.task.dependencies)
+                assert len(params) <= 3
 
-            info(_str_time() + 'Parallel: running own task ' + ot.task.name)
-            t0 = time.perf_counter()
-            tp0 = time.process_time()
-            # ATTENTION: ot.task.f(...) may call addLateTask() within
-            out = _run_task(ot.task, params)
-            elapsed = time.perf_counter() - t0
-            cpu = time.process_time() - tp0
-            info(_str_time() + 'Parallel: done own task ' + ot.task.name + ', cpu/elapsed=' + _str_dt(
-                cpu) + '/' + _str_dt(elapsed) + 's')
-            towntasks += elapsed
+                info(_str_time() + 'Parallel: running own task ' + ot.task.name)
+                t0 = time.perf_counter()
+                tp0 = time.process_time()
+                # ATTENTION: ot.task.f(...) may call addLateTask() within
+                out = _run_task(ot.task, params)
+                elapsed = time.perf_counter() - t0
+                cpu = time.process_time() - tp0
+                info(_str_time() + 'Parallel: done own task ' + ot.task.name + ', cpu/elapsed=' + _str_dt(
+                    cpu) + '/' + _str_dt(elapsed) + 's')
+                towntasks += elapsed
 
-            keystr = ot.task.name.split('.')[0]
-            oldstat = owntaskstats.get(keystr, (0, 0., 0.))
-            owntaskstats[keystr] = (oldstat[0] + 1, oldstat[1] + cpu, oldstat[2] + elapsed)
+                keystr = ot.task.name.split('.')[0]
+                oldstat = owntaskstats.get(keystr, (0, 0., 0.))
+                owntaskstats[keystr] = (oldstat[0] + 1, oldstat[1] + cpu, oldstat[2] + elapsed)
 
-            self._update_weight(ot.task.name, elapsed)
+                self._update_weight(ot.task.name, elapsed)
 
-            assert ot.task.name in self.pending_task_nodes
-            del self.pending_task_nodes[ot.task.name]
-            ot.make_done(self.ready_task_nodes, self.ready_own_task_nodes)
-            self.done_task_nodes[ot.task.name] = (ot, out)
+                assert ot.state == _TaskGraphNodeState.Ready
+                assert ot.task.name in self.ready_task_nodes
+                del self.ready_task_nodes[ot.task.name]
+                ot.make_done(self.ready_task_nodes, self.ready_own_task_nodes)
+                ot.state = _TaskGraphNodeState.Done
+                self.done_task_nodes[ot.task.name] = (ot, out)
 
         # status calculation must run after own tasks, because they may call add_late_task(s)()
         allrunningordone = True
