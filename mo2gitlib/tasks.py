@@ -2,6 +2,7 @@
 
 import pickle
 import time
+from enum import Enum
 from multiprocessing import Process, Queue as PQueue, shared_memory
 
 from mo2gitlib.common import *
@@ -242,6 +243,13 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue) 
     debug('Process #' + str(proc_num + 1) + ': exiting')
 
 
+class _TaskGraphNodeState(Enum):
+    Pending = 0,
+    Ready = 1,
+    Running = 2,
+    Done = 3
+
+
 class _TaskGraphNode:
     task: Task
     children: list["_TaskGraphNode"]
@@ -249,6 +257,8 @@ class _TaskGraphNode:
     own_weight: float
     max_leaf_weight: float
     explicit_weight: bool
+    state: _TaskGraphNodeState
+    waiting_for_n_deps: int
 
     def __init__(self, task: Task, parents: list["_TaskGraphNode"], weight: float, explicit_weight: bool) -> None:
         self.task = task
@@ -257,8 +267,29 @@ class _TaskGraphNode:
         self.own_weight = weight  # expected time in seconds
         self.max_leaf_weight = 0.
         self.explicit_weight = explicit_weight
+        self.state = _TaskGraphNodeState.Pending
+        self.waiting_for_n_deps = 0
         for parent in self.parents:
             parent._append_leaf(self)
+            if parent.state < _TaskGraphNodeState.Done:
+                self.waiting_for_n_deps += 1
+
+    def make_done(self, ready: dict[str, tuple["_TaskGraphNode", float]],
+                  ready_own: dict[str, tuple["_TaskGraphNode", float]]) -> None:
+        assert self.state == _TaskGraphNodeState.Ready or self.state == _TaskGraphNodeState.Running
+        self.state = _TaskGraphNodeState.Done
+        for ch in self.children:
+            assert ch.state == _TaskGraphNodeState.Pending
+            assert ch.waiting_for_n_deps > 0
+            ch.waiting_for_n_deps -= 1
+            if ch.waiting_for_n_deps == 0:
+                ch.state = _TaskGraphNodeState.Ready
+                assert ch.task.name not in ready
+                assert ch.task.name not in ready_own
+                if isinstance(ch.task, OwnTask):
+                    ready_own[ch.task.name] = (ch, ch.total_weight())
+                else:
+                    ready[ch.task.name] = (ch, ch.total_weight())
 
     def _append_leaf(self, leaf: "_TaskGraphNode") -> None:
         self.children.append(leaf)
@@ -298,8 +329,8 @@ class Parallel:
     # task_graph: list[_TaskGraphNode]  # graph is a forest
     all_task_nodes: dict[str, _TaskGraphNode]  # name->node
     pending_task_nodes: dict[str, _TaskGraphNode]  # name->node
-    # own_nodes: dict[str, _TaskGraphNode]  # name->node
-
+    ready_task_nodes: dict[str, tuple[_TaskGraphNode, float]]  # name->node
+    ready_own_task_nodes: dict[str, tuple[_TaskGraphNode, float]]  # name->node
     running_task_nodes: dict[str, tuple[int, float, _TaskGraphNode]]  # name->(procnum,started,node)
     done_task_nodes: dict[str, tuple[_TaskGraphNode, any]]  # name->(node,out)
 
@@ -334,7 +365,7 @@ class Parallel:
 
         self.all_task_nodes = {}
         self.pending_task_nodes = {}
-        # self.own_nodes = {}
+        self.ready_task_nodes = {}
         self.running_task_nodes = {}  # name->(procnum,started,node)
         self.done_task_nodes = {}  # name->(node,out)
         # self.done_own_tasks = {}  # name->(node,out)
@@ -394,6 +425,7 @@ class Parallel:
             w = self.estimated_time(t.name, w)
         node = _TaskGraphNode(t, taskparents, w, explicitw)
         self.all_task_nodes[t.name] = node
+        assert node.state == _TaskGraphNodeState.Pending
         self.pending_task_nodes[t.name] = node
         return True
 
@@ -481,6 +513,7 @@ class Parallel:
             (procnum, taskname, times, out) = got
             assert taskname in self.running_task_nodes
             (expectedprocnum, started, node) = self.running_task_nodes[taskname]
+            assert node.state == _TaskGraphNodeState.Running
             (cput, taskt) = times
             assert procnum == expectedprocnum
             dt = time.perf_counter() - started
@@ -490,6 +523,7 @@ class Parallel:
             self._update_weight(taskname, taskt)
             del self.running_task_nodes[taskname]
             assert taskname not in self.done_task_nodes
+            node.make_done(self.ready_task_nodes, self.ready_own_task_nodes)
             self.done_task_nodes[taskname] = (node, out)
             assert self.processesload[procnum] > 0
             self.processesload[procnum] -= 1
@@ -513,10 +547,12 @@ class Parallel:
         total_time = 0.
         tasksstr = '['
         t0 = time.perf_counter()
-        while total_time < 0.1:  # heuristics: <0.1s is not worth jerking around
-            node = self._find_best_candidate()
-            if node is None:
-                break
+        candidates = sorted(self.ready_task_nodes.values(), key=lambda tpl: -tpl[1])
+        i = 0
+        while i < len(candidates) and total_time < 0.1:  # heuristics: <0.1s is not worth jerking around
+            node = candidates[i][0]
+            assert not isinstance(node.task, OwnTask)
+            i += 1
             taskplus = [node.task]
             assert len(node.task.dependencies) == len(node.parents)
             for parent in node.parents:
@@ -527,8 +563,10 @@ class Parallel:
                     taskplus.append(donetask)
             assert len(taskplus) == 1 + len(node.task.dependencies)
 
-            assert node.task.name in self.pending_task_nodes
-            del self.pending_task_nodes[node.task.name]
+            assert node.state == _TaskGraphNodeState.Ready
+            assert node.task.name in self.ready_task_nodes
+            del self.ready_task_nodes[node.task.name]
+            node.state = _TaskGraphNodeState.Running
             self.running_task_nodes[node.task.name] = (pidx, t0, node)
 
             taskpluses.append(taskplus)
@@ -571,25 +609,21 @@ class Parallel:
     def _run_own_tasks(self, owntaskstats: dict[str, tuple[int, float, float]]) -> tuple[int, float]:
         # returns overall status: 1: work to do, 2: all running, 3: all done
         towntasks = 0.
-        for ot in self.pending_task_nodes.values():
+        candidates = sorted(self.ready_own_task_nodes.values(), key=lambda tpl: -tpl[1])
+        for c in candidates:
+            ot = c[0]
+            assert isinstance(ot.task, OwnTask)
             # print('task: '+ot.task.name)
-            if not isinstance(ot.task, OwnTask):
-                continue
-            parentsok = True
             params = []
             assert len(ot.parents) == len(ot.task.dependencies)
             for p in ot.parents:
                 # print('parent: '+p.task.name)
                 done = self._done_parent(p)
-                if done is None:
-                    parentsok = False
-                    break
+                assert done is not None
                 if done is not True:
                     params.append(done)
-            if not parentsok:
-                continue  # for ot
 
-            assert len(params) == len(ot.task.dependencies)
+            assert len(params) <= len(ot.task.dependencies)
             assert len(params) <= 3
 
             info(_str_time() + 'Parallel: running own task ' + ot.task.name)
@@ -611,6 +645,7 @@ class Parallel:
 
             assert ot.task.name in self.pending_task_nodes
             del self.pending_task_nodes[ot.task.name]
+            ot.make_done(self.ready_task_nodes, self.ready_own_task_nodes)
             self.done_task_nodes[ot.task.name] = (ot, out)
 
         # status calculation must run after own tasks, because they may call add_late_task(s)()
@@ -653,24 +688,6 @@ class Parallel:
         out = pickle.loads(shm.buf)
         self._notify_sender_shm_done(sender, name)
         return out
-
-    def _find_best_candidate(self) -> _TaskGraphNode:
-        bestcandidate = None
-        for node in self.pending_task_nodes.values():
-            if isinstance(node, OwnTask):
-                continue
-            if bestcandidate is not None and bestcandidate.total_weight() > node.total_weight():
-                continue
-            parentsok = True
-            for p in node.parents:
-                done = self._done_parent(p)
-                if done is None:
-                    parentsok = False
-                    break
-            if not parentsok:
-                continue
-            bestcandidate = node
-        return bestcandidate
 
     def _update_weight(self, taskname: str, dt: float) -> None:
         task = self.all_task_nodes[taskname].task
