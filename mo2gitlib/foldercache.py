@@ -1,4 +1,4 @@
-import pathlib
+import os.path
 import pickle
 import stat
 import time
@@ -10,8 +10,7 @@ from mo2gitlib.folders import Folders
 
 
 def _get_file_timestamp(fname: str) -> float:
-    path = pathlib.Path(fname)
-    return path.lstat().st_mtime
+    return os.lstat(fname).st_mtime
 
 
 def _get_file_timestamp_from_st(st: os.stat_result) -> float:
@@ -35,7 +34,6 @@ def _all_values_in_both_dicts(dicttoscan: dict[any, any], dicttoscan2: dict[any,
 def _read_dict_of_files(dirpath: str, name: str) -> dict[str, File]:
     assert Folders.is_normalized_dir_path(dirpath)
     fpath = dirpath + name + '.pickle'
-    # out = {}
     with open(fpath, 'rb') as rf:
         out = pickle.load(rf)
         return out
@@ -56,7 +54,30 @@ def _write_dict_of_files(dirpath: str, name: str, files: dict[str, File], filter
             wf2.write(item[1].to_json() + '\n')
 
 
-class FolderScanStats:
+def _read_scan_stats(dirpath: str, name: str) -> dict[str, int]:
+    assert Folders.is_normalized_dir_path(dirpath)
+    fpath = dirpath + name + '.scan-stats.pickle'
+    with open(fpath, 'rb') as rf:
+        out = pickle.load(rf)
+        return out
+
+
+def _write_scan_stats(dirpath: str, name: str, scan_stats: dict[str, int]) -> None:
+    assert Folders.is_normalized_dir_path(dirpath)
+    fpath = dirpath + name + '.scan-stats.pickle'
+    outstats = scan_stats
+    with open(fpath, 'wb') as wf:
+        # noinspection PyTypeChecker
+        pickle.dump(outstats, wf)
+
+    fpath2 = dirpath + name + '.scan-stats.json'
+    with open_3rdparty_txt_file_w(fpath2) as wf2:
+        srt = sorted(outstats.items())
+        # noinspection PyTypeChecker
+        json.dump(srt, wf2)
+
+
+class _FolderScanStats:
     nmodified: int
     nscanned: int
     ndel: 0
@@ -66,22 +87,24 @@ class FolderScanStats:
         self.nscanned = 0
         self.ndel = 0
 
-    def add(self, stats2: "FolderScanStats") -> None:
+    def add(self, stats2: "_FolderScanStats") -> None:
         self.nmodified += stats2.nmodified
         self.nscanned += stats2.nscanned
 
 
-class FolderScanDirOut:
+class _FolderScanDirOut:
     # filesbypath: dict[str, File]
     scanned_files: dict[str, File]
     requested_dirs: list[str]
     requested_files: list[tuple[str, float, int]]
+    scan_stats: dict[str, int]  # fpath -> nfiles
 
     def __init__(self) -> None:
         # self.filesbypath = {}
         self.scanned_files = {}
         self.requested_dirs = []
         self.requested_files = []
+        self.scan_stats = {}
 
 
 class FolderScanFilter:
@@ -89,56 +112,21 @@ class FolderScanFilter:
     file_path_is_ok: tasks.LambdaReplacement
 
     def __init__(self, dir_path_is_ok: tasks.LambdaReplacement, file_path_is_ok: tasks.LambdaReplacement) -> None:
-        assert (isinstance(file_path_is_ok, tasks.LambdaReplacement) and isinstance(dir_path_is_ok,
-                                                                                    tasks.LambdaReplacement))
+        assert isinstance(file_path_is_ok, tasks.LambdaReplacement) and isinstance(dir_path_is_ok,
+                                                                                   tasks.LambdaReplacement)
         self.dir_path_is_ok = dir_path_is_ok
         self.file_path_is_ok = file_path_is_ok
 
 
 # heuristics to enable splitting/merging tasks
 
-def _should_split(t: float) -> bool:
+def _should_split_task(t: float) -> bool:
     return t > 0.5
 
 
-def _should_merge(t: float) -> bool:
-    return t < 0.3
-
-
-class _TaskNode:
-    parent: "_TaskNode"
-    path: str
-    t: float
-    children: list["_TaskNode"]
-
-    def __init__(self, parent: "_TaskNode|None", path: str, t: float | None) -> None:
-        self.parent = parent
-        self.path = path
-        self.t = t
-        self.children = []
-
-    def add_child(self, chpath: str, t: float) -> "_TaskNode":
-        child = _TaskNode(self, chpath, t)
-        self.children.append(child)
-        return child
-
-
-def _merge_node(node: _TaskNode) -> float:  # recursive
-    t = node.t
-    if t is None:
-        return 0.
-    for ch in node.children:
-        t += _merge_node(ch)
-    if _should_merge(t):
-        node.children = []
-        node.t = t
-    return t
-
-
-def _all_nodes(allnodes2: list[_TaskNode], node: _TaskNode) -> None:  # recursive
-    allnodes2.append(node)
-    for ch in node.children:
-        _all_nodes(allnodes2, ch)
+def _scan_task_threshold() -> int:
+    sec_threshold = 0.3
+    return int(sec_threshold * 20000)  # scans per second
 
 
 def _scanned_task_name(cachename: str, dirpath: str) -> str:
@@ -184,7 +172,7 @@ def _load_files_own_task_func(out, foldercache: "FolderCache", parallel: tasks.P
     foldercache.files_by_path = {}
     foldercache.filtered_files = {}
     for key, val in filesbypath.items():
-        assert (key == val.file_path)
+        assert key == val.file_path
         if foldercache.scan_filter.file_path_is_ok.call(key):
             foldercache.files_by_path[key] = val
         else:
@@ -199,7 +187,7 @@ def _underlying_own_task_func(foldercache: "FolderCache", parallel: tasks.Parall
                               underlyingfilesbypath_generator: Generator[tuple[str, File]]) -> None:
     assert len(foldercache.underlying_files_by_path) == 0
     for key, val in underlyingfilesbypath_generator:
-        assert (val.file_path == key)
+        assert val.file_path == key
         if foldercache.scan_filter.file_path_is_ok.call(key):
             foldercache.underlying_files_by_path[key] = val
     foldercache.pub_underlying_files_by_path = tasks.SharedPublication(parallel, foldercache.underlying_files_by_path)
@@ -207,11 +195,11 @@ def _underlying_own_task_func(foldercache: "FolderCache", parallel: tasks.Parall
 
 def _scan_folder_task_func(param: tuple[str, list[str], str, FolderScanFilter, tasks.SharedPubParam, dict[str, float]],
                            fromownload: tuple[tasks.SharedPubParam]) -> tuple[
-    list[str], FolderScanStats, FolderScanDirOut]:
+    list[str], _FolderScanStats, _FolderScanDirOut]:
     (taskroot, exdirs, name, scan_filter, pubunderlying, estimates) = param
     (pubfilesbypath,) = fromownload
-    sdout = FolderScanDirOut()
-    stats = FolderScanStats()
+    sdout = _FolderScanDirOut()
+    stats = _FolderScanStats()
     filesbypath = tasks.from_publication(pubfilesbypath)
     underlying = tasks.from_publication(pubunderlying)
     started = time.perf_counter()
@@ -233,13 +221,17 @@ def _own_calc_hash_task_func(out: tuple[File], foldercache: "FolderCache", scann
     foldercache.files_by_path[f.file_path] = f
 
 
-def _scan_folder_own_task_func(out: tuple[list[str], FolderScanStats, FolderScanDirOut],
+def _scan_folder_own_task_func(out: tuple[list[str], _FolderScanStats, _FolderScanDirOut],
                                foldercache: "FolderCache", parallel: tasks.Parallel, scannedfiles: dict[str, File],
-                               stats: FolderScanStats) -> None:
+                               stats: _FolderScanStats) -> None:
     (exdirs, gotstats, sdout) = out
     stats.add(gotstats)
+    assert len(scannedfiles.keys() & sdout.scanned_files.keys()) == 0
     scannedfiles |= sdout.scanned_files
     # foldercache.files_by_path |= sdout.filesbypath
+    assert len(foldercache.scan_stats.keys() & sdout.scan_stats.keys()) == 0
+    foldercache.scan_stats |= sdout.scan_stats
+
     for f in sdout.requested_files:
         (fpath, tstamp, fsize) = f
         htaskname = _hashing_task_name(foldercache.name, fpath)
@@ -272,10 +264,9 @@ def _own_reconcile_task_func(foldercache: "FolderCache", parallel: tasks.Paralle
     ndel = 0
     for file in _all_values_in_both_dicts(foldercache.files_by_path, foldercache.underlying_files_by_path):
         fpath = file.file_path
-        assert (Folders.is_normalized_file_path(fpath))
+        assert Folders.is_normalized_file_path(fpath)
         if scannedfiles.get(fpath) is None:
             inhere = foldercache.files_by_path.get(fpath)
-            # print(injson)
             if inhere is not None and inhere.file_hash is None:  # special record is already present
                 continue
             info(fpath + ' was deleted')
@@ -288,15 +279,49 @@ def _own_reconcile_task_func(foldercache: "FolderCache", parallel: tasks.Paralle
     savetaskname = 'mo2git.foldercache.save.' + foldercache.name
     savetask = tasks.Task(savetaskname, _save_files_task_func,
                           (foldercache.cache_dir, foldercache.name, foldercache.files_by_path,
-                           foldercache.filtered_files),
+                           foldercache.filtered_files, foldercache.scan_stats),
                           [])
     parallel.add_late_task(
         savetask)  # we won't explicitly wait for savetask, it will be waited for in Parallel.__exit__
 
 
-def _save_files_task_func(param: tuple[str, str, dict[str, File], dict[str, File]]) -> None:
-    (cachedir, name, filesbypath, filteredfiles) = param
+def _save_files_task_func(param: tuple[str, str, dict[str, File], dict[str, File], dict[str, int]]) -> None:
+    (cachedir, name, filesbypath, filteredfiles, scan_stats) = param
     _write_dict_of_files(cachedir, name, filesbypath, filteredfiles)
+    _write_scan_stats(cachedir, name, scan_stats)
+
+
+class _ScanStatsNode:
+    parent: "_ScanStatsNode|None"
+    path: str
+    own_nf: int
+    children: list["_ScanStatsNode"]
+
+    def __init__(self, parent: "_ScanStatsNode|None", path: str, nf: int) -> None:
+        self.parent = parent
+        self.path = path
+        self.own_nf = nf
+        self.children = []
+
+    def fill_tasks(self, alltasks: list[tuple[str, list[str]]]) -> tuple[int, list[str]]:  # recursive
+        nf = self.own_nf
+        chex = []
+        chexmerged = []
+        for ch in self.children:
+            chf, exdirs = ch.fill_tasks(alltasks)
+            nf += chf
+            chex.append(exdirs)
+            chexmerged += exdirs
+        if self.parent is not None and nf < _scan_task_threshold():
+            return nf, chexmerged
+        else:
+            assert (len(chex) == len(self.children))
+            outexdirs = []
+            for i in range(len(self.children)):
+                ch = self.children[i]
+                alltasks.append((ch.path, chex[i]))
+                outexdirs.append(ch.path)
+            return self.own_nf, outexdirs
 
 
 class FolderCache:  # single (recursive) folder cache
@@ -308,10 +333,11 @@ class FolderCache:  # single (recursive) folder cache
     filtered_files: list[File]
     scan_filter: FolderScanFilter
     pub_underlying_files_by_path: tasks.SharedPublication | None
+    scan_stats: dict[str, int]  # fpath -> nfiles
 
     def __init__(self, cachedir: str, name: str, rootfolder: str,
                  scan_filter: FolderScanFilter) -> None:
-        assert (isinstance(scan_filter, FolderScanFilter))
+        assert isinstance(scan_filter, FolderScanFilter)
         self.cache_dir = cachedir
         self.name = name
         self.root_folder = rootfolder
@@ -321,37 +347,47 @@ class FolderCache:  # single (recursive) folder cache
 
         self.underlying_files_by_path = {}
         self.pub_underlying_files_by_path = None
+        try:
+            self.scan_stats = _read_scan_stats(cachedir, name)
+        except Exception as e:
+            warn('error loading ' + name + '.scan-stats.pickle: ' + str(e) + '. Will continue w/o scan_stats')
+            self.scan_stats = {}
 
     def start_tasks(self, parallel: tasks.Parallel,
                     underlyingfilesbypath_generator: Generator[tuple[str, File]],
                     task_name_enabling_underlyingfilesbypath_generator) -> None:
 
-        # building tree of known tasks
-        rootnode = _TaskNode(None, '', None)
-        allnodes = [('', rootnode)]  # sorted in ascending order (but we'll scan it in reverse)
-        for est in sorted(parallel.all_estimates_for_prefix(_scanned_task_name(self.name, self.root_folder))):
-            (path, t) = est
-            for an in reversed(allnodes):
-                (p, node) = an
-                if path.startswith(p):
-                    if path == p:
-                        assert (node == rootnode)
-                        rootnode.t = t
+        # building tree of known scans
+        rootstatnode: _ScanStatsNode | None = None
+        curstatnode: _ScanStatsNode | None = None
+        for fpath, nf in sorted(self.scan_stats.items()):
+            assert Folders.is_normalized_dir_path(fpath)
+            if curstatnode is None:
+                assert rootstatnode is None
+                rootstatnode = _ScanStatsNode(None, fpath, nf)
+                curstatnode = rootstatnode
+                continue
+
+            assert rootstatnode is not None
+            if fpath.startswith(curstatnode.path):
+                curstatnode = _ScanStatsNode(curstatnode, fpath, nf)
+            else:
+                ok = False
+                while curstatnode.parent is not None:
+                    if fpath.startswith(curstatnode.parent.path):
+                        curstatnode = _ScanStatsNode(curstatnode, fpath, nf)
+                        ok = True
+                        break  # while
                     else:
-                        ch = node.add_child(path, t)
-                        allnodes.append((path, ch))
-                        break  # for an
-        # task tree is complete, now we can try merging nodes
-        _merge_node(rootnode)  # recursive
+                        curstatnode = curstatnode.parent
+                assert ok
+
+        alltasks: list[tuple[str, list[str]]] = []
+        rootstatnode.fill_tasks(alltasks)
 
         # merged, starting tasks
-        allnodes2 = []  # after merging, unsorted
-        _all_nodes(allnodes2, rootnode)  # recursive
-
-        alldirs = [self.root_folder + n.path for n in allnodes2]
-
         scannedfiles = {}
-        stats = FolderScanStats()
+        stats = _FolderScanStats()
 
         loadtaskname = 'mo2git.foldercache.load.' + self.name
         loadtask = tasks.Task(loadtaskname, _load_files_task_func, (self.cache_dir, self.name), [])
@@ -370,17 +406,16 @@ class FolderCache:  # single (recursive) folder cache
                                           [task_name_enabling_underlyingfilesbypath_generator])
         parallel.add_late_task(underlyingowntask)
 
-        for node in allnodes2:
-            fullpath = self.root_folder + node.path
-            taskname = _scanned_task_name(self.name, fullpath)
-            alldirsexthisone = [d for d in alldirs if d != fullpath]
-            assert (len(alldirsexthisone) == len(alldirs) - 1)
+        for tt in alltasks:
+            (path, exdirs) = tt
+            assert Folders.is_normalized_dir_path(path)
+            taskname = _scanned_task_name(self.name, path)
             task = tasks.Task(taskname, _scan_folder_task_func,
-                              (fullpath, alldirsexthisone, self.name, self.scan_filter,
+                              (path, exdirs, self.name, self.scan_filter,
                                tasks.make_shared_publication_param(self.pub_underlying_files_by_path),
                                parallel.copy_estimates()),
                               [loadowntaskname, underlyingowntaskname])
-            owntaskname = _scanned_own_task_name(self.name, fullpath)
+            owntaskname = _scanned_own_task_name(self.name, path)
             owntask = tasks.OwnTask(owntaskname,
                                     lambda _, out: _scan_folder_own_task_func(out, self, parallel, scannedfiles, stats),
                                     None, [taskname])
@@ -397,13 +432,14 @@ class FolderCache:  # single (recursive) folder cache
         return _reconcile_own_task_name(self.name)
 
     @staticmethod
-    def _scan_dir(started: float, sdout: FolderScanDirOut, stats: FolderScanStats, dirpath: str,
+    def _scan_dir(started: float, sdout: _FolderScanDirOut, stats: _FolderScanStats, dirpath: str,
                   filesbypath: dict[str, File], underlying: dict[str, File], pubunderlying: tasks.SharedPubParam,
                   exdirs: list[str], name: str,
                   scanfilter: FolderScanFilter, estimates: dict[str, float]) -> None:  # recursive over dir
-        assert (Folders.is_normalized_dir_path(dirpath))
+        assert Folders.is_normalized_dir_path(dirpath)
         # recursive implementation: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
         # still, after recent performance fix seems to win like 1.5x over os.walk-based one
+        nf = 0
         for f in os.listdir(dirpath):
             fpath = dirpath + Folders.normalize_file_name(f)
             st = os.lstat(fpath)
@@ -417,6 +453,7 @@ class FolderCache:  # single (recursive) folder cache
                 assert scanfilter.file_path_is_ok.call(fpath)
 
                 stats.nscanned += 1
+                nf += 1
                 tstamp = _get_file_timestamp_from_st(st)
                 # print(fpath)
                 found = _get_from_one_of_dicts(filesbypath, underlying, fpath)
@@ -432,13 +469,13 @@ class FolderCache:  # single (recursive) folder cache
                     sdout.requested_files.append((fpath, tstamp, st.st_size))
             elif stat.S_ISDIR(fmode):
                 newdir = fpath + '\\'
-                assert (Folders.is_normalized_dir_path(newdir))
+                assert Folders.is_normalized_dir_path(newdir)
                 if newdir in exdirs:
                     continue
                 if scanfilter.dir_path_is_ok.call(newdir):
                     est = tasks.Parallel.estimated_time_from_estimates(estimates, _scanned_task_name(name, newdir), 1.)
                     elapsed = time.perf_counter() - started
-                    if _should_split(elapsed + est):
+                    if _should_split_task(elapsed + est):
                         sdout.requested_dirs.append(newdir)
                     else:
                         FolderCache._scan_dir(started, sdout, stats, fpath, filesbypath, underlying, pubunderlying,
@@ -446,3 +483,5 @@ class FolderCache:  # single (recursive) folder cache
             else:
                 critical(fpath + ' is neither dir or file, aborting')
                 abort_if_not(False)
+        assert dirpath not in sdout.scan_stats
+        sdout.scan_stats[dirpath] = nf

@@ -4,7 +4,7 @@ from mo2gitlib.common import *
 from mo2gitlib.folders import Folders
 
 
-def pickled_cache(cachedir: str, cachedata: dict[str, str], prefix: str, origfiles: list[str],
+def pickled_cache(cachedir: str, cachedata: dict[str, any], prefix: str, origfiles: list[str],
                   calc: Callable[[any], any], params: any = None) -> tuple[any, dict[str:str]]:
     assert isinstance(origfiles, list)
     readpaths = cachedata.get(prefix + '.files')
@@ -47,7 +47,7 @@ def pickled_cache(cachedir: str, cachedata: dict[str, str], prefix: str, origfil
 
     for f in files:
         abort_if_not(f[1] == os.path.getmtime(f[
-                                             0]))  # if any of the files we depend on, has changed while calc() was calculated - something is really weird is going on here
+                                                  0]))  # if any of the files we depend on, has changed while calc() was calculated - something is really weird is going on here
 
     with open(cachedir + prefix + '.pickle', 'wb') as wf:
         # noinspection PyTypeChecker
