@@ -118,16 +118,26 @@ class FolderScanFilter:
         self.file_path_is_ok = file_path_is_ok
 
 
-# heuristics to enable splitting/merging tasks
+# heuristics to enable splitting tasks
 
-def _should_split_task(t: float) -> bool:
+def _time_to_split_task(t: float) -> bool:
     return t > 0.5
 
 
-def _scan_task_threshold() -> int:
+def _scan_task_nf_threshold_heuristics() -> int:
     sec_threshold = 0.3
     return int(sec_threshold * 20000)  # scans per second
 
+
+def _scan_task_time_estimate(nf: int) -> float:
+    return float(nf) / 20000.
+
+
+def _hashing_file_time_estimate(fsize: int) -> float:
+    return float(fsize) / 1048576. / 30.
+
+
+# task names
 
 def _scanned_task_name(cachename: str, dirpath: str) -> str:
     assert Folders.is_normalized_dir_path(dirpath)
@@ -237,11 +247,11 @@ def _scan_folder_own_task_func(out: tuple[list[str], _FolderScanStats, _FolderSc
         htaskname = _hashing_task_name(foldercache.name, fpath)
         htask = tasks.Task(htaskname, _calc_hash_task_func,
                            (fpath, tstamp, fsize),
-                           [])
+                           [], _hashing_file_time_estimate(fsize))
         howntaskname = _hashing_own_task_name(foldercache.name, fpath)
         howntask = tasks.OwnTask(howntaskname,
                                  lambda _, o: _own_calc_hash_task_func(o, foldercache, scannedfiles),
-                                 None, [htaskname])
+                                 None, [htaskname], 0.001)  # expected to take negligible time
         parallel.add_late_tasks([htask, howntask])
 
     # new tasks
@@ -250,11 +260,11 @@ def _scan_folder_own_task_func(out: tuple[list[str], _FolderScanStats, _FolderSc
         task = tasks.Task(taskname, _scan_folder_task_func,
                           (fpath, exdirs, foldercache.name, foldercache.scan_filter,
                            foldercache.pub_underlying_files_by_path, parallel.copy_estimates()),
-                          [])
+                          [], 1.0)  # this is an ad-hoc split, we don't want tasks to cache w, and we have no idea
         owntaskname = _scanned_own_task_name(foldercache.name, fpath)
         owntask = tasks.OwnTask(owntaskname,
                                 lambda _, o: _scan_folder_own_task_func(o, foldercache, parallel, scannedfiles, stats),
-                                None, [taskname])
+                                None, [taskname], 0.01)  # should not take too long
         parallel.add_late_tasks([task, owntask])
 
 
@@ -303,23 +313,29 @@ class _ScanStatsNode:
         self.own_nf = nf
         self.children = []
 
-    def fill_tasks(self, alltasks: list[tuple[str, list[str]]]) -> tuple[int, list[str]]:  # recursive
+    def fill_tasks(self, alltasks: list[tuple[str, int, list[str]]]) -> tuple[int, list[str]] | None:  # recursive
         nf = self.own_nf
         chex = []
         chexmerged = []
+        chnfs = []
         for ch in self.children:
-            chf, exdirs = ch.fill_tasks(alltasks)
-            nf += chf
+            chnf, exdirs = ch.fill_tasks(alltasks)
+            nf += chnf
+            chnfs.append(chnf)
             chex.append(exdirs)
             chexmerged += exdirs
-        if self.parent is not None and nf < _scan_task_threshold():
+        if self.parent is None:
+            alltasks.append((self.path, nf, chexmerged))
+            return None
+        if nf < _scan_task_nf_threshold_heuristics():
             return nf, chexmerged
         else:
-            assert (len(chex) == len(self.children))
+            assert len(chex) == len(self.children)
+            assert len(chnfs) == len(self.children)
             outexdirs = []
             for i in range(len(self.children)):
                 ch = self.children[i]
-                alltasks.append((ch.path, chex[i]))
+                alltasks.append((ch.path, chnfs[i], chex[i]))
                 outexdirs.append(ch.path)
             return self.own_nf, outexdirs
 
@@ -382,7 +398,7 @@ class FolderCache:  # single (recursive) folder cache
                         curstatnode = curstatnode.parent
                 assert ok
 
-        alltasks: list[tuple[str, list[str]]] = []
+        alltasks: list[tuple[str, int, list[str]]] = []
         rootstatnode.fill_tasks(alltasks)
 
         # merged, starting tasks
@@ -407,14 +423,14 @@ class FolderCache:  # single (recursive) folder cache
         parallel.add_late_task(underlyingowntask)
 
         for tt in alltasks:
-            (path, exdirs) = tt
+            (path, nf, exdirs) = tt
             assert Folders.is_normalized_dir_path(path)
             taskname = _scanned_task_name(self.name, path)
             task = tasks.Task(taskname, _scan_folder_task_func,
                               (path, exdirs, self.name, self.scan_filter,
                                tasks.make_shared_publication_param(self.pub_underlying_files_by_path),
                                parallel.copy_estimates()),
-                              [loadowntaskname, underlyingowntaskname])
+                              [loadowntaskname, underlyingowntaskname], _scan_task_time_estimate(nf))
             owntaskname = _scanned_own_task_name(self.name, path)
             owntask = tasks.OwnTask(owntaskname,
                                     lambda _, out: _scan_folder_own_task_func(out, self, parallel, scannedfiles, stats),
@@ -475,7 +491,7 @@ class FolderCache:  # single (recursive) folder cache
                 if scanfilter.dir_path_is_ok.call(newdir):
                     est = tasks.Parallel.estimated_time_from_estimates(estimates, _scanned_task_name(name, newdir), 1.)
                     elapsed = time.perf_counter() - started
-                    if _should_split_task(elapsed + est):
+                    if _time_to_split_task(elapsed + est):  # an ad-hoc split
                         sdout.requested_dirs.append(newdir)
                     else:
                         FolderCache._scan_dir(started, sdout, stats, fpath, filesbypath, underlying, pubunderlying,
