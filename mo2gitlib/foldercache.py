@@ -17,11 +17,11 @@ def _get_file_timestamp_from_st(st: os.stat_result) -> float:
     return st.st_mtime
 
 
-def _get_from_one_of_dicts(dicttolook: dict[any, any], dicttolook2: dict[any, any], key: any) -> any:
-    found = dicttolook.get(key)
+def _get_from_one_of_files_by_path(files_by_path: dict[str, File], files_by_path2: dict[str, File], key: str) -> File:
+    found = files_by_path.get(key)
     if found is not None:
         return found
-    return dicttolook2.get(key)
+    return files_by_path2.get(key)
 
 
 def _all_values_in_both_dicts(dicttoscan: dict[any, any], dicttoscan2: dict[any, any]) -> Generator[any]:
@@ -476,7 +476,9 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         return _reconcile_own_task_name(self.name)
 
     @staticmethod
-    def file_path_is_ok_ex(path: str, exdirs: list[str]) -> bool:
+    def file_path_is_ok_ex(path: str, root: str, exdirs: list[str]) -> bool:
+        if not path.startswith(root):
+            return False
         for exdir in exdirs:
             if path.startswith(exdir):
                 return False
@@ -484,12 +486,12 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
     def file_path_is_ok(self, fpath: str) -> bool:
         for folderplus in self.folder_list:
-            if fpath.startswith(folderplus[0]) and FolderCache.file_path_is_ok_ex(fpath, folderplus[1]):
+            if FolderCache.file_path_is_ok_ex(fpath, folderplus[0], folderplus[1]):
                 return True
         return False
 
     @staticmethod
-    def _scan_dir(started: float, sdout: _FolderScanDirOut, stats: _FolderScanStats, rootpath: str, dirpath: str,
+    def _scan_dir(started: float, sdout: _FolderScanDirOut, stats: _FolderScanStats, root: str, dirpath: str,
                   filesbypath: dict[str, File], underlying: dict[str, File], pubunderlying: tasks.SharedPubParam,
                   exdirs: list[str], name: str, estimates: dict[str, float]) -> None:  # recursive over dir
         assert Folders.is_normalized_dir_path(dirpath)
@@ -504,21 +506,25 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 assert not stat.S_ISLNK(fmode)
                 assert Folders.is_normalized_file_path(fpath)
 
-                assert FolderCache.file_path_is_ok_ex(fpath, exdirs)
+                assert FolderCache.file_path_is_ok_ex(fpath, root, exdirs)
 
                 stats.nscanned += 1
                 nf += 1
                 tstamp = _get_file_timestamp_from_st(st)
-                # print(fpath)
-                found = _get_from_one_of_dicts(filesbypath, underlying, fpath)
+                found: File = _get_from_one_of_files_by_path(filesbypath, underlying, fpath)
                 matched = False
                 if found is not None:
-                    assert found.file_hash == fpath
                     sdout.scanned_files[fpath] = found
-                    if found.file_hash is not None:  # file in cache marked as deleted, re-adding
+                    if found.file_hash is None:  # file in cache marked as deleted, re-adding
+                        pass
+                    else:
                         tstamp2 = found.file_modified
                         if compare_timestamp_with_wj(tstamp, tstamp2) == 0:
                             matched = True
+                            if found.file_size is not None and found.file_size != st.st_size:
+                                warn(
+                                    'FolderCache: file size changed while timestamp did not for file ' + fpath + ', re-hashing it')
+                                matched = False
                 if not matched:
                     sdout.requested_files.append((fpath, tstamp, st.st_size))
             elif stat.S_ISDIR(fmode):
@@ -531,7 +537,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 if _time_to_split_task(elapsed + est):  # an ad-hoc split
                     sdout.requested_dirs.append(newdir)
                 else:
-                    FolderCache._scan_dir(started, sdout, stats, rootpath, newdir, filesbypath, underlying,
+                    FolderCache._scan_dir(started, sdout, stats, root, newdir, filesbypath, underlying,
                                           pubunderlying,
                                           filter_ex_dirs(exdirs, newdir), name, estimates)
             else:
