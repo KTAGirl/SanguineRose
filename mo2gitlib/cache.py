@@ -37,8 +37,10 @@ def _own_hc2self_task_func(cache: "Cache", taskout: tuple[list[File], dict[str, 
     cache.underlying_files = hcout
     info('Cache: ' + str(len(cache.underlying_files_by_path)) + ' underlying files loaded')
 
+
 def _own_downloads_ready_task_func(cache: "Cache"):
     pass
+
 
 class Cache:
     cache_data: dict[str, any]  # for pickled_cache
@@ -56,7 +58,8 @@ class Cache:
         self.aentries = ArchiveEntriesCache(folders.cache_dir, folders.tmp_dir, self.cache_data)
         self.downloads = FolderCache(folders.cache_dir, 'downloads', [(dl, []) for dl in folders.download_dirs])
         self.mo2 = FolderCache(folders.cache_dir, 'mo2',
-                               [(folders.mo2_dir, folders.ignore_dirs + folders.download_dirs + [folders.mo2_dir + 'mods\\'])]
+                               [(folders.mo2_dir,
+                                 folders.ignore_dirs + folders.download_dirs + [folders.mo2_dir + 'mods\\'])]
                                + [(mod, folders.ignore_dirs) for mod in folders.all_enabled_mod_dirs()])
         self.ownmods = FolderCache(folders.cache_dir, 'ownmods',
                                    [(own, folders.ignore_dirs) for own in folders.all_git_own_mod_dirs()])
@@ -80,10 +83,6 @@ class Cache:
 
         owndlsreadytaskname = 'mo2git.cache.owndlsready'
         owndlsready = tasks.OwnTask(owndlsreadytaskname,
-                                       lambda _, _1: _own_downloads_ready_task_func(self),
-                                       None, [self.downloads.ready_task_name()])
+                                    lambda _, _1: _own_downloads_ready_task_func(self),
+                                    None, [self.downloads.ready_task_name()])
         parallel.add_late_task(owndlsready)
-
-
-
-
