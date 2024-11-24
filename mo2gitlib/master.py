@@ -156,7 +156,7 @@ class Master:
             GitDataParam('i1', GitDataType.Path, False),
             GitDataParam('i2', GitDataType.Path),
             GitDataParam('a', GitDataType.Hash),
-            GitDataParam('s', GitDataType.Int)
+            GitDataParam('s', GitDataType.Int, False)  # to avoid too many regexps
         ])
         handler_g = GitDataHandler([
             GitDataParam('g', GitDataType.Path, False),

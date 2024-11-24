@@ -15,7 +15,7 @@ from mo2gitlib.common import *
 
 class GitParamCompressor(ABC):
     @abstractmethod
-    def compress(self, val: any) -> str:
+    def compress(self, val: int | str | None) -> str:
         pass
 
 
@@ -89,13 +89,13 @@ class GitParamHashCompressor(GitParamCompressor):
 
 
 class GitParamPathCompressor(GitParamCompressor):
-    name: str
+    prefix: str
     level: int
     prevn: int
     prevpath: list[str]
 
     def __init__(self, name: str, level=2) -> None:
-        self.name = name
+        self.prefix = name + ':'
         self.prevn = 0
         self.prevpath = []
         self.level = level
@@ -116,7 +116,7 @@ class GitParamPathCompressor(GitParamCompressor):
         # assert('>' not in path)
         path = path.replace('\\', '/')
         if self.level == 0:
-            path = self.name + ':"' + GitParamPathCompressor._to_json_fpath(path) + '"'
+            path = self.prefix + '"' + GitParamPathCompressor._to_json_fpath(path) + '"'
             assert '"' not in path[1:-1]
             return path
 
@@ -132,10 +132,10 @@ class GitParamPathCompressor(GitParamCompressor):
         assert nmatch >= 0
         if self.level == 2 or (self.level == 1 and self.prevn <= nmatch):
             if nmatch <= 9:
-                path = self.name + ':"' + str(nmatch)
+                path = self.prefix + '"' + str(nmatch)
             else:
                 assert nmatch <= 35
-                path = self.name + ':"' + chr(nmatch - 10 + 65)
+                path = self.prefix + '"' + chr(nmatch - 10 + 65)
             needslash = False
             for i in range(nmatch, len(spl)):
                 if needslash:
@@ -153,13 +153,40 @@ class GitParamPathCompressor(GitParamCompressor):
 
 ### decompressors
 
-'''
 class GitParamDecompressor(ABC):
     @abstractmethod
-    def decompress(self, val: any) -> str:
+    def regex_part(self) -> str:
+        pass
+
+    @abstractmethod
+    def matched(self, m: typing.Match, mi: Val) -> str | int:
+        pass
+
+    @abstractmethod
+    def skipped(self) -> str | int:
         pass
 
 
+class GitParamIntDecompressor(GitParamDecompressor):
+    name: str
+    prev: int | None
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def regex_part(self) -> str:
+        return self.name + r':([0-9]*)'
+
+    def matched(self, m: typing.Match, mi: Val) -> int:
+        self.prev = int(m.group(mi.val))
+        mi.val += 1
+        return self.prev
+
+    def skipped(self) -> int:
+        return self.prev
+
+
+'''
 def from_json_hash(s: str) -> int:
     ntopad = (3 - (len(s) % 3)) % 3
     # print(ntopad)
@@ -233,7 +260,7 @@ class GitDataParam:
         self.can_skip = can_skip
 
 
-def _compressor(p: GitDataParam) -> any:
+def _compressor(p: GitDataParam) -> GitParamCompressor:
     match p.typ:
         case GitDataType.Path:
             return GitParamPathCompressor(p.name, 2 if p.can_skip else 0)
@@ -243,6 +270,18 @@ def _compressor(p: GitDataParam) -> any:
             return GitParamIntCompressor(p.name, p.can_skip)
         case GitDataType.Str:
             return GitParamStrCompressor(p.name, p.can_skip)
+
+
+def _decompressor(p: GitDataParam) -> GitParamDecompressor:
+    match p.typ:
+        # case GitDataType.Path:
+        #    return GitParamPathDecompressor(p.name)
+        # case GitDataType.Hash:
+        #    return GitParamHashDecompressor(p.name)
+        case GitDataType.Int:
+            return GitParamIntDecompressor(p.name)
+        # case GitDataType.Str:
+        #    return GitParamStrDeompressor(p.name)
 
 
 class GitDataHandler:
@@ -260,7 +299,7 @@ class GitDataList:
         if __debug__:
             assert not mandatory[0].can_skip
 
-            if len(handlers) > 1:  # if only one handler, there can be no problems distinguishing handlers, even if the only handler has no parameters whatsoever
+            if len(handlers) > 1:  # if there is only one handler, then there can be no problems distinguishing handlers, even if the only handler has no parameters whatsoever
                 for h in handlers:
                     assert not h.optional[0].can_skip  # otherwise regex parsing may become ambiguous
 
@@ -268,7 +307,7 @@ class GitDataList:
             first_param_names = [h.optional[0].name for h in handlers]
             assert len(first_param_names) == len(set(first_param_names))
 
-            # there must be no duplicate names for any handler, including mandatory (to be JSON5-compliant)
+            # there must be no duplicate names for any handler, including mandatory fields (to be JSON5-compliant)
             for h in handlers:
                 all_param_names = [manda.name for manda in mandatory] + [opt.name for opt in h.optional]
                 assert len(all_param_names) == len(set(all_param_names))
@@ -302,6 +341,92 @@ class GitDataListWriter:
 
     def write_begin(self) -> None:
         pass
+
+    def write_line(self, handler: GitDataHandler, values: tuple[int | str | None, ...]) -> None:
+        assert len(values) == len(self.df.mandatory) + len(handler.optional)
+        if self.line_num > 0:
+            ln = ',\n{'
+        else:
+            ln = '{'
+        self.line_num += 1
+        assert len(self.mandatory_compressor) == len(self.df.mandatory)
+        for i in range(len(self.df.mandatory)):
+            if i > 0:
+                ln += ','
+            ln += self.mandatory_compressor[i].compress(values[i])
+
+        shift = len(self.df.mandatory)
+        if handler == self.last_handler:
+            for i in range(len(handler.optional)):
+                ln += self.last_handler_compressor[i].compress(values[shift + i])
+        else:
+            self.last_handler = handler
+            self.last_handler_compressor = [_compressor(opt) for opt in handler.optional]
+
+        ln += '}'
+        self.wfile.write(ln)
+
+    def write_end(self) -> None:
+        if self.line_num > 0:
+            self.wfile.write('\n')
+
+
+### reading
+
+class GitDataListReader:
+    df: GitDataList
+    rfile: typing.TextIO
+    mandatory_decompressor: list[GitParamDecompressor]
+    last_handler: GitDataHandler | None
+    last_handler_decompressor: list[GitParamDecompressor]  # symmetric to writer
+    regexps: list[tuple[typing.Pattern, GitDataHandler, int]]  # pattern, handler, bit mask of fields
+
+    def __init__(self, df: GitDataList, rfile: typing.TextIO) -> None:
+        self.df = df
+        self.rfile = rfile
+        self.mandatory_decompressor = [_decompressor(manda) for manda in df.mandatory]
+        self.last_handler = None
+        self.last_handler_decompressor = []
+
+        for h in self.df.handlers:
+            canskip = []
+            for i in range(len(h.optional)):
+                if h.optional[i].can_skip:
+                    canskip.append(i)
+            res: list[tuple[typing.Pattern | None, GitDataHandler, int]] = [
+                (None, h, 1 << len(canskip) - 1)
+            ]
+
+            for i in range(len(canskip)):
+                # split each record in res in two
+                toadd = []
+                for r in res:
+                    assert r[0] is None
+                    mask = 1 << i
+                    # one record is actually existing, with bit in mask == 1
+                    assert (r[2] & mask) == mask
+                    # another is the same, with bit in mask set to 0
+                    r2 = (None, r[1], r[2] - mask)
+                    toadd.append(r2)
+                res += toadd
+
+            # got res, can fill final one
+            assert len(res) == 2 ** len(canskip)
+            res2 = []
+            for r in res:
+                rex = ''
+                oldmask = r[2]
+                skip = False
+                for i in range(len(h.optional)):
+                    if i in canskip:
+                        idx = canskip.index(i)
+                        if oldmask & (1 << idx):
+                            skip = True
+
+                    if not skip:
+                        p = h.optional[i]
+                        rex += _decompressor(p).regex_part()
+                        # TODO !!!
 
     def write_line(self, handler: GitDataHandler, values: tuple[int | str | None, ...]) -> None:
         assert len(values) == len(self.df.mandatory) + len(handler.optional)
