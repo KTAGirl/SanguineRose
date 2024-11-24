@@ -2,6 +2,8 @@ import xxhash
 
 from mo2gitlib.common import *
 
+ZEROHASH = 17241709254077376921  # xxhash for 0 size
+
 
 def calculate_file_hash(fpath: str) -> int:  # our file hash function, compatible with WJ
     h = xxhash.xxh64()

@@ -1,8 +1,8 @@
 import re
 
 from cache import Cache
-from mo2gitlib.files import calculate_file_hash
-from mo2gitlib.gitdata import *
+from mo2gitlib.files import calculate_file_hash, ZEROHASH
+from mo2gitlib.gitdatafile import *
 
 
 class MasterArchiveItem:
@@ -124,72 +124,73 @@ class Master:
 
     def write(self, wfile: typing.TextIO, masterconfig: dict[str, any]) -> None:
         level = masterconfig.get('pcompression', 0) if masterconfig is not None else 0
-        assert (isinstance(level, int))
+        assert isinstance(level, int)
 
-        wfile.write('// This is JSON5 file, to save some space compared to JSON.\n')
-        wfile.write('// Still, do not edit it by hand, mo2git parses it itself using regex to save time\n')
+        write_file_header_comment(wfile)
         wfile.write('{ config: { pcompression: ' + str(level) + ' },\n')
         wfile.write('  archives: [ // Legend: n means "name", h means "hash"\n')
-        na = 0
+
+        a_mandatory = [
+            GitDataParam('n', GitDataType.Path, False),
+            GitDataParam('h', GitDataType.Hash)
+        ]
+        a_handler = GitDataHandler([
+        ])
+        df = GitDataList(a_mandatory, [a_handler])
+        writera = GitDataListWriter(df, wfile)
+        writera.write_begin()
         for ar in self.archives:
-            if na:
-                wfile.write(",\n")
-            na += 1
-            wfile.write('{n:"' + to_json_fpath(ar.name) + '",h:"' + to_json_hash(ar.item_hash) + '"}')
+            writera.write_line(a_handler, (ar.name, ar.item_hash))
+        writera.write_end()
         wfile.write('\n], files: [ // Legend: p means "path", h means "hash", s means "size", f means "from",')
         wfile.write('\n            //         a means "archive_hash", i means "intra_path"\n')
 
-        nf = 0
-        lastp = Val([])
-        lasts = Val(None)
-        lasta = Val(None)
-        lastf = Val([])
-        lasti = [Val(None)] * 2  # increasing it here will need adding more patterns to constructFromFile()
-        nlasti = 0
-        lastpn = Val(0)
+        mandatory = [
+            GitDataParam('p', GitDataType.Path, False),
+            GitDataParam('h', GitDataType.Hash)
+        ]
+        handler_s0 = GitDataHandler([
+            GitDataParam('s', GitDataType.Int, False)
+        ])
+        handler_a = GitDataHandler([
+            GitDataParam('i1', GitDataType.Path, False),
+            GitDataParam('i2', GitDataType.Path),
+            GitDataParam('a', GitDataType.Hash),
+            GitDataParam('s', GitDataType.Int)
+        ])
+        handler_g = GitDataHandler([
+            GitDataParam('g', GitDataType.Path, False),
+        ])
+        handler_warning = GitDataHandler([
+            GitDataParam('warning', GitDataType.Str, False),
+        ])
+        handlers = [
+            handler_s0,
+            handler_a,
+            handler_g,
+            handler_warning
+        ]
+        df = GitDataList(mandatory, handlers)
+        writer = GitDataListWriter(df, wfile)
+        writer.write_begin()
         for fi in self.files:
-            if nf:
-                wfile.write(",\n")
-            nf += 1
-
-            wfile.write('{p:' + compress_json_path(lastpn, lastp, fi.file_path, level))  # fi.path is mandatory
-            if fi.file_hash is not None:
-                wfile.write(',h:"' + to_json_hash(fi.file_hash) + '"')
-            else:
-                # there is no lasth, but it is a special record (size==0)
-                # print(fi.__dict__)
-                assert (fi.warning is not None or fi.file_size == 0)
-
-            if fi.file_size is not None:
-                wfile.write(int_json_param('s', lasts, fi.file_size))
-            else:
-                lasts.val = None
-            if fi.archive_hash is not None:
-                wfile.write(str_json_param('a', lasta, to_json_hash(fi.archive_hash)))
-            else:
-                lasta.val = None
-            if fi.intra_path is not None:
-                wfile.write(',i:[')
-                np = 0
-                for path in fi.intra_path:
-                    if np:
-                        wfile.write(',')
-                    if np >= nlasti:
-                        lasti[np] = Val([])
-                    wfile.write(compress_json_path(None, lasti[np], path))
-                    np += 1
-                wfile.write(']')
-                nlasti = np
-            else:
-                nlasti = 0
-            if fi.gitpath is not None:
-                wfile.write(',g:' + compress_json_path(None, lastf, fi.gitpath))
-            else:
-                lastf.val = []
+            if fi.file_hash == ZEROHASH:
+                assert fi.warning is None
+                assert fi.gitpath is None
+                writer.write_line(handler_s0, (fi.file_path, None, 0))
+                continue
             if fi.warning is not None:
-                wfile.write(',warning:"' + fi.warning + '"')
-            wfile.write('}')
-
+                assert fi.gitpath is None
+                writer.write_line(handler_warning, (fi.file_path, fi.file_hash, fi.warning))
+                continue
+            if fi.gitpath is not None:
+                writer.write_line(handler_g, (fi.file_path, fi.file_hash, fi.gitpath))
+                continue
+            writer.write_line(handler_a, (fi.file_path, fi.file_hash,
+                                          fi.intra_path[0], fi.intra_path[1] if len(fi.intra_path) > 1 else None,
+                                          fi.archive_hash, fi.file_size
+                                          ))
+        writer.write_end()
         wfile.write('\n]}\n')
 
     def construct_from_file(self, rfile: typing.TextIO) -> None:
