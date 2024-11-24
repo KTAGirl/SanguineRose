@@ -196,7 +196,7 @@ class Master:
         files.sort()
 
         targetdir = 'mo2\\'
-        mo2 = filecache.folders.mo2
+        mo2 = filecache.folders.mo2_dir
         mo2len = len(mo2)
         self.files = []
         for fpath0 in files:
@@ -211,7 +211,7 @@ class Master:
             if ae is None:
                 processed = False
 
-                srcpath = filecache.folders.github + targetdir + fpath
+                srcpath = filecache.folders.github_dir + targetdir + fpath
                 if os.path.isfile(srcpath):  # TODO: add github tree to filecache and search/read hash from there
                     h = calculate_file_hash(srcpath)
                     self.files.append(MasterFileItem(fpath, h, gitpath=fpath))

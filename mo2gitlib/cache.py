@@ -50,23 +50,23 @@ class Cache:
     underlying_files: list[File] | None
 
     def __init__(self, folders: Folders) -> None:
-        self.cache_data = read_dict_from_json_file(folders.cache + 'cache-data.json')
-        # TODO! : save cache_data
+        self.cache_data = read_dict_from_json_file(folders.cache_dir + 'cache-data.json')
+        # TODO: save cache_data
         self.folders = folders
-        self.aentries = ArchiveEntriesCache(folders.cache, folders.tmp, self.cache_data)
-        self.downloads = FolderCache(folders.cache, 'downloads', [(dl, []) for dl in folders.downloads])
-        self.mo2 = FolderCache(folders.cache, 'mo2',
-                               [(folders.mo2, folders.ignore + folders.downloads + [folders.mo2 + 'mods\\'])]
-                               + [(mod, folders.ignore) for mod in folders.all_enabled_mod_dirs()])
-        self.ownmods = FolderCache(folders.cache, 'ownmods',
-                                   [(own, folders.ignore) for own in folders.all_own_mod_dirs()])
+        self.aentries = ArchiveEntriesCache(folders.cache_dir, folders.tmp_dir, self.cache_data)
+        self.downloads = FolderCache(folders.cache_dir, 'downloads', [(dl, []) for dl in folders.download_dirs])
+        self.mo2 = FolderCache(folders.cache_dir, 'mo2',
+                               [(folders.mo2_dir, folders.ignore_dirs + folders.download_dirs + [folders.mo2_dir + 'mods\\'])]
+                               + [(mod, folders.ignore_dirs) for mod in folders.all_enabled_mod_dirs()])
+        self.ownmods = FolderCache(folders.cache_dir, 'ownmods',
+                                   [(own, folders.ignore_dirs) for own in folders.all_git_own_mod_dirs()])
         self.underlying_files_by_path = None
 
     def start_tasks(self, parallel: tasks.Parallel) -> None:
         all_folders_list = self.downloads.folder_list + self.mo2.folder_list + self.ownmods.folder_list
         hctaskname = 'mo2git.cache.loadhc'
         hctask = tasks.Task(hctaskname, _load_hc_task_func,
-                            (self.folders.cache, all_folders_list, self.cache_data), [])
+                            (self.folders.cache_dir, all_folders_list, self.cache_data), [])
 
         ownhctaskname = 'mo2git.cache.ownhc2self'
         owntaskhc2self = tasks.OwnTask(ownhctaskname,

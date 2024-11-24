@@ -72,10 +72,10 @@ def _mo2git(jsonconfigfname,config):
     compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)
     ignore=compiler_settings['Ignore']
     folders = Folders(jsonconfigfname,config,ignore)
-    with mo2compat.LockMO2(folders.mo2):
+    with mo2compat.LockMO2(folders.mo2_dir):
         filecache = _openCache(jsonconfigfname,config,mastermodlist,folders)
 
-        targetgithub = filecache.folders.github
+        targetgithub = filecache.folders.github_dir
         targetdir = 'mo2\\'
         stats = {}
         
@@ -93,7 +93,7 @@ def _mo2git(jsonconfigfname,config):
             allmods[mod]=1
         altmodlists = {}
         for profile in altprofilenames:
-            aml = ModList(filecache.folders.mo2+'profiles\\'+profile+'\\')
+            aml = ModList(filecache.folders.mo2_dir + 'profiles\\' + profile + '\\')
             for mod in aml.all_enabled():
                 allmods[mod]=1
             altmodlists[profile] = aml
@@ -116,7 +116,7 @@ def _mo2git(jsonconfigfname,config):
             shutil.rmtree(modsdir)
         # dbgWait()
 
-        mo2 = filecache.folders.mo2
+        mo2 = filecache.folders.mo2_dir
         # copying own mods
         for mod in filecache.folders.all_own_mods():
             shutil.copytree(mo2+'mods\\'+mod, targetgithub + targetdir+'mods\\'+mod, dirs_exist_ok=True)

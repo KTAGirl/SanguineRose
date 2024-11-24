@@ -35,25 +35,25 @@ def _openCache(jsonconfigname,config,mastermodlist,folders,dbgdumpwjdb=None):
     for mod in mastermodlist.all_enabled():
         if folders.is_own_mod(mod.lower()):
             continue
-        installfile,modid,manualurl,prompt = installfile_modid_manual_url_and_prompt(mod, folders.mo2)
+        installfile,modid,manualurl,prompt = installfile_modid_manual_url_and_prompt(mod, folders.mo2_dir)
         if installfile is not None:
             installfile = installfile.strip('/').strip('\\') #an odd / in the beginning of meta-provided path
             #print(installfile)
             allarchivenames.append(Folders.normalize_file_name(installfile))
     folders.add_archive_names(allarchivenames)
 
-    mo2exclude = [folders.mo2+'downloads\\', # even if downloadsdirs are different
-                  folders.mo2+'mods\\']
-    for ddir in folders.downloads:
+    mo2exclude = [folders.mo2_dir + 'downloads\\',  # even if downloadsdirs are different
+                  folders.mo2_dir + 'mods\\']
+    for ddir in folders.download_dirs:
         mo2exclude.append(ddir) # even if different from mo2+'downloads\\'
     mo2reinclude = []
-    cachedir = folders.cache
-    tmpbasepath = folders.tmp
+    cachedir = folders.cache_dir
+    tmpbasepath = folders.tmp_dir
     if not tmpbasepath:
         tmpbasepath = cachedir
     os.makedirs(cachedir,exist_ok=True)
     for mod in mastermodlist.all_enabled():
-        mo2reinclude.append(folders.mo2+'mods\\'+mod+'\\')
+        mo2reinclude.append(folders.mo2_dir + 'mods\\' + mod + '\\')
         #print('reincluded:'+mod)
     folders.set_exclusions(mo2exclude, mo2reinclude)
     filecache = cache.Cache(folders,dbgdumpwjdb)
