@@ -1,3 +1,4 @@
+# noinspection PyUnresolvedReferences
 import pickle
 import time
 
@@ -14,13 +15,9 @@ def _processing_archive_time_estimate(fsize: int):
     return float(fsize) / 1048576. / 10.  # 10 MByte/s
 
 
-def _read_dict_of_archive_entries(dirpath: str) -> dict[str, ArchiveEntry]:
-    assert Folders.is_normalized_dir_path(dirpath)
-    fpath = dirpath + 'aentries.pickle'
-    # out = {}
-    with open(fpath, 'rb') as rfile:
-        out = pickle.load(rfile)
-        return out
+def _read_dict_of_archive_entries(cachedir: str) -> dict[str, ArchiveEntry]:
+    assert Folders.is_normalized_dir_path(cachedir)
+    return read_dict_from_pickled_file(cachedir + 'aentries.pickle')
 
 
 def _write_dict_of_archive_entries(dirpath: str, archiveentries: dict[str, ArchiveEntry],
@@ -73,17 +70,12 @@ def _archive_to_entries(archive_entries: dict[int, ArchiveEntry], archive_hash: 
 
 def _load_aentries_task_func(param: tuple[str]) -> tuple[dict[str, ArchiveEntry]]:
     (cachedir,) = param
-    try:
-        archive_entries = _read_dict_of_archive_entries(cachedir)
-    except Exception as e:
-        warn('error loading cache aentries.pickle: ' + str(e) + '. Will continue w/o respective cache')
-        archive_entries = {}  # just in case
-
+    archive_entries = _read_dict_of_archive_entries(cachedir)
     return (archive_entries,)
 
 
 def _load_aentries_own_task_func(out: tuple[dict[str, ArchiveEntry]], aecache: "ArchiveEntriesCache",
-                                 all_used_archives: Generator[tuple[str, int, int]]) -> None:
+                                 all_used_archives: Iterable[tuple[str, int, int]]) -> None:
     (archive_entries,) = out
     assert aecache.archive_entries is None
     aecache.archive_entries = {}
@@ -144,7 +136,7 @@ def _archive_hashing_own_task_func(out: tuple[dict[int, ArchiveEntry]], aecache:
 
 
 def _own_filter_task_func(aecache: "ArchiveEntriesCache", parallel: tasks.Parallel,
-                          all_used_archives: Generator[tuple[str, int, int]],
+                          all_used_archives: Iterable[tuple[str, int, int]],
                           fromloadvfs: tuple[tasks.SharedReturnParam, dict[str, any]]) -> None:
     t0 = time.perf_counter()
 
@@ -237,8 +229,8 @@ class ArchiveEntriesCache:
         self.filtered_archive_entries = {}
         self.cache_data = cache_data
 
-    def start_tasks(self, parallel: tasks.Parallel, all_used_archives: Generator[tuple[str, int, int]],
-                    # fpath, hash, size
+    def start_tasks(self, parallel: tasks.Parallel,
+                    all_used_archives: Iterable[tuple[str, int, int]],  # fpath, hash, size
                     task_name_enabling_all_used_archives: str) -> None:
         loadtaskname = 'mo2gitlib.aentriescache.load'
         loadtask = tasks.Task(loadtaskname, _load_aentries_task_func,

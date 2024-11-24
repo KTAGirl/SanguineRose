@@ -1,4 +1,5 @@
 import os.path
+# noinspection PyUnresolvedReferences
 import pickle
 import stat
 import time
@@ -34,9 +35,7 @@ def _all_values_in_both_dicts(dicttoscan: dict[any, any], dicttoscan2: dict[any,
 def _read_dict_of_files(dirpath: str, name: str) -> dict[str, File]:
     assert Folders.is_normalized_dir_path(dirpath)
     fpath = dirpath + name + '.pickle'
-    with open(fpath, 'rb') as rf:
-        out = pickle.load(rf)
-        return out
+    return read_dict_from_pickled_file(fpath)
 
 
 def _write_dict_of_files(dirpath: str, name: str, files: dict[str, File], filteredfiles: dict[str, File]) -> None:
@@ -57,9 +56,7 @@ def _write_dict_of_files(dirpath: str, name: str, files: dict[str, File], filter
 def _read_all_scan_stats(dirpath: str, name: str) -> dict[str, dict[str, int]]:
     assert Folders.is_normalized_dir_path(dirpath)
     fpath = dirpath + name + '.scan-stats.pickle'
-    with open(fpath, 'rb') as rf:
-        out = pickle.load(rf)
-        return out
+    return read_dict_from_pickled_file(fpath)
 
 
 def _write_all_scan_stats(dirpath: str, name: str, all_scan_stats: dict[str, dict[str, int]]) -> None:
@@ -105,6 +102,7 @@ class _FolderScanDirOut:
         self.requested_files = []
         self.scan_stats = {}
 
+type FolderList = list[tuple[str,list[str]]]
 
 def filter_ex_dirs(exdirs: list[str], fpath) -> list[str]:
     return [xd for xd in exdirs if xd.startswith(fpath)]
@@ -160,11 +158,7 @@ def _hashing_own_task_name(cachename: str, dirpath: str) -> str:
 def _load_files_task_func(param: tuple[str, str]) -> tuple[dict[str, File]]:
     (cachedir, name) = param
     # filesbypath = {}
-    try:
-        filesbypath = _read_dict_of_files(cachedir, name)
-    except Exception as e:
-        warn('error loading cache ' + name + '.pickle: ' + str(e) + '. Will continue w/o respective cache')
-        filesbypath = {}  # just in case
+    filesbypath = _read_dict_of_files(cachedir, name)
 
     return (filesbypath,)
 
@@ -175,7 +169,7 @@ def _load_files_own_task_func(out, foldercache: "FolderCache", parallel: tasks.P
     foldercache.filtered_files = {}
     for key, val in filesbypath.items():
         assert key == val.file_path
-        if foldercache.file_path_is_ok(key):
+        if FolderCache.file_path_is_ok(key,foldercache.folder_list):
             foldercache.files_by_path[key] = val
         else:
             foldercache.filtered_files[key] = val
@@ -186,12 +180,11 @@ def _load_files_own_task_func(out, foldercache: "FolderCache", parallel: tasks.P
 
 
 def _underlying_own_task_func(foldercache: "FolderCache", parallel: tasks.Parallel,
-                              underlyingfilesbypath_generator: Generator[tuple[str, File]]) -> None:
+                              underlyingfilesbypath_generator: Iterable[File]) -> None:
     assert len(foldercache.underlying_files_by_path) == 0
-    for key, val in underlyingfilesbypath_generator:
-        assert val.file_path == key
-        if foldercache.file_path_is_ok(key):
-            foldercache.underlying_files_by_path[key] = val
+    for fi in underlyingfilesbypath_generator:
+        if FolderCache.file_path_is_ok(fi.file_path,foldercache.folder_list):
+            foldercache.underlying_files_by_path[fi.file_path] = fi
     foldercache.pub_underlying_files_by_path = tasks.SharedPublication(parallel, foldercache.underlying_files_by_path)
 
 
@@ -394,13 +387,13 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
     cache_dir: str
     underlying_files_by_path: dict[str, File]
     name: str
-    folder_list: list[tuple[str, list[str]]]
+    folder_list: FolderList
     files_by_path: dict[str, File]
     filtered_files: list[File]
     pub_underlying_files_by_path: tasks.SharedPublication | None
     all_scan_stats: dict[str, dict[str, int]]  # rootfolder -> {fpath -> nfiles}
 
-    def __init__(self, cachedir: str, name: str, folder_list: list[tuple[str, list[str]]]) -> None:
+    def __init__(self, cachedir: str, name: str, folder_list: FolderList) -> None:
         self.cache_dir = cachedir
         self.name = name
         self.folder_list = folder_list
@@ -409,14 +402,10 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
         self.underlying_files_by_path = {}
         self.pub_underlying_files_by_path = None
-        try:
-            self.all_scan_stats = _read_all_scan_stats(cachedir, name)
-        except Exception as e:
-            warn('error loading ' + name + '.scan-stats.pickle: ' + str(e) + '. Will continue w/o scan_stats')
-            self.all_scan_stats = {}
+        self.all_scan_stats = _read_all_scan_stats(cachedir, name)
 
     def start_tasks(self, parallel: tasks.Parallel,
-                    underlyingfilesbypath_generator: Generator[tuple[str, File]],
+                    underlyingfilesbypath_generator: Iterable[File],
                     task_name_enabling_underlyingfilesbypath_generator) -> None:
 
         # building tree of known scans
@@ -476,7 +465,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         return _reconcile_own_task_name(self.name)
 
     @staticmethod
-    def file_path_is_ok_ex(path: str, root: str, exdirs: list[str]) -> bool:
+    def file_path_is_ok_simple(path: str, root: str, exdirs: list[str]) -> bool:
         if not path.startswith(root):
             return False
         for exdir in exdirs:
@@ -484,9 +473,10 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 return False
         return True
 
-    def file_path_is_ok(self, fpath: str) -> bool:
-        for folderplus in self.folder_list:
-            if FolderCache.file_path_is_ok_ex(fpath, folderplus[0], folderplus[1]):
+    @staticmethod
+    def file_path_is_ok(fpath: str, folder_list:FolderList) -> bool:
+        for folderplus in folder_list:
+            if FolderCache.file_path_is_ok_simple(fpath, folderplus[0], folderplus[1]):
                 return True
         return False
 
@@ -506,7 +496,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 assert not stat.S_ISLNK(fmode)
                 assert Folders.is_normalized_file_path(fpath)
 
-                assert FolderCache.file_path_is_ok_ex(fpath, root, exdirs)
+                assert FolderCache.file_path_is_ok_simple(fpath, root, exdirs)
 
                 stats.nscanned += 1
                 nf += 1

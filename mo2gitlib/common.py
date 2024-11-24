@@ -4,14 +4,14 @@ import logging
 import os
 import traceback
 import typing
-from collections.abc import Callable as _Callable, Generator as _Generator
+import pickle
+# noinspection PyUnresolvedReferences
+from collections.abc import Callable, Generator, Iterable
+# noinspection PyUnresolvedReferences
 from types import TracebackType as _TracebackType
 
-# stubs for importing from other modules, while preventing import optimizer from optimizing it out
-Callable = _Callable
-Generator = _Generator
+
 Type = typing.Type
-TracebackType = _TracebackType
 
 
 def dbgwait() -> None:
@@ -118,17 +118,21 @@ def all_esxs(mod: str, mo2: str) -> list[str]:
     esxs = esxs + glob.glob(mo2 + 'mods/' + mod + '/*.esm')
     return esxs
 
+def read_dict_from_pickled_file(fpath: str) ->dict[str,any]:
+    try:
+        with open(fpath, 'rb') as rfile:
+            return pickle.load(rfile)
+    except Exception as e:
+        warn('error loading '+fpath+': ' + str(e) + '. Will continue without it')
+        return {}
 
-'''
-class Elapsed:
-    def __init__(self):
-        self.t0 = time.perf_counter()
-        
-    def printAndReset(self,where):
-        t1 = time.perf_counter()
-        print(where+' took '+str(round(t1-self.t0,2))+'s')
-        self.t0 = t1
-'''
+def read_dict_from_json_file(fpath: str) ->dict[str,any]:
+    try:
+        with open(fpath, 'rt', encoding='utf-8') as rfile:
+            return json.load(rfile)
+    except Exception as e:
+        warn('error loading '+fpath+': ' + str(e) + '. Will continue without it')
+        return {}
 
 
 class Val:
