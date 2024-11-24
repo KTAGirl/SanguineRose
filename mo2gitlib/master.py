@@ -222,8 +222,8 @@ class Master:
         wfile.write('  archives: [ // Legend: n means "name", h means "hash"\n')
 
         ahandler = GitDataHandler(ArchiveReadHandler.optional)
-        df = GitDataList(self._a_mandatory, [ahandler])
-        writera = GitDataListWriter(df, wfile)
+        da = GitDataList(self._a_mandatory, [ahandler])
+        writera = GitDataListWriter(da, wfile)
         writera.write_begin()
         for ar in self.archives:
             writera.write_line(ahandler, (ar.name, ar.item_hash))

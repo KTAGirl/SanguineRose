@@ -435,6 +435,8 @@ class GitDataListReader:
                         dskipped.append((i, d))
                     else:
                         dmatched.append((i, d))
+                        if len(rex) != 0:
+                            rex += ','
                         rex += d.regex_part()
 
                 rexc: re.Pattern = re.compile(rex)
