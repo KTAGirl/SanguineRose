@@ -53,10 +53,36 @@ class MasterFileItem:
             return False
         return True
 
+class ArchiveHandler(GitDataHandler):
+    def __init__(self) -> None:
+        super().__init__([])
+
+    @abstractmethod
+    def decompress(self,param:tuple[str|int,...]): # still abstract
+        pass
+
+class ArchiveReadHandler(ArchiveHandler):
+    archives: list[MasterArchiveItem]
+
+    def __init__(self, archives: list[MasterArchiveItem]) -> None:
+        super().__init__()
+        self.archives = archives
+
+    def decompress(self,param:tuple[str,int]) -> None:
+        (p,h) = param
+        assert h >= 0
+        self.archives.append(MasterArchiveItem(p,h))
+
 
 class Master:
     archives: list[MasterArchiveItem]
     files: list[MasterFileItem]
+
+    _a_mandatory:list[GitDataParam] = [
+        GitDataParam('n', GitDataType.Path, False),
+        GitDataParam('h', GitDataType.Hash)
+    ]
+    _a_gitlist: GitDataList(_a_mandatory, [ArchiveHandler()])
 
     def __init__(self) -> None:
         self.archives = []
@@ -128,17 +154,11 @@ class Master:
         wfile.write('{ config: { pcompression: ' + str(level) + ' },\n')
         wfile.write('  archives: [ // Legend: n means "name", h means "hash"\n')
 
-        a_mandatory = [
-            GitDataParam('n', GitDataType.Path, False),
-            GitDataParam('h', GitDataType.Hash)
-        ]
-        a_handler = GitDataHandler([
-        ])
-        df = GitDataList(a_mandatory, [a_handler])
+        df = GitDataList(self._a_mandatory, [ArchiveHandler()])
         writera = GitDataListWriter(df, wfile)
         writera.write_begin()
         for ar in self.archives:
-            writera.write_line(a_handler, (ar.name, ar.item_hash))
+            writera.write_line(ArchiveHandler(), (ar.name, ar.item_hash))
         writera.write_end()
         wfile.write('\n], files: [ // Legend: p means "path", h means "hash", s means "size", f means "from",')
         wfile.write('\n            //         a means "archive_hash", i means "intra_path"\n')
@@ -151,7 +171,7 @@ class Master:
             GitDataParam('s', GitDataType.Int, False)
         ])
         handler_a = GitDataHandler([
-            GitDataParam('i1', GitDataType.Path, False),
+            GitDataParam('i', GitDataType.Path, False),
             GitDataParam('i2', GitDataType.Path),
             GitDataParam('a', GitDataType.Hash),
             GitDataParam('s', GitDataType.Int, False)  # to avoid too many regexps
@@ -192,7 +212,34 @@ class Master:
         wfile.write('\n]}\n')
 
     def construct_from_file(self, rfile: typing.TextIO) -> None:
-        self.archives = []
-        self.files = []
+        assert len(self.archives) == 0
+        assert len(self.files) == 0
+
+        # skipping header
+        archivestart = re.compile(r'^\s*archives\s*:\s*\[\s*//')
+        rdh = GitHeaderReader()
+        while True:
+            ln = rfile.readline()
+            assert ln
+            processed = rdh.parse_line(ln)
+            if processed:
+                continue
+            if archivestart.search(ln):
+                break
+
+        filesstart = re.compile(r'^\s*]\s*,\s*files\s*:\s\[\s*//')
+        df = GitDataList(self._a_mandatory, [ArchiveReadHandler(self.archives)])
+        rda = GitDataListReader(df)
+        while True:
+            ln = rfile.readline()
+            assert ln
+            processed = rda.parse_line(ln)
+            if processed:
+                continue
+            if filesstart.search(ln):
+                break
+
+        
+
 
         # TODO! use GitDataListReader

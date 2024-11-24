@@ -167,6 +167,10 @@ class GitParamDecompressor(ABC):
     def skipped(self) -> str | int:
         pass
 
+    @abstractmethod
+    def reset(self) -> None:
+        pass
+
 
 class GitParamIntDecompressor(GitParamDecompressor):
     name: str
@@ -185,8 +189,12 @@ class GitParamIntDecompressor(GitParamDecompressor):
     def skipped(self) -> int:
         return self.prev
 
+    def reset(self) -> None:
+        self.prev = None
 
-'''
+
+# TODO: other decompressors
+'''  
 def from_json_hash(s: str) -> int:
     ntopad = (3 - (len(s) % 3)) % 3
     # print(ntopad)
@@ -291,8 +299,9 @@ class GitDataHandler(ABC):
         self.optional = optional
 
     @abstractmethod
-    def decompress(self,param:list[str|int]):
+    def decompress(self,param:tuple[str|int,...]) -> None:
         pass
+
 
 class GitDataList:
     mandatory: list[GitDataParam]
@@ -376,49 +385,39 @@ class GitDataListWriter:
 
 ### reading
 
+class GitHeaderReader:
+    comment_only_line: re.Pattern
+
+    def __init__(self) -> None:
+        self.comment_only_line = re.compile(r'^\s*//')
+
+    def parse_line(self,ln:str) -> bool:
+        if self.comment_only_line.search(ln):
+            return True
+        return False
+
 class GitDataListReader:
     df: GitDataList
-    rfile: typing.TextIO
     mandatory_decompressor: list[GitParamDecompressor]
     last_handler: GitDataHandler | None
-    last_handler_decompressor: list[GitParamDecompressor]  # symmetric to writer
+    comment_only_line: re.Pattern
     regexps: list[
         tuple[re.Pattern, GitDataHandler, list[tuple[int, GitParamDecompressor]], list[
             tuple[int, GitParamDecompressor]]]]  # decompressor lists are matched, skipped
 
-    def __init__(self, df: GitDataList, rfile: typing.TextIO) -> None:
+    def __init__(self, df: GitDataList) -> None:
         self.df = df
-        self.rfile = rfile
         self.mandatory_decompressor = [_decompressor(manda) for manda in df.mandatory]
         self.last_handler = None
-        self.last_handler_decompressor = []
+        self.comment_only_line = re.compile(r'^\s*//')
 
         for h in self.df.handlers:
             canskip = []
             for i in range(len(h.optional)):
                 if h.optional[i].can_skip:
                     canskip.append(i)
-            res: list[int] = [
-                1 << len(canskip) - 1  # mask
-            ]
 
-            for i in range(len(canskip)):
-                # split each record in res in two
-                toadd: list[int] = []
-                for r in res:
-                    mask = 1 << i
-                    # one record is actually existing, with bit in mask == 1
-                    assert (r & mask) == mask
-                    # another is the same, with bit in mask set to 0
-                    r2 = r[2] - mask
-                    toadd.append(r2)
-                res += toadd
-
-            # got res, can fill final one
-            assert len(res) == 2 ** len(canskip)
-            for r in res:
-                mask = r[2]
-                assert 0 <= mask < 2 ** len(canskip)
+            for mask in range(2 ** len(canskip)): #scanning all pf them to get all 2**n possible bit mask patterns
                 skip = False
                 rex = ''
                 dmatched: list[tuple[int, GitParamDecompressor]] = []
@@ -441,20 +440,38 @@ class GitDataListReader:
                 assert len(dmatched) + len(dskipped) == len(h.optional)
                 self.regexps.append((rexc, h, dmatched, dskipped))
 
-    def parse_line(self, ln) -> bool:
+    def parse_line(self, ln) -> bool: # returns False if didn't handle lm
+        if self.comment_only_line.search(ln):
+            return True
         for rex in self.regexps:
-            m = rex[0].match(ln)
+            (pattern,h,dmatched,dskipped) = rex
+            m = pattern.match(ln)
             if m:
-                assert len(rex[2]) + len(rex[3]) == len(rex[1].optional)
-                param:list[str|int|None] = [None] * len(rex[1].optional)
+                assert len(dmatched) + len(dskipped) == len(h.optional)
+                param:list[str|int|None] = [None] * len(h.optional)
                 i = 1
-                for matched in rex[2]:
-                    param[matched[0]] = matched[1].matched(m.group(i))
-                    i += 1
-                for skipped in rex[3]:
-                    param[skipped[0]] = skipped[1].skipped()
+                if h != self.last_handler: #duplicating a bit of code to move comparison out of the loop and speed things up a bit
+                    for matched in dmatched:
+                        d:GitParamDecompressor = matched[1]
+                        d.reset()
+                        param[matched[0]] = d.matched(m.group(i))
+                        i += 1
+                    for skipped in dskipped:
+                        d:GitParamDecompressor = skipped[1]
+                        d.reset()
+                        param[skipped[0]] = d.skipped()
+                    self.last_handler = h
+                else:
+                    if h != self.last_handler:
+                        for matched in dmatched:
+                            d: GitParamDecompressor = matched[1]
+                            param[matched[0]] = d.matched(m.group(i))
+                            i += 1
+                        for skipped in dskipped:
+                            d: GitParamDecompressor = skipped[1]
+                            param[skipped[0]] = d.skipped()
 
-                rex[1].decompress(param)
+                h.decompress(tuple(param))
                 return True
 
         return False
