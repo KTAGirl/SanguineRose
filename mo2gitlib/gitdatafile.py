@@ -105,10 +105,6 @@ class GitParamPathCompressor(GitParamCompressor):
     def _to_json_fpath(fpath: str) -> str:
         return urlparse.quote(fpath, safe=" /+()'&#$[];,!@")
 
-    @staticmethod
-    def _from_json_fpath(fpath: str) -> str:
-        return urlparse.unquote(fpath)
-
     def compress(self, path: str | None) -> str:
         if path is None:
             return ''
@@ -178,6 +174,7 @@ class GitParamIntDecompressor(GitParamDecompressor):
 
     def __init__(self, name: str) -> None:
         self.name = name
+        self.prev = None
 
     def regex_part(self) -> str:
         return self.name + r':([0-9]*)'
@@ -187,64 +184,116 @@ class GitParamIntDecompressor(GitParamDecompressor):
         return self.prev
 
     def skipped(self) -> int:
+        assert self.prev is not None
         return self.prev
 
     def reset(self) -> None:
         self.prev = None
 
 
-# TODO: other decompressors
-'''  
-def from_json_hash(s: str) -> int:
-    ntopad = (3 - (len(s) % 3)) % 3
-    # print(ntopad)
-    s += '=='[:ntopad]
-    # print(s)
-    b = base64.b64decode(s)
-    h = int.from_bytes(b, byteorder='little')
-    return h
+class GitParamStrDecompressor(GitParamDecompressor):
+    name: str
+    prev: str | None
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.prev = None
+
+    def regex_part(self) -> str:
+        return self.name + r':("([^"]*)"*)'
+
+    def matched(self, match: str) -> str:
+        self.prev = match
+        return self.prev
+
+    def skipped(self) -> str:
+        assert self.prev is not None
+        return self.prev
+
+    def reset(self) -> None:
+        self.prev = None
 
 
-def decompress_json_path(prevpath: Val, path: str, level: int = 2):
-    path = from_json_fpath(path)
-    if level == 0:
-        return path.replace('/', '\\')
+class GitParamHashDecompressor(GitParamDecompressor):
+    name: str
+    prev: int | None
 
-    p0 = path[0]
-    if '0' <= p0 <= '9':
-        nmatch = int(p0)
-    elif 'A' <= p0 <= 'Z':
-        nmatch = ord(p0) - 65 + 10
-    else:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.prev = None
+
+    def regex_part(self) -> str:
+        return self.name + r':("([^"]*)"*)'
+
+    def matched(self, match: str) -> int:
+        self.prev = GitParamHashDecompressor._from_json_hash(match)
+        return self.prev
+
+    def skipped(self) -> int:
+        assert self.prev is not None
+        return self.prev
+
+    def reset(self) -> None:
+        self.prev = None
+
+    @staticmethod
+    def _from_json_hash(s: str) -> int:
+        ntopad = (3 - (len(s) % 3)) % 3
+        s += '=='[:ntopad]
+        b = base64.b64decode(s)
+        h = int.from_bytes(b, byteorder='little')
+        return h
+
+
+class GitParamPathDecompressor(GitParamDecompressor):
+    name: str
+    prev: list[str] | None
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.prev = None
+
+    def regex_part(self) -> str:
+        return self.name + r':("([^"]*)"*)'
+
+    def matched(self, match: str) -> str:
+        return self._decompress_json_path(match)
+
+    def skipped(self) -> None:
         assert False
-    out = ''
 
-    # print(prevpath)
-    # print(nmatch)
-    for i in range(nmatch):
-        if i > 0:
+    def reset(self) -> None:
+        self.prev = None
+
+    @staticmethod
+    def _from_json_fpath(fpath: str) -> str:
+        return urlparse.unquote(fpath)
+
+    def _decompress_json_path(self, path: str, level: int = 2) -> str:
+        path = GitParamPathDecompressor._from_json_fpath(path)
+        if level == 0:
+            return path.replace('/', '\\')
+
+        p0 = path[0]
+        if '0' <= p0 <= '9':
+            nmatch = int(p0)
+        elif 'A' <= p0 <= 'Z':
+            nmatch = ord(p0) - 65 + 10
+        else:
+            assert False
+        out = ''
+
+        # print(prevpath)
+        # print(nmatch)
+        for i in range(nmatch):
+            if i > 0:
+                out += '/'
+            out += self.prev[i]
+        if out != '':
             out += '/'
-        out += prevpath.val[i]
-    if out != '':
-        out += '/'
-    out += path[1:]
-    prevpath.val = out.split('/')
-    return out.replace('/', '\\')
-
-
-def int_json_param(name: str, prev: Val, new: int) -> str:
-    if prev.val == new:
-        return ''
-    prev.val = new
-    return ',' + name + ':' + str(new)
-
-
-def str_json_param(name: str, prev: Val, new: str) -> str:
-    if prev.val == new:
-        return ''
-    prev.val = new
-    return ',' + name + ':"' + new + '"'
-'''
+        out += path[1:]
+        self.prev = out.split('/')
+        return out.replace('/', '\\')
 
 
 ###  params
@@ -278,18 +327,22 @@ def _compressor(p: GitDataParam) -> GitParamCompressor:
             return GitParamIntCompressor(p.name, p.can_skip)
         case GitDataType.Str:
             return GitParamStrCompressor(p.name, p.can_skip)
+        case _:
+            assert False
 
 
 def _decompressor(p: GitDataParam) -> GitParamDecompressor:
     match p.typ:
-        # case GitDataType.Path:
-        #    return GitParamPathDecompressor(p.name)
-        # case GitDataType.Hash:
-        #    return GitParamHashDecompressor(p.name)
+        case GitDataType.Path:
+            return GitParamPathDecompressor(p.name)
+        case GitDataType.Hash:
+            return GitParamHashDecompressor(p.name)
         case GitDataType.Int:
             return GitParamIntDecompressor(p.name)
-        # case GitDataType.Str:
-        #    return GitParamStrDeompressor(p.name)
+        case GitDataType.Str:
+            return GitParamStrDecompressor(p.name)
+        case _:
+            assert False
 
 
 class GitDataHandler(ABC):
