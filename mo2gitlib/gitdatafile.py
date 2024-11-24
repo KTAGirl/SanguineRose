@@ -4,6 +4,7 @@
 #            hence JSON5 quote-less names, and path and elements "compression". It was seen to save 3.8x (2x for default pcompression=0), for a 50M file it is quite a bit
 
 import base64
+import re
 import urllib.parse as urlparse
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -159,7 +160,7 @@ class GitParamDecompressor(ABC):
         pass
 
     @abstractmethod
-    def matched(self, m: typing.Match, mi: Val) -> str | int:
+    def matched(self, _: str) -> str | int:
         pass
 
     @abstractmethod
@@ -177,9 +178,8 @@ class GitParamIntDecompressor(GitParamDecompressor):
     def regex_part(self) -> str:
         return self.name + r':([0-9]*)'
 
-    def matched(self, m: typing.Match, mi: Val) -> int:
-        self.prev = int(m.group(mi.val))
-        mi.val += 1
+    def matched(self, match: str) -> int:
+        self.prev = int(match)
         return self.prev
 
     def skipped(self) -> int:
@@ -284,12 +284,15 @@ def _decompressor(p: GitDataParam) -> GitParamDecompressor:
         #    return GitParamStrDeompressor(p.name)
 
 
-class GitDataHandler:
+class GitDataHandler(ABC):
     optional: list[GitDataParam]
 
     def __init__(self, optional: list[GitDataParam]) -> None:
         self.optional = optional
 
+    @abstractmethod
+    def decompress(self,param:list[str|int]):
+        pass
 
 class GitDataList:
     mandatory: list[GitDataParam]
@@ -379,7 +382,9 @@ class GitDataListReader:
     mandatory_decompressor: list[GitParamDecompressor]
     last_handler: GitDataHandler | None
     last_handler_decompressor: list[GitParamDecompressor]  # symmetric to writer
-    regexps: list[tuple[typing.Pattern, GitDataHandler, int]]  # pattern, handler, bit mask of fields
+    regexps: list[
+        tuple[re.Pattern, GitDataHandler, list[tuple[int, GitParamDecompressor]], list[
+            tuple[int, GitParamDecompressor]]]]  # decompressor lists are matched, skipped
 
     def __init__(self, df: GitDataList, rfile: typing.TextIO) -> None:
         self.df = df
@@ -393,65 +398,63 @@ class GitDataListReader:
             for i in range(len(h.optional)):
                 if h.optional[i].can_skip:
                     canskip.append(i)
-            res: list[tuple[typing.Pattern | None, GitDataHandler, int]] = [
-                (None, h, 1 << len(canskip) - 1)
+            res: list[int] = [
+                1 << len(canskip) - 1  # mask
             ]
 
             for i in range(len(canskip)):
                 # split each record in res in two
-                toadd = []
+                toadd: list[int] = []
                 for r in res:
-                    assert r[0] is None
                     mask = 1 << i
                     # one record is actually existing, with bit in mask == 1
-                    assert (r[2] & mask) == mask
+                    assert (r & mask) == mask
                     # another is the same, with bit in mask set to 0
-                    r2 = (None, r[1], r[2] - mask)
+                    r2 = r[2] - mask
                     toadd.append(r2)
                 res += toadd
 
             # got res, can fill final one
             assert len(res) == 2 ** len(canskip)
-            res2 = []
             for r in res:
-                rex = ''
-                oldmask = r[2]
+                mask = r[2]
+                assert 0 <= mask < 2 ** len(canskip)
                 skip = False
+                rex = ''
+                dmatched: list[tuple[int, GitParamDecompressor]] = []
+                dskipped: list[tuple[int, GitParamDecompressor]] = []
                 for i in range(len(h.optional)):
                     if i in canskip:
                         idx = canskip.index(i)
-                        if oldmask & (1 << idx):
+                        if mask & (1 << idx):
                             skip = True
 
-                    if not skip:
-                        p = h.optional[i]
-                        rex += _decompressor(p).regex_part()
-                        # TODO !!!
+                    p = h.optional[i]
+                    d = _decompressor(p)
+                    if skip:
+                        dskipped.append((i,d))
+                    else:
+                        dmatched.append((i,d))
+                        rex += d.regex_part()
 
-    def write_line(self, handler: GitDataHandler, values: tuple[int | str | None, ...]) -> None:
-        assert len(values) == len(self.df.mandatory) + len(handler.optional)
-        if self.line_num > 0:
-            ln = ',\n{'
-        else:
-            ln = '{'
-        self.line_num += 1
-        assert len(self.mandatory_compressor) == len(self.df.mandatory)
-        for i in range(len(self.df.mandatory)):
-            if i > 0:
-                ln += ','
-            ln += self.mandatory_compressor[i].compress(values[i])
+                rexc: re.Pattern = re.compile(rex)
+                assert len(dmatched) + len(dskipped) == len(h.optional)
+                self.regexps.append((rexc, h, dmatched, dskipped))
 
-        shift = len(self.df.mandatory)
-        if handler == self.last_handler:
-            for i in range(len(handler.optional)):
-                ln += self.last_handler_compressor[i].compress(values[shift + i])
-        else:
-            self.last_handler = handler
-            self.last_handler_compressor = [_compressor(opt) for opt in handler.optional]
+    def parse_line(self, ln) -> bool:
+        for rex in self.regexps:
+            m = rex[0].match(ln)
+            if m:
+                assert len(rex[2]) + len(rex[3]) == len(rex[1].optional)
+                param:list[str|int|None] = [None] * len(rex[1].optional)
+                i = 1
+                for matched in rex[2]:
+                    param[matched[0]] = matched[1].matched(m.group(i))
+                    i += 1
+                for skipped in rex[3]:
+                    param[skipped[0]] = skipped[1].skipped()
 
-        ln += '}'
-        self.wfile.write(ln)
+                rex[1].decompress(param)
+                return True
 
-    def write_end(self) -> None:
-        if self.line_num > 0:
-            self.wfile.write('\n')
+        return False
