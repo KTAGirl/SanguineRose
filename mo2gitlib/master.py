@@ -53,36 +53,103 @@ class MasterFileItem:
             return False
         return True
 
-class ArchiveHandler(GitDataHandler):
-    def __init__(self) -> None:
-        super().__init__([])
 
-    @abstractmethod
-    def decompress(self,param:tuple[str|int,...]): # still abstract
-        pass
-
-class ArchiveReadHandler(ArchiveHandler):
+class ArchiveReadHandler(GitDataHandler):
     archives: list[MasterArchiveItem]
+    optional: list[GitDataParam] = []
 
     def __init__(self, archives: list[MasterArchiveItem]) -> None:
-        super().__init__()
+        super().__init__(self.optional)
         self.archives = archives
 
-    def decompress(self,param:tuple[str,int]) -> None:
-        (p,h) = param
+    def decompress(self, param: tuple[str, int]) -> None:
+        (p, h) = param
         assert h >= 0
-        self.archives.append(MasterArchiveItem(p,h))
+        self.archives.append(MasterArchiveItem(p, h))
+
+
+class FilesDataHandlerS0(GitDataHandler):
+    files: list[MasterFileItem]
+    optional: list[GitDataParam] = [
+        GitDataParam('s', GitDataType.Int, False)
+    ]
+
+    def __init__(self, files: list[MasterFileItem]) -> None:
+        super().__init__(self.optional)
+        self.files = files
+
+    def decompress(self, param: tuple[str, None, int]) -> None:
+        (p, h, s) = param
+        assert s == 0
+        assert h is None
+        self.files.append(MasterFileItem(p, file_hash=ZEROHASH, file_size=0))
+
+
+class FilesDataHandlerA(GitDataHandler):
+    files: list[MasterFileItem]
+    optional: list[GitDataParam] = [
+        GitDataParam('i', GitDataType.Path, False),
+        GitDataParam('i2', GitDataType.Path),
+        GitDataParam('a', GitDataType.Hash),
+        GitDataParam('s', GitDataType.Int, False)  # to avoid too many regexps
+    ]
+
+    def __init__(self, files: list[MasterFileItem]) -> None:
+        super().__init__(self.optional)
+        self.files = files
+
+    def decompress(self, param: tuple[str, int, str, str | None, int, int]) -> None:
+        (p, h, i, i2, a, s) = param
+        assert s == 0
+        inpath = [i]
+        if i2 is not None:
+            inpath.append(i2)
+        self.files.append(MasterFileItem(p, file_hash=h, file_size=s, archive_hash=a, intra_path=inpath))
+
+
+class FilesDataHandlerG(GitDataHandler):
+    files: list[MasterFileItem]
+    optional: list[GitDataParam] = [
+        GitDataParam('g', GitDataType.Path, False),
+    ]
+
+    def __init__(self, files: list[MasterFileItem]) -> None:
+        super().__init__(self.optional)
+        self.files = files
+
+    def decompress(self, param: tuple[str, int, str]) -> None:
+        (p, h, g) = param
+        self.files.append(MasterFileItem(p, file_hash=h, gitpath=g))
+
+
+class FilesDataHandlerWarning(GitDataHandler):
+    files: list[MasterFileItem]
+    optional: list[GitDataParam] = [
+        GitDataParam('warning', GitDataType.Str, False),
+    ]
+
+    def __init__(self, files: list[MasterFileItem]) -> None:
+        super().__init__(self.optional)
+        self.files = files
+
+    def decompress(self, param: tuple[str, int, str]) -> None:
+        (p, h, warning) = param
+        self.files.append(MasterFileItem(p, file_hash=h, warning=warning))
 
 
 class Master:
     archives: list[MasterArchiveItem]
     files: list[MasterFileItem]
 
-    _a_mandatory:list[GitDataParam] = [
+    _a_mandatory: list[GitDataParam] = [
         GitDataParam('n', GitDataType.Path, False),
         GitDataParam('h', GitDataType.Hash)
     ]
-    _a_gitlist: GitDataList(_a_mandatory, [ArchiveHandler()])
+
+    _f_mandatory: list[GitDataParam] = [
+        GitDataParam('p', GitDataType.Path, False),
+        GitDataParam('h', GitDataType.Hash)
+    ]
 
     def __init__(self) -> None:
         self.archives = []
@@ -154,41 +221,27 @@ class Master:
         wfile.write('{ config: { pcompression: ' + str(level) + ' },\n')
         wfile.write('  archives: [ // Legend: n means "name", h means "hash"\n')
 
-        df = GitDataList(self._a_mandatory, [ArchiveHandler()])
+        ahandler = GitDataHandler(ArchiveReadHandler.optional)
+        df = GitDataList(self._a_mandatory, [ahandler])
         writera = GitDataListWriter(df, wfile)
         writera.write_begin()
         for ar in self.archives:
-            writera.write_line(ArchiveHandler(), (ar.name, ar.item_hash))
+            writera.write_line(ahandler, (ar.name, ar.item_hash))
         writera.write_end()
         wfile.write('\n], files: [ // Legend: p means "path", h means "hash", s means "size", f means "from",')
         wfile.write('\n            //         a means "archive_hash", i means "intra_path"\n')
 
-        mandatory = [
-            GitDataParam('p', GitDataType.Path, False),
-            GitDataParam('h', GitDataType.Hash)
-        ]
-        handler_s0 = GitDataHandler([
-            GitDataParam('s', GitDataType.Int, False)
-        ])
-        handler_a = GitDataHandler([
-            GitDataParam('i', GitDataType.Path, False),
-            GitDataParam('i2', GitDataType.Path),
-            GitDataParam('a', GitDataType.Hash),
-            GitDataParam('s', GitDataType.Int, False)  # to avoid too many regexps
-        ])
-        handler_g = GitDataHandler([
-            GitDataParam('g', GitDataType.Path, False),
-        ])
-        handler_warning = GitDataHandler([
-            GitDataParam('warning', GitDataType.Str, False),
-        ])
+        handler_s0 = GitDataHandler(FilesDataHandlerS0.optional)
+        handler_a = GitDataHandler(FilesDataHandlerA.optional)
+        handler_g = GitDataHandler(FilesDataHandlerG.optional)
+        handler_warning = GitDataHandler(FilesDataHandlerWarning.optional)
         handlers = [
             handler_s0,
             handler_a,
             handler_g,
             handler_warning
         ]
-        df = GitDataList(mandatory, handlers)
+        df = GitDataList(self._f_mandatory, handlers)
         writer = GitDataListWriter(df, wfile)
         writer.write_begin()
         for fi in self.files:
@@ -215,11 +268,13 @@ class Master:
         assert len(self.archives) == 0
         assert len(self.files) == 0
 
+        lineno = 0
         # skipping header
         archivestart = re.compile(r'^\s*archives\s*:\s*\[\s*//')
-        rdh = GitHeaderReader()
+        rdh = GitHeaderFooterReader()
         while True:
             ln = rfile.readline()
+            lineno += 1
             assert ln
             processed = rdh.parse_line(ln)
             if processed:
@@ -227,11 +282,13 @@ class Master:
             if archivestart.search(ln):
                 break
 
+        # reading archives: [ ...
         filesstart = re.compile(r'^\s*]\s*,\s*files\s*:\s\[\s*//')
-        df = GitDataList(self._a_mandatory, [ArchiveReadHandler(self.archives)])
-        rda = GitDataListReader(df)
+        da = GitDataList(self._a_mandatory, [ArchiveReadHandler(self.archives)])
+        rda = GitDataListReader(da)
         while True:
             ln = rfile.readline()
+            lineno += 1
             assert ln
             processed = rda.parse_line(ln)
             if processed:
@@ -239,7 +296,38 @@ class Master:
             if filesstart.search(ln):
                 break
 
-        
+        # reading files: [ ...
+        filesend = re.compile(r'^\s*]\s*}')
+        handler_s0 = FilesDataHandlerS0(self.files)
+        handler_a = FilesDataHandlerA(self.files)
+        handler_g = FilesDataHandlerG(self.files)
+        handler_warning = FilesDataHandlerWarning(self.files)
+        handlers = [
+            handler_s0,
+            handler_a,
+            handler_g,
+            handler_warning
+        ]
+        df = GitDataList(self._f_mandatory, handlers)
+        rdf = GitDataListReader(df)
+        while True:
+            ln = rfile.readline()
+            lineno += 1
+            assert ln
+            processed = rdf.parse_line(ln)
+            if processed:
+                continue
+            if filesend.search(ln):
+                break
 
-
-        # TODO! use GitDataListReader
+        rdh = GitHeaderFooterReader()
+        while True:
+            ln = rfile.readline()
+            lineno += 1
+            if not ln:
+                return
+            processed = rdh.parse_line(ln)
+            if processed:
+                continue
+            critical('Unrecognized line #' + str(lineno) + ':' + ln)
+            abort_if_not(False)  # unknown pattern

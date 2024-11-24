@@ -299,7 +299,7 @@ class GitDataHandler(ABC):
         self.optional = optional
 
     @abstractmethod
-    def decompress(self,param:tuple[str|int,...]) -> None:
+    def decompress(self, param: tuple[str | int, ...]) -> None:
         pass
 
 
@@ -385,16 +385,17 @@ class GitDataListWriter:
 
 ### reading
 
-class GitHeaderReader:
+class GitHeaderFooterReader:
     comment_only_line: re.Pattern
 
     def __init__(self) -> None:
         self.comment_only_line = re.compile(r'^\s*//')
 
-    def parse_line(self,ln:str) -> bool:
+    def parse_line(self, ln: str) -> bool:
         if self.comment_only_line.search(ln):
             return True
         return False
+
 
 class GitDataListReader:
     df: GitDataList
@@ -417,7 +418,7 @@ class GitDataListReader:
                 if h.optional[i].can_skip:
                     canskip.append(i)
 
-            for mask in range(2 ** len(canskip)): #scanning all pf them to get all 2**n possible bit mask patterns
+            for mask in range(2 ** len(canskip)):  # scanning all pf them to get all 2**n possible bit mask patterns
                 skip = False
                 rex = ''
                 dmatched: list[tuple[int, GitParamDecompressor]] = []
@@ -431,33 +432,33 @@ class GitDataListReader:
                     p = h.optional[i]
                     d = _decompressor(p)
                     if skip:
-                        dskipped.append((i,d))
+                        dskipped.append((i, d))
                     else:
-                        dmatched.append((i,d))
+                        dmatched.append((i, d))
                         rex += d.regex_part()
 
                 rexc: re.Pattern = re.compile(rex)
                 assert len(dmatched) + len(dskipped) == len(h.optional)
                 self.regexps.append((rexc, h, dmatched, dskipped))
 
-    def parse_line(self, ln) -> bool: # returns False if didn't handle lm
+    def parse_line(self, ln) -> bool:  # returns False if didn't handle lm
         if self.comment_only_line.search(ln):
             return True
         for rex in self.regexps:
-            (pattern,h,dmatched,dskipped) = rex
+            (pattern, h, dmatched, dskipped) = rex
             m = pattern.match(ln)
             if m:
                 assert len(dmatched) + len(dskipped) == len(h.optional)
-                param:list[str|int|None] = [None] * len(h.optional)
+                param: list[str | int | None] = [None] * len(h.optional)
                 i = 1
-                if h != self.last_handler: #duplicating a bit of code to move comparison out of the loop and speed things up a bit
+                if h != self.last_handler:  # duplicating a bit of code to move comparison out of the loop and speed things up a bit
                     for matched in dmatched:
-                        d:GitParamDecompressor = matched[1]
+                        d: GitParamDecompressor = matched[1]
                         d.reset()
                         param[matched[0]] = d.matched(m.group(i))
                         i += 1
                     for skipped in dskipped:
-                        d:GitParamDecompressor = skipped[1]
+                        d: GitParamDecompressor = skipped[1]
                         d.reset()
                         param[skipped[0]] = d.skipped()
                     self.last_handler = h
