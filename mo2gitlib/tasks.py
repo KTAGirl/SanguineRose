@@ -324,7 +324,7 @@ class Parallel:
     done_task_nodes: dict[str, tuple[_TaskGraphNode, any]]  # name->(node,out)
     pending_patterns: list[tuple[str, _TaskGraphNode]]  # pattern, node
 
-    def __init__(self, jsonfname: str, nproc: int = 0) -> None:
+    def __init__(self, jsonfname: str|None, nproc: int = 0) -> None:
         assert nproc >= 0
         if nproc:
             self.nprocesses = nproc

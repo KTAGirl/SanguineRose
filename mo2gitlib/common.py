@@ -8,7 +8,7 @@ import pickle
 # noinspection PyUnresolvedReferences
 from collections.abc import Callable, Generator, Iterable
 # noinspection PyUnresolvedReferences
-from types import TracebackType as _TracebackType
+from types import TracebackType
 
 
 Type = typing.Type

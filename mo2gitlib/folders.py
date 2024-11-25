@@ -164,7 +164,7 @@ class Folders:
 
     def all_git_own_mod_dirs(self) -> Generator[str]:
         for ownmod in self.own_mod_names:
-            out = self.github_dir + '\\mo2\mods' + ownmod
+            out = self.github_dir + '\\mo2\\mods' + ownmod
             assert Folders.is_normalized_dir_path(out)
             yield out
 

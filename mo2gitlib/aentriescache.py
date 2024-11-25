@@ -264,3 +264,13 @@ class ArchiveEntriesCache:
         assert h >= 0
         out = self.filtered_archive_entries.get(h)
         return out if out is not None else self.filtered_wj_archive_entries.get(h)
+
+if __name__ == '__main__':
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == 'test':
+        acache = ArchiveEntriesCache('..\\..\\mo2git.cache\\',
+                                     '..\\..\\mo2git.tmp\\', {})
+        tparallel = tasks.Parallel(None)
+        acache.start_tasks(tparallel,[],'')
+
+        tparallel.run([])
