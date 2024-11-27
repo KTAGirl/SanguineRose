@@ -479,7 +479,7 @@ class Parallel:
         while True:
             out = self._run_own_task(
                 owntaskstats)  # ATTENTION: own tasks may call add_task() or add_tasks() within
-            debug('Parallel: rotir: '+str(out))
+            #debug('Parallel: rotir: '+str(out))
             (wereadded, towntasks) = out
             town += towntasks
             if not wereadded:
@@ -561,6 +561,9 @@ class Parallel:
             self.done_task_nodes[taskname] = (node, out)
             assert self.processesload[procnum] > 0
             self.processesload[procnum] -= 1
+
+            if self.all_done():
+                break
 
         maintelapsed = time.perf_counter() - maintstarted
         info(_str_time() + 'Parallel: main thread: waited+owntasks+scheduler+unaccounted=elapsed '
