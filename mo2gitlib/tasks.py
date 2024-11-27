@@ -1,7 +1,8 @@
 # mini-micro <s>skirt</s>, sorry, lib for data-driven parallel processing
 
-import pickle
 import time
+# noinspection PyUnresolvedReferences
+import pickle
 from enum import Enum
 from multiprocessing import Process, Queue as PQueue, shared_memory
 
@@ -311,7 +312,6 @@ class Parallel:
     json_weights: dict[str, float]
     updated_json_weights: dict[str, float]
 
-    is_running: bool
     shutting_down: bool
     has_joined: bool
 
@@ -324,7 +324,7 @@ class Parallel:
     done_task_nodes: dict[str, tuple[_TaskGraphNode, any]]  # name->(node,out)
     pending_patterns: list[tuple[str, _TaskGraphNode]]  # pattern, node
 
-    def __init__(self, jsonfname: str|None, nproc: int = 0) -> None:
+    def __init__(self, jsonfname: str | None, nproc: int = 0) -> None:
         assert nproc >= 0
         if nproc:
             self.nprocesses = nproc
@@ -344,7 +344,6 @@ class Parallel:
                     'WARNING: error loading JSON weights ' + jsonfname + ': ' + str(e) + '. Will continue w/o weights')
                 self.json_weights = {}  # just in case
 
-        self.is_running = False
         self.shutting_down = False
         self.has_joined = False
 
@@ -455,7 +454,6 @@ class Parallel:
                 abort_if_not(False)
 
     def run(self, tasks: list[Task]) -> None:
-        self.is_running = True
         # building task graph
         self._internal_add_tasks(tasks)
 
@@ -539,7 +537,6 @@ class Parallel:
         info("Parallel: breakdown per task type (task name before '.'):")
         for key, val in owntaskstats.items():
             info('  ' + key + ': ' + str(val[0]) + ', took ' + _str_dt(val[1]) + '/' + _str_dt(val[2]) + 's')
-        self.is_running = False
 
     def _schedule_best_tasks(self) -> bool:  # may schedule multiple tasks as one meta-task
         pidx = self._find_best_process()
@@ -652,14 +649,13 @@ class Parallel:
             return (2, towntasks) if allrunningordone else (1, towntasks)
         return 3, towntasks
 
-    def add_late_task(self, task: Task) -> None:  # to be called from owntask.f()
-        assert self.is_running
+    def add_task(self, task: Task) -> None:  # to be called from owntask.f()
         assert task.name not in self.all_task_nodes
         added = self._internal_add_task_if(task)
         assert added  # failure to add is ok only during original building of the tree
         # print(_printTime()+'Parallel: late task '+task.name+' added')
 
-    def add_late_tasks(self, tasks: list[Task]) -> None:
+    def add_tasks(self, tasks: list[Task]) -> None:
         self._internal_add_tasks(tasks)
 
     def _find_best_process(self) -> int:

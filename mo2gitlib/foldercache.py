@@ -238,7 +238,7 @@ def _scan_folder_own_task_func(out: tuple[list[str], _FolderScanStats, _FolderSc
         howntask = tasks.OwnTask(howntaskname,
                                  lambda _, o: _own_calc_hash_task_func(o, foldercache, scannedfiles),
                                  None, [htaskname], 0.001)  # expected to take negligible time
-        parallel.add_late_tasks([htask, howntask])
+        parallel.add_tasks([htask, howntask])
 
     # new tasks
     for fpath in sdout.requested_dirs:
@@ -252,7 +252,7 @@ def _scan_folder_own_task_func(out: tuple[list[str], _FolderScanStats, _FolderSc
         owntask = tasks.OwnTask(owntaskname,
                                 lambda _, o: _scan_folder_own_task_func(o, foldercache, parallel, scannedfiles, stats),
                                 None, [taskname], 0.01)  # should not take too long
-        parallel.add_late_tasks([task, owntask])
+        parallel.add_tasks([task, owntask])
 
 
 def _own_reconcile_task_func(foldercache: "FolderCache", parallel: tasks.Parallel,
@@ -278,7 +278,7 @@ def _own_reconcile_task_func(foldercache: "FolderCache", parallel: tasks.Paralle
                           (foldercache.cache_dir, foldercache.name, foldercache.files_by_path,
                            foldercache.filtered_files, foldercache.all_scan_stats),
                           [])
-    parallel.add_late_task(
+    parallel.add_task(
         savetask)  # we won't explicitly wait for savetask, it will be waited for in Parallel.__exit__
 
 
@@ -423,20 +423,20 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
         loadtaskname = 'mo2git.foldercache.load.' + self.name
         loadtask = tasks.Task(loadtaskname, _load_files_task_func, (self.cache_dir, self.name), [])
-        parallel.add_late_task(loadtask)
+        parallel.add_task(loadtask)
 
         loadowntaskname = 'mo2git.foldercache.loadown.' + self.name
         loadowntask = tasks.OwnTask(loadowntaskname, lambda _, out: _load_files_own_task_func(out, self, parallel),
                                     None,
                                     [loadtaskname])
-        parallel.add_late_task(loadowntask)
+        parallel.add_task(loadowntask)
 
         underlyingowntaskname = 'mo2git.foldercache.underlyingown.' + self.name
         underlyingowntask = tasks.OwnTask(underlyingowntaskname, lambda _, _1: _underlying_own_task_func(self, parallel,
                                                                                                          underlyingfilesbypath_generator),
                                           None,
                                           [task_name_enabling_underlyingfilesbypath_generator])
-        parallel.add_late_task(underlyingowntask)
+        parallel.add_task(underlyingowntask)
 
         for tt in allscantasks:
             (root, path, nf, exdirs) = tt
@@ -452,14 +452,14 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                                     lambda _, out: _scan_folder_own_task_func(out, self, parallel, scannedfiles, stats),
                                     None, [taskname])
 
-            parallel.add_late_tasks([task, owntask])
+            parallel.add_tasks([task, owntask])
 
         scanningdeps = [_scanned_own_task_name(self.name, folderplus[0]) + '*' for folderplus in self.folder_list]
         hashingdeps = [_hashing_own_task_name(self.name, folderplus[0]) + '*' for folderplus in self.folder_list]
         reconciletask = tasks.OwnTask(_reconcile_own_task_name(self.name),
                                       lambda _, _1: _own_reconcile_task_func(self, parallel, scannedfiles),
                                       None, scanningdeps + hashingdeps)
-        parallel.add_late_task(reconciletask)
+        parallel.add_task(reconciletask)
 
     def ready_task_name(self) -> str:
         return _reconcile_own_task_name(self.name)

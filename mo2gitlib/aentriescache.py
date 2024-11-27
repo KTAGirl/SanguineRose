@@ -194,13 +194,13 @@ def _own_filter_task_func(aecache: "ArchiveEntriesCache", parallel: tasks.Parall
             hashingowntask = tasks.OwnTask(hashingowntaskname,
                                            lambda _, out: _archive_hashing_own_task_func(out, aecache), None,
                                            [hashingtaskname], 0.001)  # should take negligible time
-            parallel.add_late_tasks([hashingtask, hashingowntask])
+            parallel.add_tasks([hashingtask, hashingowntask])
 
     savetaskname = 'mo2git.aentriescache.save'
     savetask = tasks.Task(savetaskname, _save_aentries_task_func,
                           (aecache.cache_dir, aecache.archive_entries, aecache.filtered_archive_entries),
                           [])
-    parallel.add_late_task(
+    parallel.add_task(
         savetask)  # we won't explicitly wait for savetask, it will be waited for in Parallel.__exit__
 
 
@@ -235,17 +235,17 @@ class ArchiveEntriesCache:
         loadtaskname = 'mo2gitlib.aentriescache.load'
         loadtask = tasks.Task(loadtaskname, _load_aentries_task_func,
                               (self.cache_dir,), [])
-        parallel.add_late_task(loadtask)
+        parallel.add_task(loadtask)
         loadowntaskname = 'mo2gitlib.aentriescache.loadown'
         loadowntask = tasks.OwnTask(loadowntaskname,
                                     lambda _, out, _1: _load_aentries_own_task_func(out, self, all_used_archives), None,
                                     [loadtaskname, task_name_enabling_all_used_archives])
-        parallel.add_late_task(loadowntask)
+        parallel.add_task(loadowntask)
 
         loadvfstaskname = 'mo2gitlib.aentriescache.loadvfs'
         vfstask = tasks.Task(loadvfstaskname, _load_vfs_task_func,
                              (self.cache_dir, self.cache_data), [])
-        parallel.add_late_task(vfstask)
+        parallel.add_task(vfstask)
 
         ownfiltertask = tasks.OwnTask('mo2gitlib.aentriescache.ownfilter',
                                       lambda _, fromloadvfs, _2, _3: _own_filter_task_func(self, parallel,
@@ -253,7 +253,7 @@ class ArchiveEntriesCache:
                                                                                            fromloadvfs),
                                       None,
                                       [loadvfstaskname, task_name_enabling_all_used_archives, loadowntaskname])
-        parallel.add_late_task(ownfiltertask)
+        parallel.add_task(ownfiltertask)
 
     def find_entry_by_hash(self, h: int):
         assert h >= 0
@@ -273,4 +273,4 @@ if __name__ == '__main__':
         tparallel = tasks.Parallel(None)
         acache.start_tasks(tparallel,[],'')
 
-        tparallel.run([])
+        tparallel.run([]) #all necessary tasks were already added in acache.start_tasks()

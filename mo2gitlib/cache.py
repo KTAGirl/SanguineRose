@@ -75,7 +75,7 @@ class Cache:
         owntaskhc2self = tasks.OwnTask(ownhctaskname,
                                        lambda _, out: _own_hc2self_task_func(self, out),
                                        None, [hctaskname])
-        parallel.add_late_tasks([hctask, owntaskhc2self])
+        parallel.add_tasks([hctask, owntaskhc2self])
 
         self.downloads.start_tasks(parallel, iter(self.underlying_files), ownhctaskname)
         self.mo2.start_tasks(parallel, iter(self.underlying_files), ownhctaskname)
@@ -85,4 +85,4 @@ class Cache:
         owndlsready = tasks.OwnTask(owndlsreadytaskname,
                                     lambda _, _1: _own_downloads_ready_task_func(self),
                                     None, [self.downloads.ready_task_name()])
-        parallel.add_late_task(owndlsready)
+        parallel.add_task(owndlsready)
