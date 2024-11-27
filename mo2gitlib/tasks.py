@@ -1,8 +1,8 @@
 # mini-micro <s>skirt</s>, sorry, lib for data-driven parallel processing
 
-import time
 # noinspection PyUnresolvedReferences
 import pickle
+import time
 from enum import IntEnum
 from multiprocessing import Process, Queue as PQueue, shared_memory
 
@@ -270,13 +270,9 @@ class _TaskGraphNode:
         self.explicit_weight = explicit_weight
         self.state = _TaskGraphNodeState.Pending
         self.waiting_for_n_deps = 0
-        for parent in self.parents:
-            parent._append_leaf(self)
-            if int(parent.state) < int(_TaskGraphNodeState.Done):
-                self.waiting_for_n_deps += 1
 
-    def is_done(self, ready: dict[str, tuple["_TaskGraphNode", float]],
-                ready_own: dict[str, tuple["_TaskGraphNode", float]]) -> None:
+    def mark_as_done_and_handle_children(self, ready: dict[str, tuple["_TaskGraphNode", float]],
+                                         ready_own: dict[str, tuple["_TaskGraphNode", float]]) -> None:
         assert self.state == _TaskGraphNodeState.Ready or self.state == _TaskGraphNodeState.Running
         self.state = _TaskGraphNodeState.Done
         for ch in self.children:
@@ -292,7 +288,7 @@ class _TaskGraphNode:
                 else:
                     ready[ch.task.name] = (ch, ch.total_weight())
 
-    def _append_leaf(self, leaf: "_TaskGraphNode") -> None:
+    def append_leaf(self, leaf: "_TaskGraphNode") -> None:
         self.children.append(leaf)
         self._adjust_leaf_weight(leaf.own_weight)
 
@@ -413,8 +409,13 @@ class Parallel:
             w = self.estimated_time(task.name, w)
         node = _TaskGraphNode(task, taskparents, w, explicitw)
         self.all_task_nodes[task.name] = node
-        assert node.state == _TaskGraphNodeState.Pending
-        self.pending_task_nodes[task.name] = node
+
+        assert node.waiting_for_n_deps == 0
+        for parent in node.parents:
+            parent.append_leaf(node)
+            if int(parent.state) < int(_TaskGraphNodeState.Done):
+                node.waiting_for_n_deps += 1
+
         for p in patterns:
             for n in self.all_task_nodes.values():
                 if n.state < _TaskGraphNodeState.Done and n.task.name.startswith(p):
@@ -423,6 +424,21 @@ class Parallel:
             node.parents.append(p)
             self.pending_patterns.append((p, node))
 
+        for parent in node.parents:  # node. parents is same as taskparents at this point
+            if int(parent.state) < int(_TaskGraphNodeState.Done):
+                node.waiting_for_n_deps += 1
+
+        assert node.state == _TaskGraphNodeState.Pending
+        if node.waiting_for_n_deps == 0:
+            node.state = _TaskGraphNodeState.Ready
+            if isinstance(node.task, OwnTask):
+                self.ready_own_task_nodes[task.name] = (node, node.total_weight())
+            else:
+                self.ready_task_nodes[task.name] = (node, node.total_weight())
+        else:
+            self.pending_task_nodes[task.name] = node
+
+        # processing other dependencies on this task's patterns
         for pp in self.pending_patterns:
             (p, n) = pp
             if task.name.startswith(p):
@@ -465,6 +481,16 @@ class Parallel:
         maintown = 0.
         maintschedule = 0.
         owntaskstats: dict[str, tuple[int, float, float]] = {}
+
+        # we need to try running own tasks before main loop - otherwise we can get stuck in an endless loop of self._schedule_best_tasks()
+        while True:
+            (overallstatus, towntasks) = self._run_own_tasks(
+                owntaskstats)  # ATTENTION: own tasks may call add_task() or add_tasks() within
+            maintown += towntasks
+            if overallstatus == 3:
+                break  # while True
+
+        # main loop
         while True:
             # place items in process queues, until each has 2 tasks, or until there are no tasks
             sch0 = time.perf_counter()
@@ -473,13 +499,13 @@ class Parallel:
             maintschedule += (time.perf_counter() - sch0)
 
             (overallstatus, towntasks) = self._run_own_tasks(
-                owntaskstats)  # ATTENTION: own tasks may call add_late_task() or add_late_tasks() within
+                owntaskstats)  # ATTENTION: own tasks may call add_task() or add_tasks() within
             maintown += towntasks
             if overallstatus == 3:
                 break  # while True
 
             sch0 = time.perf_counter()
-            while self._schedule_best_tasks():  # late tasks may have been added, need to check again
+            while self._schedule_best_tasks():  # tasks may have been added by _run_own_tasks(), need to check again
                 pass
             maintschedule += (time.perf_counter() - sch0)
 
@@ -524,7 +550,7 @@ class Parallel:
             self._update_weight(taskname, taskt)
             del self.running_task_nodes[taskname]
             assert taskname not in self.done_task_nodes
-            node.is_done(self.ready_task_nodes, self.ready_own_task_nodes)
+            node.mark_as_done_and_handle_children(self.ready_task_nodes, self.ready_own_task_nodes)
             self.done_task_nodes[taskname] = (node, out)
             assert self.processesload[procnum] > 0
             self.processesload[procnum] -= 1
@@ -547,7 +573,8 @@ class Parallel:
         total_time = 0.
         tasksstr = '['
         t0 = time.perf_counter()
-        candidates = sorted(self.ready_task_nodes.values(), key=lambda tpl: -tpl[1])
+        candidates = sorted([tpl for tpl in self.ready_task_nodes.values() if not isinstance(tpl[0].task, OwnTask)],
+                            key=lambda tpl: -tpl[1])
         i = 0
         while i < len(candidates) and total_time < 0.1:  # heuristics: <0.1s is not worth jerking around
             node = candidates[i][0]
@@ -596,7 +623,7 @@ class Parallel:
         # returns overall status: 1: work to do, 2: all running, 3: all done
         towntasks = 0.
         while len(
-                self.ready_own_task_nodes) > 0:  # new tasks might have been added by add_late_task(s), so we need to loop
+                self.ready_own_task_nodes) > 0:  # new tasks might have been added by add_task(s), so we need to loop
             candidates = sorted(self.ready_own_task_nodes.values(), key=lambda tpl: -tpl[1])
             for c in candidates:
                 ot = c[0]
@@ -634,17 +661,19 @@ class Parallel:
                 assert ot.state == _TaskGraphNodeState.Ready
                 assert ot.task.name in self.ready_task_nodes
                 del self.ready_task_nodes[ot.task.name]
-                ot.is_done(self.ready_task_nodes, self.ready_own_task_nodes)
+                ot.mark_as_done_and_handle_children(self.ready_task_nodes, self.ready_own_task_nodes)
                 ot.state = _TaskGraphNodeState.Done
                 self.done_task_nodes[ot.task.name] = (ot, out)
 
-        # status calculation must run after own tasks, because they may call add_late_task(s)()
+        # status calculation must run after own tasks, because own tasks may call add_task(s)()
         allrunningordone = True
         alldone = True
         if len(self.pending_task_nodes) > 0:
             alldone = False
             allrunningordone = False
         if len(self.running_task_nodes) > 0:
+            alldone = False
+        if len(self.ready_own_task_nodes) > 0:
             alldone = False
         if not alldone:
             return (2, towntasks) if allrunningordone else (1, towntasks)
