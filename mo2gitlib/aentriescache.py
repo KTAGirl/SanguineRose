@@ -270,7 +270,11 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
         acache = ArchiveEntriesCache('..\\..\\mo2git.cache\\',
                                      '..\\..\\mo2git.tmp\\', {})
-        tparallel = tasks.Parallel(None)
-        acache.start_tasks(tparallel,[],'')
+        with tasks.Parallel(None) as tparallel:
+            dummyowntask = tasks.OwnTask('dummy.loadown',
+                                        lambda _, out, _1: _load_aentries_own_task_func(out, acache, []), None,
+                                        [])
+            tparallel.add_task(dummyowntask)
+            acache.start_tasks(tparallel,[],'dummy.loadown')
 
-        tparallel.run([]) #all necessary tasks were already added in acache.start_tasks()
+            tparallel.run([]) #all necessary tasks were already added in acache.start_tasks()

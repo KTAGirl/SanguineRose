@@ -3,7 +3,7 @@
 import time
 # noinspection PyUnresolvedReferences
 import pickle
-from enum import Enum
+from enum import IntEnum
 from multiprocessing import Process, Queue as PQueue, shared_memory
 
 from mo2gitlib.common import *
@@ -244,7 +244,7 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue) 
     debug('Process #' + str(proc_num + 1) + ': exiting')
 
 
-class _TaskGraphNodeState(Enum):
+class _TaskGraphNodeState(IntEnum):
     Pending = 0,
     Ready = 1,
     Running = 2,
@@ -272,7 +272,7 @@ class _TaskGraphNode:
         self.waiting_for_n_deps = 0
         for parent in self.parents:
             parent._append_leaf(self)
-            if parent.state < _TaskGraphNodeState.Done:
+            if int(parent.state) < int(_TaskGraphNodeState.Done):
                 self.waiting_for_n_deps += 1
 
     def is_done(self, ready: dict[str, tuple["_TaskGraphNode", float]],
@@ -352,6 +352,7 @@ class Parallel:
         self.all_task_nodes = {}
         self.pending_task_nodes = {}
         self.ready_task_nodes = {}
+        self.ready_own_task_nodes = {}
         self.running_task_nodes = {}  # name->(procnum,started,node)
         self.done_task_nodes = {}  # name->(node,out)
         self.pending_patterns = []
