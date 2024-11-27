@@ -268,11 +268,11 @@ class ArchiveEntriesCache:
 if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
-        acache = ArchiveEntriesCache('..\\..\\mo2git.cache\\',
-                                     '..\\..\\mo2git.tmp\\', {})
+        acache = ArchiveEntriesCache(Folders.normalize_dir_path('..\\..\\mo2git.cache\\'),
+                                     Folders.normalize_dir_path('..\\..\\mo2git.tmp\\'), {})
         with tasks.Parallel(None) as tparallel:
             dummyowntask = tasks.OwnTask('dummy.loadown',
-                                        lambda _, out, _1: _load_aentries_own_task_func(out, acache, []), None,
+                                        lambda _: _load_aentries_own_task_func(({},), acache, []), None,
                                         [])
             tparallel.add_task(dummyowntask)
             acache.start_tasks(tparallel,[],'dummy.loadown')

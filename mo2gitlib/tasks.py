@@ -137,18 +137,22 @@ class OwnTask(Task):
 def _run_task(task: Task, depparams: list[any]) -> any:
     ndep = len(depparams)
     assert ndep <= 3
-    match ndep:
-        case 0:
-            out = task.f(task.param)
-        case 1:
-            out = task.f(task.param, depparams[0])
-        case 2:
-            out = task.f(task.param, depparams[0], depparams[1])
-        case 3:
-            out = task.f(task.param, depparams[0], depparams[1], depparams[2])
-        case _:
-            assert False
-    return out
+    try:
+        match ndep:
+            case 0:
+                out = task.f(task.param)
+            case 1:
+                out = task.f(task.param, depparams[0])
+            case 2:
+                out = task.f(task.param, depparams[0], depparams[1])
+            case 3:
+                out = task.f(task.param, depparams[0], depparams[1], depparams[2])
+            case _:
+                assert False
+        return out
+    except Exception as e:
+        critical('Parallel: exception in task ' + task.name + ': ' + str(e))
+        critical(traceback.format_exc())
 
 
 type SharedReturnParam = tuple[str, int]
@@ -470,6 +474,18 @@ class Parallel:
                          + taskstr + '\n')
                 abort_if_not(False)
 
+    def _run_own_tasks_including_readditions(self, owntaskstats: dict[str, tuple[int, float, float]]) -> float:
+        town = 0.
+        while True:
+            out = self._run_own_task(
+                owntaskstats)  # ATTENTION: own tasks may call add_task() or add_tasks() within
+            debug('Parallel: rotir: '+str(out))
+            (wereadded, towntasks) = out
+            town += towntasks
+            if not wereadded:
+                break  # while True
+        return town
+
     def run(self, tasks: list[Task]) -> None:
         # building task graph
         self._internal_add_tasks(tasks)
@@ -483,12 +499,7 @@ class Parallel:
         owntaskstats: dict[str, tuple[int, float, float]] = {}
 
         # we need to try running own tasks before main loop - otherwise we can get stuck in an endless loop of self._schedule_best_tasks()
-        while True:
-            (overallstatus, towntasks) = self._run_own_tasks(
-                owntaskstats)  # ATTENTION: own tasks may call add_task() or add_tasks() within
-            maintown += towntasks
-            if overallstatus == 3:
-                break  # while True
+        maintown += self._run_own_tasks_including_readditions(owntaskstats)
 
         # main loop
         while True:
@@ -498,11 +509,7 @@ class Parallel:
                 pass
             maintschedule += (time.perf_counter() - sch0)
 
-            (overallstatus, towntasks) = self._run_own_tasks(
-                owntaskstats)  # ATTENTION: own tasks may call add_task() or add_tasks() within
-            maintown += towntasks
-            if overallstatus == 3:
-                break  # while True
+            maintown += self._run_own_tasks_including_readditions(owntaskstats)
 
             sch0 = time.perf_counter()
             while self._schedule_best_tasks():  # tasks may have been added by _run_own_tasks(), need to check again
@@ -619,65 +626,68 @@ class Parallel:
         else:
             self.inqueues[pidx].put((None, name))
 
-    def _run_own_tasks(self, owntaskstats: dict[str, tuple[int, float, float]]) -> tuple[int, float]:
-        # returns overall status: 1: work to do, 2: all running, 3: all done
-        towntasks = 0.
-        while len(
-                self.ready_own_task_nodes) > 0:  # new tasks might have been added by add_task(s), so we need to loop
-            candidates = sorted(self.ready_own_task_nodes.values(), key=lambda tpl: -tpl[1])
-            for c in candidates:
-                ot = c[0]
-                assert isinstance(ot.task, OwnTask)
-                # print('task: '+ot.task.name)
-                params = []
-                assert len(ot.parents) == len(ot.task.dependencies)
-                for p in ot.parents:
-                    if isinstance(p, _TaskGraphNode):
-                        param = self.done_task_nodes[p.task.name]
-                        params.append(param[1])
-                    else:
-                        assert isinstance(p, str)
+    def _run_own_task(self, owntaskstats: dict[str, tuple[int, float, float]]) -> tuple[bool, float]:
+        if len(self.ready_own_task_nodes) == 0:
+            return False, 0.
+        towntask = 0.
+        best = min(self.ready_own_task_nodes.values(), key=lambda tpl: -tpl[1])
 
-                assert len(params) <= len(ot.task.dependencies)
-                assert len(params) <= 3
+        ot = best[0]
+        assert isinstance(ot.task, OwnTask)
+        # print('task: '+ot.task.name)
+        params = []
+        assert len(ot.parents) == len(ot.task.dependencies)
+        for p in ot.parents:
+            if isinstance(p, _TaskGraphNode):
+                param = self.done_task_nodes[p.task.name]
+                params.append(param[1])
+            else:
+                assert isinstance(p, str)
 
-                info(_str_time() + 'Parallel: running own task ' + ot.task.name)
-                t0 = time.perf_counter()
-                tp0 = time.process_time()
-                # ATTENTION: ot.task.f(...) may call addLateTask() within
-                out = _run_task(ot.task, params)
-                elapsed = time.perf_counter() - t0
-                cpu = time.process_time() - tp0
-                info(_str_time() + 'Parallel: done own task ' + ot.task.name + ', cpu/elapsed=' + _str_dt(
-                    cpu) + '/' + _str_dt(elapsed) + 's')
-                towntasks += elapsed
+        assert len(params) <= len(ot.task.dependencies)
+        assert len(params) <= 3
 
-                keystr = ot.task.name.split('.')[0]
-                oldstat = owntaskstats.get(keystr, (0, 0., 0.))
-                owntaskstats[keystr] = (oldstat[0] + 1, oldstat[1] + cpu, oldstat[2] + elapsed)
+        info(_str_time() + 'Parallel: running own task ' + ot.task.name)
+        t0 = time.perf_counter()
+        tp0 = time.process_time()
 
-                self._update_weight(ot.task.name, elapsed)
+        nall = len(self.all_task_nodes)
+        # ATTENTION: ot.task.f(...) may call add_task() or add_task(s) within
+        out = _run_task(ot.task, params)
+        newnall = len(self.all_task_nodes)
+        assert newnall >= nall
+        wereadded = newnall > nall
 
-                assert ot.state == _TaskGraphNodeState.Ready
-                assert ot.task.name in self.ready_task_nodes
-                del self.ready_task_nodes[ot.task.name]
-                ot.mark_as_done_and_handle_children(self.ready_task_nodes, self.ready_own_task_nodes)
-                ot.state = _TaskGraphNodeState.Done
-                self.done_task_nodes[ot.task.name] = (ot, out)
+        elapsed = time.perf_counter() - t0
+        cpu = time.process_time() - tp0
+        info(_str_time() + 'Parallel: done own task ' + ot.task.name + ', cpu/elapsed=' + _str_dt(
+            cpu) + '/' + _str_dt(elapsed) + 's')
+        towntask += elapsed
 
+        keystr = ot.task.name.split('.')[0]
+        oldstat = owntaskstats.get(keystr, (0, 0., 0.))
+        owntaskstats[keystr] = (oldstat[0] + 1, oldstat[1] + cpu, oldstat[2] + elapsed)
+
+        self._update_weight(ot.task.name, elapsed)
+
+        assert ot.state == _TaskGraphNodeState.Ready
+        assert ot.task.name in self.ready_own_task_nodes
+        del self.ready_own_task_nodes[ot.task.name]
+        ot.mark_as_done_and_handle_children(self.ready_task_nodes, self.ready_own_task_nodes)
+        ot.state = _TaskGraphNodeState.Done
+        self.done_task_nodes[ot.task.name] = (ot, out)
+
+        return wereadded, towntask
+
+    def all_done(self) -> bool:
         # status calculation must run after own tasks, because own tasks may call add_task(s)()
-        allrunningordone = True
-        alldone = True
         if len(self.pending_task_nodes) > 0:
-            alldone = False
-            allrunningordone = False
+            return False
         if len(self.running_task_nodes) > 0:
-            alldone = False
+            return False
         if len(self.ready_own_task_nodes) > 0:
-            alldone = False
-        if not alldone:
-            return (2, towntasks) if allrunningordone else (1, towntasks)
-        return 3, towntasks
+            return False
+        return True
 
     def add_task(self, task: Task) -> None:  # to be called from owntask.f()
         assert task.name not in self.all_task_nodes

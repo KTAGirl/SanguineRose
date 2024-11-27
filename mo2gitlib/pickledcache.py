@@ -17,7 +17,7 @@ def pickled_cache(cachedir: str, cachedata: dict[str, any], prefix: str, origfil
     else:
         sameparams = True
 
-    samefiles = (len(readpaths) == len(origfiles))
+    samefiles = readpaths is not None and len(readpaths) == len(origfiles)
     if sameparams and samefiles:
         readpaths = sorted(readpaths)
         origfiles = sorted(origfiles)
