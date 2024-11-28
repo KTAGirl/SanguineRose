@@ -272,7 +272,7 @@ if __name__ == '__main__':
                                      Folders.normalize_dir_path('..\\..\\mo2git.tmp\\'), {})
         with tasks.Parallel(None) as tparallel:
             dummyowntask = tasks.OwnTask('dummy.loadown',
-                                        lambda _: _load_aentries_own_task_func(({},), acache, []), None,
+                                        lambda _: None, None,
                                         [])
             tparallel.add_task(dummyowntask)
             acache.start_tasks(tparallel,[],'dummy.loadown')
