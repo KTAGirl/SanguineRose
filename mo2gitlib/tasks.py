@@ -152,7 +152,7 @@ def _run_task(task: Task, depparams: list[any]) -> (Exception | None, any):
         return None, out
     except Exception as e:
         critical('Parallel: exception in task ' + task.name + ': ' + str(e))
-        critical(traceback.format_exc())
+        warn(traceback.format_exc())
         return e, None
 
 
@@ -247,7 +247,7 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue) 
             outq.put(ex)
     except Exception as e:
         critical('Process #' + str(proc_num + 1) + ': tasks internal exception: ' + str(e))
-        critical(traceback.format_exc())
+        warn(traceback.format_exc())
         outq.put(e)
     _pool_of_shared_returns.cleanup()
     debug('Process #' + str(proc_num + 1) + ': exiting')
@@ -280,7 +280,8 @@ class _TaskGraphNode:
         self.state = _TaskGraphNodeState.Pending
         self.waiting_for_n_deps = 0
 
-    def mark_as_done_and_handle_children(self, ready: dict[str, tuple["_TaskGraphNode", float]],
+    def mark_as_done_and_handle_children(self, pending: dict[str, "_TaskGraphNode"],
+                                         ready: dict[str, tuple["_TaskGraphNode", float]],
                                          ready_own: dict[str, tuple["_TaskGraphNode", float]]) -> None:
         assert self.state == _TaskGraphNodeState.Ready or self.state == _TaskGraphNodeState.Running
         self.state = _TaskGraphNodeState.Done
@@ -292,10 +293,16 @@ class _TaskGraphNode:
                 ch.state = _TaskGraphNodeState.Ready
                 assert ch.task.name not in ready
                 assert ch.task.name not in ready_own
+                assert ch.task.name in pending
+                debug('Parallel: task ' + ch.task.name + ' is ready')
+                del pending[ch.task.name]
                 if isinstance(ch.task, OwnTask):
                     ready_own[ch.task.name] = (ch, ch.total_weight())
                 else:
                     ready[ch.task.name] = (ch, ch.total_weight())
+            else:
+                debug('Parallel: task ' + ch.task.name + ' has ' + str(
+                    ch.waiting_for_n_deps) + ' remaining dependencies to become ready')
 
     def append_leaf(self, leaf: "_TaskGraphNode") -> None:
         self.children.append(leaf)
@@ -558,7 +565,8 @@ class Parallel:
             self._update_weight(taskname, taskt)
             del self.running_task_nodes[taskname]
             assert taskname not in self.done_task_nodes
-            node.mark_as_done_and_handle_children(self.ready_task_nodes, self.ready_own_task_nodes)
+            node.mark_as_done_and_handle_children(self.pending_task_nodes, self.ready_task_nodes,
+                                                  self.ready_own_task_nodes)
             self.done_task_nodes[taskname] = (node, out)
             assert self.processesload[procnum] > 0
             self.processesload[procnum] -= 1
@@ -679,21 +687,22 @@ class Parallel:
         assert ot.state == _TaskGraphNodeState.Ready
         assert ot.task.name in self.ready_own_task_nodes
         del self.ready_own_task_nodes[ot.task.name]
-        ot.mark_as_done_and_handle_children(self.ready_task_nodes, self.ready_own_task_nodes)
+        ot.mark_as_done_and_handle_children(self.pending_task_nodes, self.ready_task_nodes, self.ready_own_task_nodes)
         ot.state = _TaskGraphNodeState.Done
         self.done_task_nodes[ot.task.name] = (ot, out)
 
         return wereadded, towntask
 
     def is_all_done(self) -> bool:
-        # status calculation must run after own tasks, because own tasks may call add_task(s)()
-        if len(self.pending_task_nodes) > 0:
-            return False
-        if len(self.running_task_nodes) > 0:
-            return False
-        if len(self.ready_own_task_nodes) > 0:
-            return False
-        return True
+        self._stats()
+        return len(self.done_task_nodes) == len(self.all_task_nodes)
+        # if len(self.pending_task_nodes) > 0:
+        #    return False
+        # if len(self.ready_task_nodes) > 0 or len(self.ready_own_task_nodes) > 0:
+        #    return False
+        # if len(self.running_task_nodes) > 0:
+        #    return False
+        # return True
 
     def add_task(self, task: Task) -> None:  # to be called from owntask.f()
         assert task.name not in self.all_task_nodes
@@ -787,11 +796,22 @@ class Parallel:
         pub.close()
         del self.publications[name]
 
+    def _stats(self) -> None:
+        debug('Parallel: ' + str(len(self.all_task_nodes)) + ' tasks, including '
+              + str(len(self.pending_task_nodes)) + ' pending, '
+              + str(len(self.ready_task_nodes)) + '/' + str(len(self.ready_own_task_nodes)) + ' ready, '
+              + str(len(self.running_task_nodes)) + ' running, '
+              + str(len(self.done_task_nodes)) + ' done.'
+              )
+        assert (len(self.all_task_nodes) == len(self.pending_task_nodes)
+                + len(self.ready_task_nodes) + len(self.ready_own_task_nodes)
+                + len(self.running_task_nodes) + len(self.done_task_nodes))
+
     def __exit__(self, exceptiontype: Type[BaseException] | None, exceptionval: BaseException | None,
                  exceptiontraceback: TracebackType | None):
         if exceptiontype is not None:
             critical('Parallel: exception ' + str(exceptiontype) + ' :' + str(exceptionval))
-            traceback.print_tb(exceptiontraceback)
+            warn('\n'.join(traceback.format_tb(exceptiontraceback)))
 
         if not self.shutting_down:
             self.shutdown()
