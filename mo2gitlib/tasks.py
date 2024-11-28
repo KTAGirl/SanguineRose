@@ -134,7 +134,7 @@ class OwnTask(Task):
     pass
 
 
-def _run_task(task: Task, depparams: list[any]) -> any:
+def _run_task(task: Task, depparams: list[any]) -> (Exception | None, any):
     ndep = len(depparams)
     assert ndep <= 3
     try:
@@ -149,10 +149,11 @@ def _run_task(task: Task, depparams: list[any]) -> any:
                 out = task.f(task.param, depparams[0], depparams[1], depparams[2])
             case _:
                 assert False
-        return out
+        return None, out
     except Exception as e:
         critical('Parallel: exception in task ' + task.name + ': ' + str(e))
         critical(traceback.format_exc())
+        return e, None
 
 
 type SharedReturnParam = tuple[str, int]
@@ -199,6 +200,7 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue) 
         _proc_num = proc_num
         debug('Process #' + str(proc_num + 1) + ' started')
         outq.put(_Started(_proc_num))
+        ex = None
         while True:
             waitt0 = time.perf_counter()
             msg = inq.get()
@@ -231,7 +233,9 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue) 
                 else:
                     info(_str_time() + 'Process #' + str(
                         proc_num + 1) + ': starting task ' + task.name)
-                out = _run_task(task, tplus[1:])
+                (ex, out) = _run_task(task, tplus[1:])
+                if ex is not None:
+                    break  # while True
                 elapsed = time.perf_counter() - t0
                 cpu = time.process_time() - tp0
                 info(
@@ -239,9 +243,10 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue) 
                         proc_num + 1) + ': done task ' + task.name + ', cpu/elapsed=' + _str_dt(
                         cpu) + '/' + _str_dt(elapsed) + 's')
                 outq.put((proc_num, task.name, (cpu, elapsed), out))
-
+        if ex is not None:
+            outq.put(ex)
     except Exception as e:
-        critical('Process #' + str(proc_num + 1) + ': exception: ' + str(e))
+        critical('Process #' + str(proc_num + 1) + ': tasks internal exception: ' + str(e))
         critical(traceback.format_exc())
         outq.put(e)
     _pool_of_shared_returns.cleanup()
@@ -428,10 +433,6 @@ class Parallel:
             node.parents.append(p)
             self.pending_patterns.append((p, node))
 
-        for parent in node.parents:  # node. parents is same as taskparents at this point
-            if int(parent.state) < int(_TaskGraphNodeState.Done):
-                node.waiting_for_n_deps += 1
-
         assert node.state == _TaskGraphNodeState.Pending
         if node.waiting_for_n_deps == 0:
             node.state = _TaskGraphNodeState.Ready
@@ -479,7 +480,7 @@ class Parallel:
         while True:
             out = self._run_own_task(
                 owntaskstats)  # ATTENTION: own tasks may call add_task() or add_tasks() within
-            #debug('Parallel: rotir: '+str(out))
+            # debug('Parallel: rotir: '+str(out))
             (wereadded, towntasks) = out
             town += towntasks
             if not wereadded:
@@ -562,7 +563,7 @@ class Parallel:
             assert self.processesload[procnum] > 0
             self.processesload[procnum] -= 1
 
-            if self.all_done():
+            if self.is_all_done():
                 break
 
         maintelapsed = time.perf_counter() - maintstarted
@@ -656,7 +657,9 @@ class Parallel:
 
         nall = len(self.all_task_nodes)
         # ATTENTION: ot.task.f(...) may call add_task() or add_task(s) within
-        out = _run_task(ot.task, params)
+        (ex, out) = _run_task(ot.task, params)
+        if ex is not None:
+            raise Exception('Parallel: Exception is user task, quitting')
         newnall = len(self.all_task_nodes)
         assert newnall >= nall
         wereadded = newnall > nall
@@ -682,7 +685,7 @@ class Parallel:
 
         return wereadded, towntask
 
-    def all_done(self) -> bool:
+    def is_all_done(self) -> bool:
         # status calculation must run after own tasks, because own tasks may call add_task(s)()
         if len(self.pending_task_nodes) > 0:
             return False
