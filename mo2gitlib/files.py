@@ -1,31 +1,36 @@
-import xxhash
+import hashlib
 
 from mo2gitlib.common import *
 
-ZEROHASH = 17241709254077376921  # xxhash for 0 size
+ZEROHASH = hashlib.sha256(b"")
 
 
-def calculate_file_hash(fpath: str) -> int:  # our file hash function, compatible with WJ
-    h = xxhash.xxh64()
+def calculate_file_hash(fpath: str) -> bytes:  # our file hash function, compatible with WJ
+    h = hashlib.sha256()
     blocksize = 1048576
     with open(fpath, 'rb') as f:
         while True:
             bb = f.read(blocksize)
             h.update(bb)
-            assert (len(bb) <= blocksize)
+            assert len(bb) <= blocksize
             if len(bb) != blocksize:
-                return h.intdigest()
+                return h.digest()
+
+
+def truncate_file_hash(h: bytes) -> bytes:
+    assert len(h) == 32
+    return h[:12]
 
 
 class File:
-    file_hash: int
+    file_hash: bytes | None
     file_path: str
     file_modified: float
     file_size: int | None
 
-    def __init__(self, file_hash: int | None, file_modified: float | None, file_path: str,
+    def __init__(self, file_hash: bytes | None, file_modified: float | None, file_path: str,
                  file_size: int | None):
-        assert (file_path is not None)
+        assert file_path is not None
         self.file_hash = file_hash
         self.file_modified = file_modified
         self.file_path = file_path
@@ -41,8 +46,6 @@ class File:
         return True
 
     def to_json(self) -> str:
-        # works both for ar=Archive, and ar=SimpleNamespace
-        # for SimpleNamespace cannot use return json.dumps(self,default=lambda o: o.__dict__)
         if self.file_hash is None:
             return '{"file_path": ' + escape_json(self.file_path) + ', "file_hash":null}'
         else:
@@ -63,7 +66,5 @@ class ArchiveEntry:
         self.file_hash = file_hash
 
     def to_json(self) -> str:
-        # works both for ar=ArchiveEntry, and ar=SimpleNamespace
-        # for SimpleNamespace cannot use return json.dumps(self,default=lambda o: o.__dict__)
         return '{"archive_hash":' + str(self.archive_hash) + ', "intra_path": ' + escape_json(
             self.intra_path) + ', "file_size": ' + str(self.file_size) + ', "file_hash": ' + str(self.file_hash) + '}'

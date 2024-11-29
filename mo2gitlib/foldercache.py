@@ -177,7 +177,9 @@ def _scan_folder_task_func(
     stats = _FolderScanStats()
     filesbypath = tasks.from_publication(pubfilesbypath)
     started = time.perf_counter()
+    lfilesbypath = len(filesbypath)
     FolderCache._scan_dir(started, sdout, stats, rootpath, taskroot, filesbypath, pubfilesbypath, exdirs, name)
+    assert len(filesbypath) == lfilesbypath
     return exdirs, stats, sdout
 
 
@@ -367,12 +369,50 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
     all_scan_stats: dict[str, dict[str, int]]  # rootfolder -> {fpath -> nfiles}
 
     def __init__(self, cachedir: str, name: str, folder_list: FolderList) -> None:
+        assert not FolderCache._folder_list_self_overlaps(folder_list)
         self.cache_dir = cachedir
         self.name = name
         self.folder_list = folder_list
         self.files_by_path = {}
         self.filtered_files = []
         self.all_scan_stats = _read_all_scan_stats(cachedir, name)
+
+    @staticmethod
+    def _two_folders_overlap(a: str, aex: list[str], b: str, bex: list[str]) -> bool:
+        if a == b:
+            return False
+        ok = True
+        if a.startswith(b):  # b contains a
+            ok = False
+            for x in bex:
+                if a.startswith(x):
+                    ok = True
+                    break
+        elif b.startswith(a):  # a contains b
+            ok = False
+            for x in aex:
+                if b.startswith(x):
+                    ok = True
+                    break
+        return ok
+
+    @staticmethod
+    def _folder_list_self_overlaps(l: FolderList) -> bool:
+        for aidx in range(len(l)):
+            for bidx in range(len(l)):
+                if aidx == bidx:
+                    continue
+                if FolderCache._two_folders_overlap(l[aidx][0], l[aidx][1], l[bidx][0], l[bidx][1]):
+                    return True
+        return False
+
+    @staticmethod
+    def folder_lists_overlap(al: FolderList, bl: FolderList) -> bool:
+        for a in al:
+            for b in bl:
+                if FolderCache._two_folders_overlap(a[0], a[1], b[0], b[1]):
+                    return True
+        return False
 
     def start_tasks(self, parallel: tasks.Parallel) -> None:
 
@@ -441,8 +481,8 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
     @staticmethod
     def _scan_dir(started: float, sdout: _FolderScanDirOut, stats: _FolderScanStats, root: str, dirpath: str,
-                  filesbypath: dict[str, File], pubfilesbypath: tasks.SharedPubParam,
-                  exdirs: list[str], name: str) -> None:  # recursive over dir
+                  const_filesbypath: dict[str, File], pubfilesbypath: tasks.SharedPubParam,
+                  const_exdirs: list[str], name: str) -> None:  # recursive over dir
         assert Folders.is_normalized_dir_path(dirpath)
         # recursive implementation: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
         # still, after recent performance fix seems to win like 1.5x over os.walk-based one
@@ -455,12 +495,12 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 assert not stat.S_ISLNK(fmode)
                 assert Folders.is_normalized_file_path(fpath)
 
-                assert FolderCache.file_path_is_ok_simple(fpath, root, exdirs)
+                assert FolderCache.file_path_is_ok_simple(fpath, root, const_exdirs)
 
                 stats.nscanned += 1
                 nf += 1
                 tstamp = _get_file_timestamp_from_st(st)
-                found = filesbypath.get(fpath)
+                found = const_filesbypath.get(fpath)
                 matched = False
                 if found is not None:
                     sdout.scanned_files[fpath] = found
@@ -479,16 +519,29 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             elif stat.S_ISDIR(fmode):
                 newdir = fpath + '\\'
                 assert Folders.is_normalized_dir_path(newdir)
-                if newdir in exdirs:
+                if newdir in const_exdirs:
                     continue
                 elapsed = time.perf_counter() - started
                 if _time_to_split_task(elapsed):  # an ad-hoc split
                     sdout.requested_dirs.append(newdir)
                 else:
-                    FolderCache._scan_dir(started, sdout, stats, root, newdir, filesbypath, pubfilesbypath,
-                                          filter_ex_dirs(exdirs, newdir), name)
+                    FolderCache._scan_dir(started, sdout, stats, root, newdir, const_filesbypath, pubfilesbypath,
+                                          filter_ex_dirs(const_exdirs, newdir), name)
             else:
                 critical(fpath + ' is neither dir or file, aborting')
                 abort_if_not(False)
         assert dirpath not in sdout.scan_stats
         sdout.scan_stats[dirpath] = nf
+
+
+if __name__ == '__main__':
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == 'test':
+        tfoldercache = FolderCache(Folders.normalize_dir_path('..\\..\\mo2git.cache\\'),
+                                   'downloads',
+                                   [(Folders.normalize_dir_path('..\\..\\..\\mo2\\downloads'), [])])
+        with tasks.Parallel(None) as tparallel:
+            tfoldercache.start_tasks(tparallel)
+
+        tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()
