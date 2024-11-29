@@ -6,7 +6,7 @@ import time
 
 import mo2gitlib.tasks as tasks
 from mo2gitlib.common import *
-from mo2gitlib.files import File, calculate_file_hash, compare_timestamp_with_wj
+from mo2gitlib.files import File, calculate_file_hash
 from mo2gitlib.folders import Folders
 
 
@@ -16,20 +16,6 @@ def _get_file_timestamp(fname: str) -> float:
 
 def _get_file_timestamp_from_st(st: os.stat_result) -> float:
     return st.st_mtime
-
-
-def _get_from_one_of_files_by_path(files_by_path: dict[str, File], files_by_path2: dict[str, File], key: str) -> File:
-    found = files_by_path.get(key)
-    if found is not None:
-        return found
-    return files_by_path2.get(key)
-
-
-def _all_values_in_both_dicts(dicttoscan: dict[any, any], dicttoscan2: dict[any, any]) -> Generator[any]:
-    for key, val in dicttoscan.items():
-        yield val
-    for key, val in dicttoscan2.items():
-        yield val
 
 
 def _read_dict_of_files(dirpath: str, name: str) -> dict[str, File]:
@@ -102,7 +88,9 @@ class _FolderScanDirOut:
         self.requested_files = []
         self.scan_stats = {}
 
-type FolderList = list[tuple[str,list[str]]]
+
+type FolderList = list[tuple[str, list[str]]]
+
 
 def filter_ex_dirs(exdirs: list[str], fpath) -> list[str]:
     return [xd for xd in exdirs if xd.startswith(fpath)]
@@ -169,39 +157,27 @@ def _load_files_own_task_func(out, foldercache: "FolderCache", parallel: tasks.P
     foldercache.filtered_files = {}
     for key, val in filesbypath.items():
         assert key == val.file_path
-        if FolderCache.file_path_is_ok(key,foldercache.folder_list):
+        if FolderCache.file_path_is_ok(key, foldercache.folder_list):
             foldercache.files_by_path[key] = val
         else:
             foldercache.filtered_files[key] = val
 
-    foldercache.pub_underlying_files_by_path = tasks.SharedPublication(parallel, foldercache.underlying_files_by_path)
-    pubparam = tasks.make_shared_publication_param(foldercache.pub_underlying_files_by_path)
+    foldercache.pub_files_by_path = tasks.SharedPublication(parallel, foldercache.files_by_path)
+    pubparam = tasks.make_shared_publication_param(foldercache.pub_files_by_path)
     return (pubparam,)
 
 
-def _underlying_own_task_func(foldercache: "FolderCache", parallel: tasks.Parallel,
-                              underlyingfilesbypath_generator: Iterable[File]) -> None:
-    assert len(foldercache.underlying_files_by_path) == 0
-    for fi in underlyingfilesbypath_generator:
-        if FolderCache.file_path_is_ok(fi.file_path,foldercache.folder_list):
-            foldercache.underlying_files_by_path[fi.file_path] = fi
-    foldercache.pub_underlying_files_by_path = tasks.SharedPublication(parallel, foldercache.underlying_files_by_path)
-
-
 def _scan_folder_task_func(
-        param: tuple[str, str, list[str], str, tasks.SharedPubParam, dict[str, float]],
+        param: tuple[str, str, list[str], str],
         fromownload: tuple[tasks.SharedPubParam]) -> tuple[
     list[str], _FolderScanStats, _FolderScanDirOut]:
-    (rootpath, taskroot, exdirs, name, pubunderlying, estimates) = param
+    (rootpath, taskroot, exdirs, name) = param
     (pubfilesbypath,) = fromownload
     sdout = _FolderScanDirOut(rootpath)
     stats = _FolderScanStats()
     filesbypath = tasks.from_publication(pubfilesbypath)
-    underlying = tasks.from_publication(pubunderlying)
     started = time.perf_counter()
-    FolderCache._scan_dir(started, sdout, stats, rootpath, taskroot, filesbypath, underlying, pubunderlying, exdirs,
-                          name,
-                          estimates)
+    FolderCache._scan_dir(started, sdout, stats, rootpath, taskroot, filesbypath, pubfilesbypath, exdirs, name)
     return exdirs, stats, sdout
 
 
@@ -245,8 +221,7 @@ def _scan_folder_own_task_func(out: tuple[list[str], _FolderScanStats, _FolderSc
         assert Folders.is_normalized_dir_path(fpath)
         taskname = _scanned_task_name(foldercache.name, fpath)
         task = tasks.Task(taskname, _scan_folder_task_func,
-                          (sdout.root, fpath, filter_ex_dirs(exdirs, fpath), foldercache.name,
-                           foldercache.pub_underlying_files_by_path, parallel.copy_estimates()),
+                          (sdout.root, fpath, filter_ex_dirs(exdirs, fpath), foldercache.name),
                           [], 1.0)  # this is an ad-hoc split, we don't want tasks to cache w, and we have no idea
         owntaskname = _scanned_own_task_name(foldercache.name, fpath)
         owntask = tasks.OwnTask(owntaskname,
@@ -259,7 +234,7 @@ def _own_reconcile_task_func(foldercache: "FolderCache", parallel: tasks.Paralle
                              scannedfiles: dict[str, File]) -> None:
     info('FolderCache(' + foldercache.name + '): ' + str(len(scannedfiles)) + ' files scanned')
     ndel = 0
-    for file in _all_values_in_both_dicts(foldercache.files_by_path, foldercache.underlying_files_by_path):
+    for file in foldercache.files_by_path.values():
         fpath = file.file_path
         assert Folders.is_normalized_file_path(fpath)
         if scannedfiles.get(fpath) is None:
@@ -268,7 +243,7 @@ def _own_reconcile_task_func(foldercache: "FolderCache", parallel: tasks.Paralle
                 continue
             info(fpath + ' was deleted')
             # dbgWait()
-            foldercache.files_by_path[fpath] = File(None, None, fpath)
+            foldercache.files_by_path[fpath] = File(None, None, fpath, None)
             ndel += 1
     info('FolderCache reconcile: ' + str(ndel) + ' files were deleted')
     # dbgWait()
@@ -385,12 +360,10 @@ class _ScanStatsNode:
 
 class FolderCache:  # folder cache; can handle multiple folders, each folder with its own set of exclusions
     cache_dir: str
-    underlying_files_by_path: dict[str, File]
     name: str
     folder_list: FolderList
     files_by_path: dict[str, File]
     filtered_files: list[File]
-    pub_underlying_files_by_path: tasks.SharedPublication | None
     all_scan_stats: dict[str, dict[str, int]]  # rootfolder -> {fpath -> nfiles}
 
     def __init__(self, cachedir: str, name: str, folder_list: FolderList) -> None:
@@ -399,14 +372,9 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         self.folder_list = folder_list
         self.files_by_path = {}
         self.filtered_files = []
-
-        self.underlying_files_by_path = {}
-        self.pub_underlying_files_by_path = None
         self.all_scan_stats = _read_all_scan_stats(cachedir, name)
 
-    def start_tasks(self, parallel: tasks.Parallel,
-                    underlyingfilesbypath_generator: Iterable[File],
-                    task_name_enabling_underlyingfilesbypath_generator) -> None:
+    def start_tasks(self, parallel: tasks.Parallel) -> None:
 
         # building tree of known scans
         allscantasks: list[tuple[str, str, int, list[str]]] = []  # [(root,path,nf,exdirs)]
@@ -431,22 +399,13 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                                     [loadtaskname])
         parallel.add_task(loadowntask)
 
-        underlyingowntaskname = 'mo2git.foldercache.underlyingown.' + self.name
-        underlyingowntask = tasks.OwnTask(underlyingowntaskname, lambda _, _1: _underlying_own_task_func(self, parallel,
-                                                                                                         underlyingfilesbypath_generator),
-                                          None,
-                                          [task_name_enabling_underlyingfilesbypath_generator])
-        parallel.add_task(underlyingowntask)
-
         for tt in allscantasks:
             (root, path, nf, exdirs) = tt
             assert Folders.is_normalized_dir_path(path)
             taskname = _scanned_task_name(self.name, path)
             task = tasks.Task(taskname, _scan_folder_task_func,
-                              (root, path, exdirs, self.name,
-                               tasks.make_shared_publication_param(self.pub_underlying_files_by_path),
-                               parallel.copy_estimates()),
-                              [loadowntaskname, underlyingowntaskname], _scan_task_time_estimate(nf))
+                              (root, path, exdirs, self.name),
+                              [loadowntaskname], _scan_task_time_estimate(nf))
             owntaskname = _scanned_own_task_name(self.name, path)
             owntask = tasks.OwnTask(owntaskname,
                                     lambda _, out: _scan_folder_own_task_func(out, self, parallel, scannedfiles, stats),
@@ -474,7 +433,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         return True
 
     @staticmethod
-    def file_path_is_ok(fpath: str, folder_list:FolderList) -> bool:
+    def file_path_is_ok(fpath: str, folder_list: FolderList) -> bool:
         for folderplus in folder_list:
             if FolderCache.file_path_is_ok_simple(fpath, folderplus[0], folderplus[1]):
                 return True
@@ -482,8 +441,8 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
     @staticmethod
     def _scan_dir(started: float, sdout: _FolderScanDirOut, stats: _FolderScanStats, root: str, dirpath: str,
-                  filesbypath: dict[str, File], underlying: dict[str, File], pubunderlying: tasks.SharedPubParam,
-                  exdirs: list[str], name: str, estimates: dict[str, float]) -> None:  # recursive over dir
+                  filesbypath: dict[str, File], pubfilesbypath: tasks.SharedPubParam,
+                  exdirs: list[str], name: str) -> None:  # recursive over dir
         assert Folders.is_normalized_dir_path(dirpath)
         # recursive implementation: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
         # still, after recent performance fix seems to win like 1.5x over os.walk-based one
@@ -501,7 +460,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 stats.nscanned += 1
                 nf += 1
                 tstamp = _get_file_timestamp_from_st(st)
-                found: File = _get_from_one_of_files_by_path(filesbypath, underlying, fpath)
+                found = filesbypath.get(fpath)
                 matched = False
                 if found is not None:
                     sdout.scanned_files[fpath] = found
@@ -509,9 +468,9 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                         pass
                     else:
                         tstamp2 = found.file_modified
-                        if compare_timestamp_with_wj(tstamp, tstamp2) == 0:
+                        if tstamp == tstamp2:
                             matched = True
-                            if found.file_size is not None and found.file_size != st.st_size:
+                            if found.file_size != st.st_size:
                                 warn(
                                     'FolderCache: file size changed while timestamp did not for file ' + fpath + ', re-hashing it')
                                 matched = False
@@ -522,14 +481,12 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 assert Folders.is_normalized_dir_path(newdir)
                 if newdir in exdirs:
                     continue
-                est = tasks.Parallel.estimated_time_from_estimates(estimates, _scanned_task_name(name, newdir), 1.)
                 elapsed = time.perf_counter() - started
-                if _time_to_split_task(elapsed + est):  # an ad-hoc split
+                if _time_to_split_task(elapsed):  # an ad-hoc split
                     sdout.requested_dirs.append(newdir)
                 else:
-                    FolderCache._scan_dir(started, sdout, stats, root, newdir, filesbypath, underlying,
-                                          pubunderlying,
-                                          filter_ex_dirs(exdirs, newdir), name, estimates)
+                    FolderCache._scan_dir(started, sdout, stats, root, newdir, filesbypath, pubfilesbypath,
+                                          filter_ex_dirs(exdirs, newdir), name)
             else:
                 critical(fpath + ' is neither dir or file, aborting')
                 abort_if_not(False)

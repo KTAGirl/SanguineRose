@@ -17,12 +17,6 @@ def calculate_file_hash(fpath: str) -> int:  # our file hash function, compatibl
                 return h.intdigest()
 
 
-def compare_timestamp_with_wj(a: float, b: float) -> int:
-    if abs(a - b) == 0:  # < 0.000001:
-        return 0
-    return -1 if a < b else 1
-
-
 class File:
     file_hash: int
     file_path: str
@@ -30,7 +24,7 @@ class File:
     file_size: int | None
 
     def __init__(self, file_hash: int | None, file_modified: float | None, file_path: str,
-                 file_size: int | None = None):
+                 file_size: int | None):
         assert (file_path is not None)
         self.file_hash = file_hash
         self.file_modified = file_modified
