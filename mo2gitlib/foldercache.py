@@ -131,14 +131,19 @@ def _reconcile_own_task_name(name: str) -> str:
     return 'mo2gitlib.foldercache.reconcile.' + name
 
 
-def _hashing_task_name(cachename: str, dirpath: str) -> str:
-    assert Folders.is_normalized_dir_path(dirpath)
-    return 'mo2gitlib.foldercache.hash.' + cachename + '.' + dirpath
+def _hashing_task_name(cachename: str, fpath: str) -> str:
+    assert Folders.is_normalized_file_path(fpath)
+    return 'mo2gitlib.foldercache.hash.' + cachename + '.' + fpath
 
 
-def _hashing_own_task_name(cachename: str, dirpath: str) -> str:
+def _hashing_own_task_name(cachename: str, fpath: str) -> str:
+    assert Folders.is_normalized_file_path(fpath)
+    return 'mo2gitlib.foldercache.hash.own.' + cachename + '.' + fpath
+
+
+def _hashing_own_wildcard_task_name(cachename: str, dirpath: str) -> str:
     assert Folders.is_normalized_dir_path(dirpath)
-    return 'mo2gitlib.foldercache.hash.own.' + cachename + '.' + dirpath
+    return 'mo2gitlib.foldercache.hash.own.' + cachename + '.' + dirpath + '*'
 
 
 ### Tasks
@@ -202,12 +207,15 @@ def _scan_folder_own_task_func(out: tuple[list[str], _FolderScanStats, _FolderSc
     stats.add(gotstats)
     assert len(scannedfiles.keys() & sdout.scanned_files.keys()) == 0
     scannedfiles |= sdout.scanned_files
-    # foldercache.files_by_path |= sdout.filesbypath
-    assert len(foldercache.all_scan_stats[sdout.root].keys() & sdout.scan_stats.keys()) == 0
-    foldercache.all_scan_stats[sdout.root] |= sdout.scan_stats
+    if sdout.root in foldercache.all_scan_stats:
+        assert len(foldercache.all_scan_stats[sdout.root].keys() & sdout.scan_stats.keys()) == 0
+        foldercache.all_scan_stats[sdout.root] |= sdout.scan_stats
+    else:
+        foldercache.all_scan_stats[sdout.root] = sdout.scan_stats
 
     for f in sdout.requested_files:
         (fpath, tstamp, fsize) = f
+        debug(fpath)  # RM
         htaskname = _hashing_task_name(foldercache.name, fpath)
         htask = tasks.Task(htaskname, _calc_hash_task_func,
                            (fpath, tstamp, fsize),
@@ -234,7 +242,7 @@ def _scan_folder_own_task_func(out: tuple[list[str], _FolderScanStats, _FolderSc
 
 def _own_reconcile_task_func(foldercache: "FolderCache", parallel: tasks.Parallel,
                              scannedfiles: dict[str, File]) -> None:
-    info('FolderCache(' + foldercache.name + '): ' + str(len(scannedfiles)) + ' files scanned')
+    info('FolderCache({}):{} files scanned'.format(foldercache.name, len(scannedfiles)))
     ndel = 0
     for file in foldercache.files_by_path.values():
         fpath = file.file_path
@@ -243,12 +251,11 @@ def _own_reconcile_task_func(foldercache: "FolderCache", parallel: tasks.Paralle
             inhere = foldercache.files_by_path.get(fpath)
             if inhere is not None and inhere.file_hash is None:  # special record is already present
                 continue
-            info(fpath + ' was deleted')
+            info('FolderCache: {} was deleted'.format(fpath))
             # dbgWait()
             foldercache.files_by_path[fpath] = File(None, None, fpath, None)
             ndel += 1
-    info('FolderCache reconcile: ' + str(ndel) + ' files were deleted')
-    # dbgWait()
+    info('FolderCache reconcile: {} files were deleted'.format(ndel))
 
     savetaskname = 'mo2git.foldercache.save.' + foldercache.name
     savetask = tasks.Task(savetaskname, _save_files_task_func,
@@ -454,7 +461,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             parallel.add_tasks([task, owntask])
 
         scanningdeps = [_scanned_own_task_name(self.name, folderplus[0]) + '*' for folderplus in self.folder_list]
-        hashingdeps = [_hashing_own_task_name(self.name, folderplus[0]) + '*' for folderplus in self.folder_list]
+        hashingdeps = [_hashing_own_wildcard_task_name(self.name, folderplus[0]) for folderplus in self.folder_list]
         reconciletask = tasks.OwnTask(_reconcile_own_task_name(self.name),
                                       lambda _, _1: _own_reconcile_task_func(self, parallel, scannedfiles),
                                       None, scanningdeps + hashingdeps)
@@ -512,7 +519,8 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                             matched = True
                             if found.file_size != st.st_size:
                                 warn(
-                                    'FolderCache: file size changed while timestamp did not for file ' + fpath + ', re-hashing it')
+                                    'FolderCache: file size changed while timestamp did not for file {}, re-hashing it'.format(
+                                        fpath))
                                 matched = False
                 if not matched:
                     sdout.requested_files.append((fpath, tstamp, st.st_size))
@@ -528,7 +536,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                     FolderCache._scan_dir(started, sdout, stats, root, newdir, const_filesbypath, pubfilesbypath,
                                           filter_ex_dirs(const_exdirs, newdir), name)
             else:
-                critical(fpath + ' is neither dir or file, aborting')
+                critical('FolderCache: {} is neither dir or file, aborting'.format(fpath))
                 abort_if_not(False)
         assert dirpath not in sdout.scan_stats
         sdout.scan_stats[dirpath] = nf
@@ -543,5 +551,4 @@ if __name__ == '__main__':
                                    [(Folders.normalize_dir_path('..\\..\\..\\mo2\\downloads'), [])])
         with tasks.Parallel(None) as tparallel:
             tfoldercache.start_tasks(tparallel)
-
-        tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()
+            tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()

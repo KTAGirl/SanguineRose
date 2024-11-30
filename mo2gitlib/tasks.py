@@ -68,12 +68,8 @@ _pool_of_shared_returns = _PoolOfSharedReturns()
 _started: float = time.perf_counter()
 
 
-def _str_time() -> str:
-    return str(round(time.perf_counter() - _started, 2)) + ': '
-
-
-def _str_dt(dt) -> str:
-    return str(round(dt, 2))
+def _log_time() -> float:
+    return time.perf_counter() - _started
 
 
 class SharedPublication:
@@ -86,7 +82,7 @@ class SharedPublication:
         shared = self.shm.buf
         shared[:] = data
         name = self.shm.name
-        debug('SharedPublication: ' + name)
+        debug('SharedPublication: {}'.format(name))
         assert name not in parallel.publications
         parallel.publications[name] = self.shm
         self.closed = False
@@ -151,7 +147,7 @@ def _run_task(task: Task, depparams: list[any]) -> (Exception | None, any):
                 assert False
         return None, out
     except Exception as e:
-        critical('Parallel: exception in task ' + task.name + ': ' + str(e))
+        critical('Parallel: exception in task {}: {}'.format(task.name, e))
         warn(traceback.format_exc())
         return e, None
 
@@ -198,7 +194,7 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue) 
         global _proc_num
         assert _proc_num == -1
         _proc_num = proc_num
-        debug('Process #' + str(proc_num + 1) + ' started')
+        debug('Process #{} started'.format(proc_num + 1))
         outq.put(_Started(_proc_num))
         ex = None
         while True:
@@ -208,49 +204,49 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue) 
                 break  # while True
 
             dwait = time.perf_counter() - waitt0
-            waitstr = _str_dt(dwait) + 's'
 
             (tasks, processedshm) = msg
             if processedshm is not None:
                 assert tasks is None
-                info('Process #' + str(
-                    proc_num + 1) + ': after waiting for ' + waitstr + ', releasing shm=' + processedshm)
+                info('Process #{}: after waiting for {:.2f}s, releasing shm={}'.format(
+                    proc_num + 1, dwait, processedshm))
                 _pool_of_shared_returns.done_with(processedshm)
                 continue  # while True
 
-            assert tasks is not None
             assert isinstance(tasks, list)
+            outtasks: list[tuple[str, tuple[float, float], any]] = []
             for tplus in tasks:
                 task = tplus[0]
                 ndep = len(task.dependencies)
                 assert len(tplus) == 1 + ndep
                 t0 = time.perf_counter()
                 tp0 = time.process_time()
-                if waitstr is not None:
-                    info(_str_time() + 'Process #' + str(
-                        proc_num + 1) + ': after waiting for ' + waitstr + ', starting task ' + task.name)
-                    waitstr = None
+                if dwait is not None:
+                    info('{}: Process #{}: after waiting for {:.2f}s, starting task {}'.format(
+                        _log_time(), proc_num + 1, dwait, task.name))
+                    dwait = None
                 else:
-                    info(_str_time() + 'Process #' + str(
-                        proc_num + 1) + ': starting task ' + task.name)
+                    info('{}: Process #{}: starting task {}'.format(
+                        _log_time(), proc_num + 1, task.name))
                 (ex, out) = _run_task(task, tplus[1:])
                 if ex is not None:
                     break  # while True
                 elapsed = time.perf_counter() - t0
                 cpu = time.process_time() - tp0
-                info(
-                    _str_time() + 'Process #' + str(
-                        proc_num + 1) + ': done task ' + task.name + ', cpu/elapsed=' + _str_dt(
-                        cpu) + '/' + _str_dt(elapsed) + 's')
-                outq.put((proc_num, task.name, (cpu, elapsed), out))
+                info('{}: Process #{}: done task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
+                    _log_time(), proc_num + 1, task.name, cpu, elapsed))
+                outtasks.append((task.name, (cpu, elapsed), out))
+            outq.put((proc_num, outtasks))
+            # end of while True
+
         if ex is not None:
             outq.put(ex)
     except Exception as e:
-        critical('Process #' + str(proc_num + 1) + ': tasks internal exception: ' + str(e))
+        critical('Process #{}: tasks internal exception: {}'.format(proc_num + 1, e))
         warn(traceback.format_exc())
         outq.put(e)
     _pool_of_shared_returns.cleanup()
-    debug('Process #' + str(proc_num + 1) + ': exiting')
+    debug('Process #{}: exiting'.format(proc_num + 1))
 
 
 class _TaskGraphNodeState(IntEnum):
@@ -294,15 +290,15 @@ class _TaskGraphNode:
                 assert ch.task.name not in ready
                 assert ch.task.name not in ready_own
                 assert ch.task.name in pending
-                debug('Parallel: task ' + ch.task.name + ' is ready')
+                debug('Parallel: task {} is ready'.format(ch.task.name))
                 del pending[ch.task.name]
                 if isinstance(ch.task, OwnTask):
                     ready_own[ch.task.name] = (ch, ch.total_weight())
                 else:
                     ready[ch.task.name] = (ch, ch.total_weight())
             else:
-                debug('Parallel: task ' + ch.task.name + ' has ' + str(
-                    ch.waiting_for_n_deps) + ' remaining dependencies to become ready')
+                debug('Parallel: task {} has {} remaining dependencies to become ready'.format(
+                    ch.task.name, ch.waiting_for_n_deps))
 
     def append_leaf(self, leaf: "_TaskGraphNode") -> None:
         self.children.append(leaf)
@@ -343,7 +339,7 @@ class Parallel:
         else:
             self.nprocesses = os.cpu_count() - 1  # -1 for the master process
         assert self.nprocesses >= 0
-        info('Using ' + str(self.nprocesses) + ' processes...')
+        info('Parallel: using {} processes...'.format(self.nprocesses))
         self.json_fname = jsonfname
         self.json_weights = {}
         self.updated_json_weights = {}
@@ -352,8 +348,7 @@ class Parallel:
                 with open(jsonfname, 'rt', encoding='utf-8') as rf:
                     self.json_weights = json.load(rf)
             except Exception as e:
-                warn(
-                    'WARNING: error loading JSON weights ' + jsonfname + ': ' + str(e) + '. Will continue w/o weights')
+                warn('error loading JSON weights from {}: {}. Will continue w/o weights'.format(jsonfname, e))
                 self.json_weights = {}  # just in case
 
         self.shutting_down = False
@@ -406,8 +401,8 @@ class Parallel:
     def _internal_add_task_if(self, task: Task) -> bool:
         assert task.name not in self.all_task_nodes
         islambda = callable(task.f) and task.f.__name__ == '<lambda>'
-        if islambda:
-            print('lambda in task ' + task.name)
+        # if islambda:
+        #    print('lambda in task ' + task.name)
         assert isinstance(task, OwnTask) or not islambda
 
         taskparents, patterns = self._dependencies_to_parents(task.dependencies)
@@ -440,6 +435,9 @@ class Parallel:
             node.parents.append(p)
             self.pending_patterns.append((p, node))
 
+        debug('Parallel: added task {}, which is waiting for {} dependencies'.format(node.task.name,
+                                                                                     node.waiting_for_n_deps))
+
         assert node.state == _TaskGraphNodeState.Pending
         if node.waiting_for_n_deps == 0:
             node.state = _TaskGraphNodeState.Ready
@@ -459,13 +457,12 @@ class Parallel:
 
         return True
 
-    def _internal_add_tasks(self, tasks: list[Task]) -> None:
+    def add_tasks(self, tasks: list[Task]) -> None:
         while len(tasks) > 0:
             megaok = False
             for t in tasks:
                 ok = self._internal_add_task_if(t)
                 if ok:
-                    debug('Parallel: ' + t.name + ' added')
                     tasks.remove(t)
                     megaok = True
                     break  # for t
@@ -487,7 +484,6 @@ class Parallel:
         while True:
             out = self._run_own_task(
                 owntaskstats)  # ATTENTION: own tasks may call add_task() or add_tasks() within
-            # debug('Parallel: rotir: '+str(out))
             (wereadded, towntasks) = out
             town += towntasks
             if not wereadded:
@@ -496,7 +492,7 @@ class Parallel:
 
     def run(self, tasks: list[Task]) -> None:
         # building task graph
-        self._internal_add_tasks(tasks)
+        self.add_tasks(tasks)
 
         # graph ok, running the initial tasks
         assert len(self.pending_task_nodes)
@@ -527,7 +523,8 @@ class Parallel:
             # waiting for other processes to finish
             waitt0 = time.perf_counter()
             got = self.outq.get()
-            debug('Parallel: response size:' + str(len(pickle.dumps(got))))
+            if __debug__:  # pickle.dumps is expensive by itself
+                debug('Parallel: response size: {}'.format(len(pickle.dumps(got))))
             if isinstance(got, Exception):
                 critical('Parallel: An exception within child process reported. Shutting down')
 
@@ -547,42 +544,50 @@ class Parallel:
                 continue  # while True
 
             dwait = time.perf_counter() - waitt0
-            strwait = _str_dt(dwait) + 's'
+            strwait = '{:.2f}s'.format(dwait)
             maintwait += dwait
             if dwait < 0.005:
                 strwait += '[MAIN THREAD SERIALIZATION]'
 
-            (procnum, taskname, times, out) = got
-            assert taskname in self.running_task_nodes
-            (expectedprocnum, started, node) = self.running_task_nodes[taskname]
-            assert node.state == _TaskGraphNodeState.Running
-            (cput, taskt) = times
-            assert procnum == expectedprocnum
-            dt = time.perf_counter() - started
-            info(_str_time() + 'Parallel: after waiting for ' + strwait +
-                 ', received results of task ' + taskname + ' elapsed/task/cpu='
-                 + _str_dt(dt) + '/' + _str_dt(taskt) + '/' + _str_dt(cput) + 's')
-            self._update_weight(taskname, taskt)
-            del self.running_task_nodes[taskname]
-            assert taskname not in self.done_task_nodes
-            node.mark_as_done_and_handle_children(self.pending_task_nodes, self.ready_task_nodes,
-                                                  self.ready_own_task_nodes)
-            self.done_task_nodes[taskname] = (node, out)
+            (procnum, tasks) = got
             assert self.processesload[procnum] > 0
             self.processesload[procnum] -= 1
+
+            for taskname, times, out in tasks:
+                assert taskname in self.running_task_nodes
+                (expectedprocnum, started, node) = self.running_task_nodes[taskname]
+                assert node.state == _TaskGraphNodeState.Running
+                (cput, taskt) = times
+                assert procnum == expectedprocnum
+                dt = time.perf_counter() - started
+                if strwait is not None:
+                    info(
+                        '{}: Parallel: after waiting for {}, received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
+                            _log_time(), strwait, taskname, procnum + 1, dt, taskt, cput))
+                else:
+                    info(
+                        '{}: Parallel: received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
+                            _log_time(), taskname, procnum + 1, dt, taskt, cput))
+
+                strwait = None
+                self._update_weight(taskname, taskt)
+                del self.running_task_nodes[taskname]
+                assert taskname not in self.done_task_nodes
+                node.mark_as_done_and_handle_children(self.pending_task_nodes, self.ready_task_nodes,
+                                                      self.ready_own_task_nodes)
+                self.done_task_nodes[taskname] = (node, out)
 
             if self.is_all_done():
                 break
 
         maintelapsed = time.perf_counter() - maintstarted
-        info(_str_time() + 'Parallel: main thread: waited+owntasks+scheduler+unaccounted=elapsed '
-             + _str_dt(maintwait) + '+' + _str_dt(maintown) + '+' + _str_dt(maintschedule)
-             + '+' + _str_dt(maintelapsed - maintwait - maintown - maintschedule) + '=' + _str_dt(
-            maintelapsed) + 's, '
-             + str(100 - round(100 * maintwait / maintelapsed, 2)) + '% load')
+        info(
+            '{}: Parallel: main thread: waited+owntasks+scheduler+unaccounted=elapsed {:.2f}+{:.2f}+{:.2f}+{:.2f}={:.2f}s, {:.1f}% load'.format(
+                _log_time(), maintwait, maintown, maintschedule, maintelapsed - maintwait - maintown - maintschedule,
+                maintelapsed, 100 * (1. - maintwait / maintelapsed)))
         info("Parallel: breakdown per task type (task name before '.'):")
         for key, val in owntaskstats.items():
-            info('  ' + key + ': ' + str(val[0]) + ', took ' + _str_dt(val[1]) + '/' + _str_dt(val[2]) + 's')
+            info('  : {}, took {:.2f}/{:.2f}s'.format(val[0], val[1], val[2]))
 
     def _schedule_best_tasks(self) -> bool:  # may schedule multiple tasks as one meta-task
         pidx = self._find_best_process()
@@ -625,15 +630,16 @@ class Parallel:
 
         msg = (taskpluses, None)
         self.inqueues[pidx].put(msg)
-        info(_str_time() + 'Parallel: assigned tasks ' + tasksstr + ' to process #' + str(pidx + 1))
-        debug('Parallel: request size:' + str(len(pickle.dumps(msg))))
+        info('{}: Parallel: assigned tasks {} to process #{}'.format(_log_time(), tasksstr, pidx + 1))
+        if __debug__:  # pickle.dumps is expensive by itself
+            debug('Parallel: request size: {}'.format(len(pickle.dumps(msg))))
         self.processesload[pidx] += 1
         return True
 
     def _notify_sender_shm_done(self, pidx: int, name: str) -> None:
         if pidx < 0:
             assert pidx == -1
-            debug(_str_time() + 'Releasing own shm=' + name)
+            debug('{}: Parallel: Releasing own shm={}'.format(_log_time(), name))
             _pool_of_shared_returns.done_with(name)
         else:
             self.inqueues[pidx].put((None, name))
@@ -659,7 +665,7 @@ class Parallel:
         assert len(params) <= len(ot.task.dependencies)
         assert len(params) <= 3
 
-        info(_str_time() + 'Parallel: running own task ' + ot.task.name)
+        info('{}: Parallel: running own task {}'.format(_log_time(), ot.task.name))
         t0 = time.perf_counter()
         tp0 = time.process_time()
 
@@ -667,15 +673,15 @@ class Parallel:
         # ATTENTION: ot.task.f(...) may call add_task() or add_task(s) within
         (ex, out) = _run_task(ot.task, params)
         if ex is not None:
-            raise Exception('Parallel: Exception is user task, quitting')
+            raise Exception('Parallel: Exception in user task, quitting')
         newnall = len(self.all_task_nodes)
         assert newnall >= nall
         wereadded = newnall > nall
 
         elapsed = time.perf_counter() - t0
         cpu = time.process_time() - tp0
-        info(_str_time() + 'Parallel: done own task ' + ot.task.name + ', cpu/elapsed=' + _str_dt(
-            cpu) + '/' + _str_dt(elapsed) + 's')
+        info('{}: Parallel: done own task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
+            _log_time(), ot.task.name, cpu, elapsed))
         towntask += elapsed
 
         keystr = ot.task.name.split('.')[0]
@@ -696,22 +702,11 @@ class Parallel:
     def is_all_done(self) -> bool:
         self._stats()
         return len(self.done_task_nodes) == len(self.all_task_nodes)
-        # if len(self.pending_task_nodes) > 0:
-        #    return False
-        # if len(self.ready_task_nodes) > 0 or len(self.ready_own_task_nodes) > 0:
-        #    return False
-        # if len(self.running_task_nodes) > 0:
-        #    return False
-        # return True
 
     def add_task(self, task: Task) -> None:  # to be called from owntask.f()
         assert task.name not in self.all_task_nodes
         added = self._internal_add_task_if(task)
         assert added  # failure to add is ok only during original building of the tree
-        # print(_printTime()+'Parallel: late task '+task.name+' added')
-
-    def add_tasks(self, tasks: list[Task]) -> None:
-        self._internal_add_tasks(tasks)
 
     def _find_best_process(self) -> int:
         besti = -1
@@ -743,7 +738,7 @@ class Parallel:
                                                               oldw + dt) / 2  # heuristics to get some balance between new value and history
         else:
             if abs(task.w - dt) > task.w * 0.3:  # ~30% tolerance
-                debug('Parallel: task ' + task.name + ': expected=' + str(task.w) + ', real=' + str(dt))
+                debug('Parallel: task {}: expected={:.2f}, real={:.2f}'.format(task.name, task.w, dt))
 
     def estimated_time(self, taskname: str, defaulttime: float) -> float:
         return self.updated_json_weights.get(taskname, self.json_weights.get(taskname, defaulttime))
@@ -783,12 +778,12 @@ class Parallel:
             got = self.outq.get()
             if isinstance(got, _Started):
                 self.procrunningconfirmed[got.proc_num] = True
-                # print('Parallel: joinAll(): process #'+str(got.procnum+1)+' confirmed as started')
+                # debug('Parallel: joinAll(): process #{} confirmed as started',got.procnum+1)
 
         info('All processes confirmed as started, waiting for joins')
         for i in range(self.nprocesses):
             self.processes[i].join()
-            debug('Process #' + str(i + 1) + ' joined')
+            debug('Process #{} joined'.format(i + 1))
         self.has_joined = True
 
     def unpublish(self, name: str) -> None:
@@ -797,12 +792,10 @@ class Parallel:
         del self.publications[name]
 
     def _stats(self) -> None:
-        debug('Parallel: ' + str(len(self.all_task_nodes)) + ' tasks, including '
-              + str(len(self.pending_task_nodes)) + ' pending, '
-              + str(len(self.ready_task_nodes)) + '/' + str(len(self.ready_own_task_nodes)) + ' ready, '
-              + str(len(self.running_task_nodes)) + ' running, '
-              + str(len(self.done_task_nodes)) + ' done.'
-              )
+        debug('Parallel: {} tasks, including {} pending, {}/{} ready, {} running, {} done'.format(
+            len(self.all_task_nodes), len(self.pending_task_nodes), len(self.ready_task_nodes),
+            len(self.ready_own_task_nodes), len(self.running_task_nodes), len(self.done_task_nodes))
+        )
         assert (len(self.all_task_nodes) == len(self.pending_task_nodes)
                 + len(self.ready_task_nodes) + len(self.ready_own_task_nodes)
                 + len(self.running_task_nodes) + len(self.done_task_nodes))
@@ -810,8 +803,8 @@ class Parallel:
     def __exit__(self, exceptiontype: Type[BaseException] | None, exceptionval: BaseException | None,
                  exceptiontraceback: TracebackType | None):
         if exceptiontype is not None:
-            critical('Parallel: exception ' + str(exceptiontype) + ' :' + str(exceptionval))
-            warn('\n'.join(traceback.format_tb(exceptiontraceback)))
+            critical('Parallel: exception {}: {}'.format(exceptiontype, exceptionval))
+            debug('\n'.join(traceback.format_tb(exceptiontraceback)))
 
         if not self.shutting_down:
             self.shutdown()
