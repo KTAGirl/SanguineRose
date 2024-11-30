@@ -3,14 +3,13 @@
 #  2. minor. we want to keep these files as small as feasible (while keeping it more or less readable),
 #            hence JSON5 quote-less names, and path and elements "compression". It was seen to save 3.8x (2x for default pcompression=0), for a 50M file it is quite a bit
 
-import base64
 import re
 import urllib.parse as urlparse
 from abc import ABC, abstractmethod
 from enum import Enum
 
 from mo2gitlib.common import *
-from mo2gitlib.files import from_json_hash
+from mo2gitlib.files import from_json_hash, to_json_hash
 
 
 ### compressors
@@ -60,23 +59,22 @@ class GitParamStrCompressor(GitParamCompressor):
 class GitParamHashCompressor(GitParamCompressor):
     can_skip: bool
     name: str
-    prev: int
+    prev: bytes | None
 
     def __init__(self, name: str, can_skip: bool) -> None:
         self.can_skip = can_skip
         self.name = name
-        self.prev = 0
+        self.prev = None
 
-
-    def compress(self, h: int) -> str:
-        assert isinstance(h, int)
+    def compress(self, h: bytes) -> str:
+        assert isinstance(h, bytes)
         if h is None:
             assert self.can_skip
             return ''
         if self.can_skip and self.prev == h:
             return ''
         self.prev = h
-        return self.name + ':"' + GitParamHashCompressor._to_json_hash(h) + '"'
+        return self.name + ':"' + to_json_hash(h) + '"'
 
 
 class GitParamPathCompressor(GitParamCompressor):
@@ -206,7 +204,7 @@ class GitParamStrDecompressor(GitParamDecompressor):
 
 class GitParamHashDecompressor(GitParamDecompressor):
     name: str
-    prev: int | None
+    prev: bytes | None
 
     def __init__(self, name: str) -> None:
         self.name = name
@@ -215,11 +213,11 @@ class GitParamHashDecompressor(GitParamDecompressor):
     def regex_part(self) -> str:
         return self.name + r':("([^"]*)"*)'
 
-    def matched(self, match: str) -> int:
+    def matched(self, match: str) -> bytes:
         self.prev = from_json_hash(match)
         return self.prev
 
-    def skipped(self) -> int:
+    def skipped(self) -> bytes:
         assert self.prev is not None
         return self.prev
 

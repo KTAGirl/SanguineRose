@@ -160,6 +160,7 @@ def make_shared_return_param(shared: SharedReturn) -> SharedReturnParam:
     global _proc_num
     return shared.name(), _proc_num
 
+
 def log_process_prefix() -> str:
     global _proc_num
     return 'Process #{}: '.format(_proc_num + 1)

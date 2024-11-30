@@ -7,7 +7,8 @@ from mo2gitlib.common import *
 ZEROHASH = hashlib.sha256(b"")
 
 
-def calculate_file_hash(fpath: str) -> bytes:  # using SHA-256, the fastest crypto-function because of hardware instruction
+def calculate_file_hash(
+        fpath: str) -> bytes:  # using SHA-256, the fastest crypto-function because of hardware instruction
     st = os.lstat(fpath)
     assert stat.S_ISREG(st.st_mode) and not stat.S_ISLNK(st.st_mode)
     h = hashlib.sha256()
@@ -79,7 +80,7 @@ class File:
             return '{{"file_path":{},"file_hash":null}}'.format(escape_json(self.file_path))
         else:
             return '{{"file_hash":"{}","file_modified":{},"file_path":"{}"}}'.format(to_json_hash(self.file_hash),
-                                                                                 self.file_modified, self.file_path)
+                                                                                     self.file_modified, self.file_path)
 
 
 class ArchiveEntry:

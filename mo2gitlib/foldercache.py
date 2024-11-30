@@ -209,12 +209,12 @@ def _scan_folder_own_task_func(out: tuple[list[str], _FolderScanStats, _FolderSc
     stats.add(gotstats)
     assert len(scannedfiles.keys() & sdout.scanned_files.keys()) == 0
     scannedfiles |= sdout.scanned_files
-    #if sdout.root in foldercache.all_scan_stats:
+    # if sdout.root in foldercache.all_scan_stats:
     #    assert len(foldercache.all_scan_stats[sdout.root].keys() & sdout.scan_stats.keys()) == 0
     #    foldercache.all_scan_stats[sdout.root] |= sdout.scan_stats
-    #else:
+    # else:
     #    foldercache.all_scan_stats[sdout.root] = sdout.scan_stats
-    foldercache.all_scan_stats[sdout.root] = sdout.scan_stats # always overwriting scan_stats
+    foldercache.all_scan_stats[sdout.root] = sdout.scan_stats  # always overwriting scan_stats
 
     for f in sdout.requested_files:
         (fpath, tstamp, fsize) = f
