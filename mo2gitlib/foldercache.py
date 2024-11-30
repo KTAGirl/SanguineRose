@@ -20,19 +20,19 @@ def _get_file_timestamp_from_st(st: os.stat_result) -> float:
 
 def _read_dict_of_files(dirpath: str, name: str) -> dict[str, File]:
     assert Folders.is_normalized_dir_path(dirpath)
-    fpath = dirpath + name + '.pickle'
+    fpath = dirpath + 'foldercache.' + name + '.pickle'
     return read_dict_from_pickled_file(fpath)
 
 
 def _write_dict_of_files(dirpath: str, name: str, files: dict[str, File], filteredfiles: dict[str, File]) -> None:
     assert Folders.is_normalized_dir_path(dirpath)
-    fpath = dirpath + name + '.pickle'
+    fpath = dirpath + 'foldercache.' + name + '.pickle'
     outfiles: dict[str, File] = files | filteredfiles
     with open(fpath, 'wb') as wf:
         # noinspection PyTypeChecker
         pickle.dump(outfiles, wf)
 
-    fpath2 = dirpath + name + '.njson'
+    fpath2 = dirpath + 'foldercache.' + name + '.njson'
     with open_3rdparty_txt_file_w(fpath2) as wf2:
         srt: list[tuple[str, File]] = sorted(outfiles.items())
         for item in srt:
@@ -41,22 +41,22 @@ def _write_dict_of_files(dirpath: str, name: str, files: dict[str, File], filter
 
 def _read_all_scan_stats(dirpath: str, name: str) -> dict[str, dict[str, int]]:
     assert Folders.is_normalized_dir_path(dirpath)
-    fpath = dirpath + name + '.scan-stats.pickle'
+    fpath = dirpath + 'foldercache.' + name + '.scan-stats.pickle'
     return read_dict_from_pickled_file(fpath)
 
 
 def _write_all_scan_stats(dirpath: str, name: str, all_scan_stats: dict[str, dict[str, int]]) -> None:
     assert Folders.is_normalized_dir_path(dirpath)
-    fpath = dirpath + name + '.scan-stats.pickle'
+    fpath = dirpath + 'foldercache.' + name + '.scan-stats.pickle'
     with open(fpath, 'wb') as wf:
         # noinspection PyTypeChecker
         pickle.dump(all_scan_stats, wf)
 
-    fpath2 = dirpath + name + '.scan-stats.json'
+    fpath2 = dirpath + 'foldercache.' + name + '.scan-stats.json'
     srt = sorted(all_scan_stats.items())
     with open_3rdparty_txt_file_w(fpath2) as wf2:
         # noinspection PyTypeChecker
-        json.dump(srt, wf2)
+        json.dump(srt, wf2, indent=2)
 
 
 class _FolderScanStats:
@@ -184,6 +184,8 @@ def _scan_folder_task_func(
     started = time.perf_counter()
     lfilesbypath = len(filesbypath)
     FolderCache._scan_dir(started, sdout, stats, rootpath, taskroot, filesbypath, pubfilesbypath, exdirs, name)
+    debug('{}FolderCache._scan_folder_task_func(): requested_files/requested_dirs/scanned_files={}/{}/{}'.format(
+        tasks.log_process_prefix(), len(sdout.requested_files), len(sdout.requested_dirs), len(sdout.scanned_files)))
     assert len(filesbypath) == lfilesbypath
     return exdirs, stats, sdout
 
@@ -207,11 +209,12 @@ def _scan_folder_own_task_func(out: tuple[list[str], _FolderScanStats, _FolderSc
     stats.add(gotstats)
     assert len(scannedfiles.keys() & sdout.scanned_files.keys()) == 0
     scannedfiles |= sdout.scanned_files
-    if sdout.root in foldercache.all_scan_stats:
-        assert len(foldercache.all_scan_stats[sdout.root].keys() & sdout.scan_stats.keys()) == 0
-        foldercache.all_scan_stats[sdout.root] |= sdout.scan_stats
-    else:
-        foldercache.all_scan_stats[sdout.root] = sdout.scan_stats
+    #if sdout.root in foldercache.all_scan_stats:
+    #    assert len(foldercache.all_scan_stats[sdout.root].keys() & sdout.scan_stats.keys()) == 0
+    #    foldercache.all_scan_stats[sdout.root] |= sdout.scan_stats
+    #else:
+    #    foldercache.all_scan_stats[sdout.root] = sdout.scan_stats
+    foldercache.all_scan_stats[sdout.root] = sdout.scan_stats # always overwriting scan_stats
 
     for f in sdout.requested_files:
         (fpath, tstamp, fsize) = f
@@ -436,11 +439,11 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         scannedfiles = {}
         stats = _FolderScanStats()
 
-        loadtaskname = 'mo2git.foldercache.load.' + self.name
+        loadtaskname = 'mo2gitlib.foldercache.load.' + self.name
         loadtask = tasks.Task(loadtaskname, _load_files_task_func, (self.cache_dir, self.name), [])
         parallel.add_task(loadtask)
 
-        loadowntaskname = 'mo2git.foldercache.loadown.' + self.name
+        loadowntaskname = 'mo2gitlib.foldercache.loadown.' + self.name
         loadowntask = tasks.OwnTask(loadowntaskname, lambda _, out: _load_files_own_task_func(out, self, parallel),
                                     None,
                                     [loadtaskname])
@@ -510,6 +513,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 found = const_filesbypath.get(fpath)
                 matched = False
                 if found is not None:
+                    # debug('FolderCache: found {}'.format(fpath))
                     sdout.scanned_files[fpath] = found
                     if found.file_hash is None:  # file in cache marked as deleted, re-adding
                         pass
@@ -522,6 +526,8 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                                     'FolderCache: file size changed while timestamp did not for file {}, re-hashing it'.format(
                                         fpath))
                                 matched = False
+                else:
+                    debug('FolderCache: not found {}'.format(fpath))
                 if not matched:
                     sdout.requested_files.append((fpath, tstamp, st.st_size))
             elif stat.S_ISDIR(fmode):
