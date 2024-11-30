@@ -68,6 +68,8 @@ def critical(msg: str) -> None:
 
 
 def debug(msg: str) -> None:
+    if not __debug__:
+        return
     global _logger
     _logger.debug(msg)
 
