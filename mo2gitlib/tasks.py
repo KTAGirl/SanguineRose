@@ -222,18 +222,18 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue) 
                 t0 = time.perf_counter()
                 tp0 = time.process_time()
                 if dwait is not None:
-                    info('{}: Process #{}: after waiting for {:.2f}s, starting task {}'.format(
+                    info('{:.2f}: Process #{}: after waiting for {:.2f}s, starting task {}'.format(
                         _log_time(), proc_num + 1, dwait, task.name))
                     dwait = None
                 else:
-                    info('{}: Process #{}: starting task {}'.format(
+                    info('{:.2f}: Process #{}: starting task {}'.format(
                         _log_time(), proc_num + 1, task.name))
                 (ex, out) = _run_task(task, tplus[1:])
                 if ex is not None:
                     break  # while True
                 elapsed = time.perf_counter() - t0
                 cpu = time.process_time() - tp0
-                info('{}: Process #{}: done task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
+                info('{:.2f}: Process #{}: done task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
                     _log_time(), proc_num + 1, task.name, cpu, elapsed))
                 outtasks.append((task.name, (cpu, elapsed), out))
             outq.put((proc_num, outtasks))
@@ -427,11 +427,15 @@ class Parallel:
             if int(parent.state) < int(_TaskGraphNodeState.Done):
                 node.waiting_for_n_deps += 1
 
+        # processing other task's dependencies on this task's patterns
         for p in patterns:
             for n in self.all_task_nodes.values():
                 if n.state < _TaskGraphNodeState.Done and n.task.name.startswith(p):
                     node.waiting_for_n_deps += 1
                     n.children.append(node)
+                    debug(
+                        'Parallel: adding task {} with pattern {}, now it has {} dependencies due to existing task {}'.format(
+                            node.task.name, p, node.waiting_for_n_deps, n.task.name))
             node.parents.append(p)
             self.pending_patterns.append((p, node))
 
@@ -448,12 +452,15 @@ class Parallel:
         else:
             self.pending_task_nodes[task.name] = node
 
-        # processing other dependencies on this task's patterns
+        # processing other task's pattern dependencies on this task
         for pp in self.pending_patterns:
             (p, n) = pp
             if task.name.startswith(p):
                 node.children.append(n)
                 n.waiting_for_n_deps += 1
+                debug('Parallel: task {} now has {} dependencies due to added task {}'.format(n.task.name,
+                                                                                              n.waiting_for_n_deps,
+                                                                                              node.task.name))
 
         return True
 
@@ -479,15 +486,12 @@ class Parallel:
                          + taskstr + '\n')
                 abort_if_not(False)
 
-    def _run_own_tasks_including_readditions(self, owntaskstats: dict[str, tuple[int, float, float]]) -> float:
+    def _run_all_own_tasks(self, owntaskstats: dict[str, tuple[int, float, float]]) -> float:
         town = 0.
-        while True:
-            out = self._run_own_task(
+        while len(self.ready_own_task_nodes) > 0:
+            towntasks = self._run_own_task(
                 owntaskstats)  # ATTENTION: own tasks may call add_task() or add_tasks() within
-            (wereadded, towntasks) = out
             town += towntasks
-            if not wereadded:
-                break  # while True
         return town
 
     def run(self, tasks: list[Task]) -> None:
@@ -503,7 +507,7 @@ class Parallel:
         owntaskstats: dict[str, tuple[int, float, float]] = {}
 
         # we need to try running own tasks before main loop - otherwise we can get stuck in an endless loop of self._schedule_best_tasks()
-        maintown += self._run_own_tasks_including_readditions(owntaskstats)
+        maintown += self._run_all_own_tasks(owntaskstats)
 
         # main loop
         while True:
@@ -513,7 +517,7 @@ class Parallel:
                 pass
             maintschedule += (time.perf_counter() - sch0)
 
-            maintown += self._run_own_tasks_including_readditions(owntaskstats)
+            maintown += self._run_all_own_tasks(owntaskstats)
 
             sch0 = time.perf_counter()
             while self._schedule_best_tasks():  # tasks may have been added by _run_own_tasks(), need to check again
@@ -562,11 +566,11 @@ class Parallel:
                 dt = time.perf_counter() - started
                 if strwait is not None:
                     info(
-                        '{}: Parallel: after waiting for {}, received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
+                        '{:.2f}: Parallel: after waiting for {}, received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
                             _log_time(), strwait, taskname, procnum + 1, dt, taskt, cput))
                 else:
                     info(
-                        '{}: Parallel: received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
+                        '{:.2f}: Parallel: received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
                             _log_time(), taskname, procnum + 1, dt, taskt, cput))
 
                 strwait = None
@@ -582,7 +586,7 @@ class Parallel:
 
         maintelapsed = time.perf_counter() - maintstarted
         info(
-            '{}: Parallel: main thread: waited+owntasks+scheduler+unaccounted=elapsed {:.2f}+{:.2f}+{:.2f}+{:.2f}={:.2f}s, {:.1f}% load'.format(
+            '{:.2f}: Parallel: main thread: waited+owntasks+scheduler+unaccounted=elapsed {:.2f}+{:.2f}+{:.2f}+{:.2f}={:.2f}s, {:.1f}% load'.format(
                 _log_time(), maintwait, maintown, maintschedule, maintelapsed - maintwait - maintown - maintschedule,
                 maintelapsed, 100 * (1. - maintwait / maintelapsed)))
         info("Parallel: breakdown per task type (task name before '.'):")
@@ -630,7 +634,7 @@ class Parallel:
 
         msg = (taskpluses, None)
         self.inqueues[pidx].put(msg)
-        info('{}: Parallel: assigned tasks {} to process #{}'.format(_log_time(), tasksstr, pidx + 1))
+        info('{:.2f}: Parallel: assigned tasks {} to process #{}'.format(_log_time(), tasksstr, pidx + 1))
         if __debug__:  # pickle.dumps is expensive by itself
             debug('Parallel: request size: {}'.format(len(pickle.dumps(msg))))
         self.processesload[pidx] += 1
@@ -639,14 +643,13 @@ class Parallel:
     def _notify_sender_shm_done(self, pidx: int, name: str) -> None:
         if pidx < 0:
             assert pidx == -1
-            debug('{}: Parallel: Releasing own shm={}'.format(_log_time(), name))
+            debug('{:.2f}: Parallel: Releasing own shm={}'.format(_log_time(), name))
             _pool_of_shared_returns.done_with(name)
         else:
             self.inqueues[pidx].put((None, name))
 
-    def _run_own_task(self, owntaskstats: dict[str, tuple[int, float, float]]) -> tuple[bool, float]:
-        if len(self.ready_own_task_nodes) == 0:
-            return False, 0.
+    def _run_own_task(self, owntaskstats: dict[str, tuple[int, float, float]]) -> float:
+        assert len(self.ready_own_task_nodes) > 0
         towntask = 0.
         best = min(self.ready_own_task_nodes.values(), key=lambda tpl: -tpl[1])
 
@@ -665,7 +668,7 @@ class Parallel:
         assert len(params) <= len(ot.task.dependencies)
         assert len(params) <= 3
 
-        info('{}: Parallel: running own task {}'.format(_log_time(), ot.task.name))
+        info('{:.2f}: Parallel: running own task {}'.format(_log_time(), ot.task.name))
         t0 = time.perf_counter()
         tp0 = time.process_time()
 
@@ -674,13 +677,13 @@ class Parallel:
         (ex, out) = _run_task(ot.task, params)
         if ex is not None:
             raise Exception('Parallel: Exception in user task, quitting')
-        newnall = len(self.all_task_nodes)
-        assert newnall >= nall
-        wereadded = newnall > nall
+        #newnall = len(self.all_task_nodes)
+        #assert newnall >= nall
+        #wereadded = newnall > nall
 
         elapsed = time.perf_counter() - t0
         cpu = time.process_time() - tp0
-        info('{}: Parallel: done own task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
+        info('{:.2f}: Parallel: done own task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
             _log_time(), ot.task.name, cpu, elapsed))
         towntask += elapsed
 
@@ -697,7 +700,7 @@ class Parallel:
         ot.state = _TaskGraphNodeState.Done
         self.done_task_nodes[ot.task.name] = (ot, out)
 
-        return wereadded, towntask
+        return towntask
 
     def is_all_done(self) -> bool:
         self._stats()

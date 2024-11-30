@@ -463,7 +463,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         scanningdeps = [_scanned_own_task_name(self.name, folderplus[0]) + '*' for folderplus in self.folder_list]
         hashingdeps = [_hashing_own_wildcard_task_name(self.name, folderplus[0]) for folderplus in self.folder_list]
         reconciletask = tasks.OwnTask(_reconcile_own_task_name(self.name),
-                                      lambda _, _1: _own_reconcile_task_func(self, parallel, scannedfiles),
+                                      lambda _: _own_reconcile_task_func(self, parallel, scannedfiles),
                                       None, scanningdeps + hashingdeps)
         parallel.add_task(reconciletask)
 
