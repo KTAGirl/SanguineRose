@@ -125,7 +125,7 @@ class Folders:
         self.ignore_dirs = []
         for ignore in ignores:
             if ignore == '{DEFAULT-IGNORES}':
-                self.ignore_dirs += [self.mo2_dir + defignore for defignore in [
+                self.ignore_dirs += [_normalize_dir_path(self.mo2_dir + defignore) for defignore in [
                     'plugins\\data\\RootBuilder',
                     'crashDumps',
                     'logs',
