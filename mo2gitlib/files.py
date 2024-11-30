@@ -1,3 +1,4 @@
+import base64
 import hashlib
 
 from mo2gitlib.common import *
@@ -19,7 +20,22 @@ def calculate_file_hash(fpath: str) -> bytes:  # our file hash function, compati
 
 def truncate_file_hash(h: bytes) -> bytes:
     assert len(h) == 32
-    return h[:12]
+    return h[:9]
+
+
+def to_json_hash(h: bytes) -> str:
+    b64 = base64.b64encode(h).decode('ascii')
+    # print(b64)
+    s = b64.rstrip('=')
+    # assert from_json_hash(s) == h
+    return s
+
+
+def from_json_hash(s: str) -> bytes:
+    ntopad = (3 - (len(s) % 3)) % 3
+    s += '=='[:ntopad]
+    b = base64.b64decode(s)
+    return b
 
 
 class File:
@@ -47,24 +63,24 @@ class File:
 
     def to_json(self) -> str:
         if self.file_hash is None:
-            return '{"file_path": ' + escape_json(self.file_path) + ', "file_hash":null}'
+            return '{{"file_path":{},"file_hash":null}}'.format(escape_json(self.file_path))
         else:
-            return '{"file_hash":' + str(self.file_hash) + ', "file_modified": ' + str(
-                self.file_modified) + ', "file_path": ' + escape_json(self.file_path) + '}'
+            return '{{"file_hash":"{}","file_modified":{},"file_path":"{}"}}'.format(to_json_hash(self.file_hash),
+                                                                                 self.file_modified, self.file_path)
 
 
 class ArchiveEntry:
-    archive_hash: int
+    archive_hash: bytes
     intra_path: list[str]
     file_size: int
-    file_hash: int
+    file_hash: bytes
 
-    def __init__(self, archive_hash: int, intra_path: list[str], file_size: int, file_hash: int) -> None:
+    def __init__(self, archive_hash: bytes, intra_path: list[str], file_size: int, file_hash: bytes) -> None:
         self.archive_hash = archive_hash
         self.intra_path = intra_path
         self.file_size = file_size
         self.file_hash = file_hash
 
     def to_json(self) -> str:
-        return '{"archive_hash":' + str(self.archive_hash) + ', "intra_path": ' + escape_json(
-            self.intra_path) + ', "file_size": ' + str(self.file_size) + ', "file_hash": ' + str(self.file_hash) + '}'
+        return '{{"archive_hash":"{}","intra_path":{},"file_size":{},"file_hash":"{}"}}'.format(
+            to_json_hash(self.archive_hash), escape_json(self.intra_path), self.file_size, to_json_hash(self.file_hash))

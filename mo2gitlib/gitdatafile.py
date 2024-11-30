@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 
 from mo2gitlib.common import *
+from mo2gitlib.files import from_json_hash
 
 
 ### compressors
@@ -66,17 +67,6 @@ class GitParamHashCompressor(GitParamCompressor):
         self.name = name
         self.prev = 0
 
-    @staticmethod
-    def _to_json_hash(h: int) -> str:
-        assert h >= 0
-        assert h < 2 ** 64
-        # print(h)
-        b = h.to_bytes(8, 'little', signed=False)
-        b64 = base64.b64encode(b).decode('ascii')
-        # print(b64)
-        s = b64.rstrip('=')
-        # assert from_json_hash(s) == h
-        return s
 
     def compress(self, h: int) -> str:
         assert isinstance(h, int)
@@ -226,7 +216,7 @@ class GitParamHashDecompressor(GitParamDecompressor):
         return self.name + r':("([^"]*)"*)'
 
     def matched(self, match: str) -> int:
-        self.prev = GitParamHashDecompressor._from_json_hash(match)
+        self.prev = from_json_hash(match)
         return self.prev
 
     def skipped(self) -> int:
@@ -235,14 +225,6 @@ class GitParamHashDecompressor(GitParamDecompressor):
 
     def reset(self) -> None:
         self.prev = None
-
-    @staticmethod
-    def _from_json_hash(s: str) -> int:
-        ntopad = (3 - (len(s) % 3)) % 3
-        s += '=='[:ntopad]
-        b = base64.b64decode(s)
-        h = int.from_bytes(b, byteorder='little')
-        return h
 
 
 class GitParamPathDecompressor(GitParamDecompressor):

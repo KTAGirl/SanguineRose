@@ -591,7 +591,7 @@ class Parallel:
                 maintelapsed, 100 * (1. - maintwait / maintelapsed)))
         info("Parallel: breakdown per task type (task name before '.'):")
         for key, val in owntaskstats.items():
-            info('  : {}, took {:.2f}/{:.2f}s'.format(val[0], val[1], val[2]))
+            info('  {}: {}, took {:.2f}/{:.2f}s'.format(key, val[0], val[1], val[2]))
 
     def _schedule_best_tasks(self) -> bool:  # may schedule multiple tasks as one meta-task
         pidx = self._find_best_process()
@@ -677,9 +677,9 @@ class Parallel:
         (ex, out) = _run_task(ot.task, params)
         if ex is not None:
             raise Exception('Parallel: Exception in user task, quitting')
-        #newnall = len(self.all_task_nodes)
-        #assert newnall >= nall
-        #wereadded = newnall > nall
+        # newnall = len(self.all_task_nodes)
+        # assert newnall >= nall
+        # wereadded = newnall > nall
 
         elapsed = time.perf_counter() - t0
         cpu = time.process_time() - tp0
@@ -687,7 +687,9 @@ class Parallel:
             _log_time(), ot.task.name, cpu, elapsed))
         towntask += elapsed
 
-        keystr = ot.task.name.split('.')[0]
+        lastdot = ot.task.name.rfind('.')
+        assert lastdot >= 0
+        keystr = ot.task.name[:lastdot]
         oldstat = owntaskstats.get(keystr, (0, 0., 0.))
         owntaskstats[keystr] = (oldstat[0] + 1, oldstat[1] + cpu, oldstat[2] + elapsed)
 
