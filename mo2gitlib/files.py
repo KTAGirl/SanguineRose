@@ -1,21 +1,34 @@
 import base64
 import hashlib
+import stat
 
 from mo2gitlib.common import *
 
 ZEROHASH = hashlib.sha256(b"")
 
 
-def calculate_file_hash(fpath: str) -> bytes:  # our file hash function, compatible with WJ
+def calculate_file_hash(fpath: str) -> bytes:  # using SHA-256, the fastest crypto-function because of hardware instruction
+    st = os.lstat(fpath)
+    assert stat.S_ISREG(st.st_mode) and not stat.S_ISLNK(st.st_mode)
     h = hashlib.sha256()
     blocksize = 1048576
+    fsize = 0
     with open(fpath, 'rb') as f:
         while True:
             bb = f.read(blocksize)
             h.update(bb)
-            assert len(bb) <= blocksize
-            if len(bb) != blocksize:
-                return h.digest()
+            lbb = len(bb)
+            assert lbb <= blocksize
+            fsize += lbb
+            if lbb != blocksize:
+                break
+
+    # were there any changes while we were working?
+    assert st.st_size == fsize
+    st2 = os.lstat(fpath)
+    assert st2.st_size == st.st_size
+    assert st2.st_mtime == st.st_mtime
+    return h.digest()
 
 
 def truncate_file_hash(h: bytes) -> bytes:
