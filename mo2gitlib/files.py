@@ -135,12 +135,12 @@ class GitMasterArchiveHandler(GitDataHandler):
 
 class GitMasterArchiveFile:
     _aentry_mandatory: list[GitDataParam] = [
-        GitDataParam('i', GitDataType.Path, False),
-        GitDataParam('i2', GitDataType.Path),
-        GitDataParam('a', GitDataType.Hash),  # archive hash
-        GitDataParam('x', GitDataType.Int),  # archive size
-        GitDataParam('h', GitDataType.Hash, False),  # file hash (truncated)
-        GitDataParam('s', GitDataType.Int)  # file size
+        GitDataParam('i', GitDataType.Path, False),  # intra_path[0]
+        GitDataParam('j', GitDataType.Path),  # intra_path[1]
+        GitDataParam('a', GitDataType.Hash),  # archive_hash
+        GitDataParam('x', GitDataType.Int),  # archive_size
+        GitDataParam('h', GitDataType.Hash, False),  # file_hash (truncated)
+        GitDataParam('s', GitDataType.Int)  # file_size
     ]
 
     archives: list[Archive]
@@ -151,7 +151,7 @@ class GitMasterArchiveFile:
     def write(self, wfile: typing.TextIO) -> None:
         write_file_header_comment(wfile)
         wfile.write(
-            '  archives: [ // Legend: i=intra_archive_path, i2=intra_archive_path2, a=archive_hash, x=archive_size, h=file_hash, s=file_size\n')
+            '  archives: [ // Legend: i=intra_archive_path, j=intra_archive_path2, a=archive_hash, x=archive_size, h=file_hash, s=file_size\n')
 
         ahandler = GitDataHandler(GitMasterArchiveHandler.optional)
         da = GitDataList(self._aentry_mandatory, [ahandler])
