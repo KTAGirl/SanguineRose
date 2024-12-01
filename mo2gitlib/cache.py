@@ -1,6 +1,6 @@
 import mo2gitlib.tasks as tasks
 import mo2gitlib.wjcompat.wjdb as wjdb
-from mo2gitlib.aentriescache import ArchiveEntriesCache
+from mo2gitlib.archivesdata import ArchiveEntriesCache
 from mo2gitlib.common import *
 from mo2gitlib.files import File
 from mo2gitlib.foldercache import FolderCache, FolderList

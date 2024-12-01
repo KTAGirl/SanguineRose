@@ -156,7 +156,8 @@ def _load_files_task_func(param: tuple[str, str]) -> tuple[dict[str, File]]:
     return (filesbypath,)
 
 
-def _load_files_own_task_func(out, foldercache: "FolderCache", parallel: tasks.Parallel) -> tuple[tasks.SharedPubParam]:
+def _load_files_own_task_func(out: tuple[dict[str, File]], foldercache: "FolderCache", parallel: tasks.Parallel) -> \
+tuple[tasks.SharedPubParam]:
     (filesbypath,) = out
     foldercache.files_by_path = {}
     foldercache.filtered_files = {}
@@ -192,7 +193,8 @@ def _scan_folder_task_func(
 
 def _calc_hash_task_func(param: tuple[str, float, int]) -> tuple[File]:
     (fpath, tstamp, fsize) = param
-    h = calculate_file_hash(fpath)
+    s, h = calculate_file_hash(fpath)
+    assert s == fsize
     return (File(h, tstamp, fpath, fsize),)
 
 

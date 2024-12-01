@@ -217,7 +217,7 @@ class Master:
         level = masterconfig.get('pcompression', 0) if masterconfig is not None else 0
         assert isinstance(level, int)
 
-        write_file_header_comment(wfile)
+        write_git_file_header_comment(wfile)
         wfile.write('{ config: { pcompression: ' + str(level) + ' },\n')
         wfile.write('  archives: [ // Legend: n means "name", h means "hash"\n')
 

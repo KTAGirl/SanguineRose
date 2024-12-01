@@ -362,7 +362,7 @@ class GitDataList:
 
 ### writing
 
-def write_file_header_comment(wfile: typing.TextIO) -> None:
+def write_git_file_header_comment(wfile: typing.TextIO) -> None:
     wfile.write('// This is JSON5 file, to save some space compared to JSON.\n')
     wfile.write('// Still, do not edit it by hand, mo2git parses it itself using regex to save time\n')
 
