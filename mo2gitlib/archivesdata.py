@@ -1,5 +1,4 @@
-# noinspection PyUnresolvedReferences
-import pickle
+import shutil
 
 import mo2gitlib.pluginhandler as pluginhandler
 import mo2gitlib.tasks as tasks
@@ -136,10 +135,9 @@ def _write_git_archives(mastergitdir: str, archives: list[Archive]) -> None:
         GitArchivesJson().write(wf, archives)
 
 
-def _hash_archive(archive: Archive, tmppath: str, cur_intra_path: list[str],
+def _hash_archive(archive: Archive, tmppath: str, curintrapath: list[str],
                   plugin: pluginhandler.ArchivePluginBase, archivepath: str) -> None:  # recursive!
-    if not os.path.isdir(tmppath):
-        os.makedirs(tmppath)
+    assert os.path.isdir(tmppath)
     plugin.extract_all(archivepath, tmppath)
     pluginexts = pluginhandler.all_archive_plugins_extensions()  # for nested archives
     for root, dirs, files in os.walk(tmppath):
@@ -151,15 +149,18 @@ def _hash_archive(archive: Archive, tmppath: str, cur_intra_path: list[str],
             # print(fpath)
             s, h = calculate_file_hash(fpath)
             assert fpath.startswith(tmppath)
-            new_intra_path = cur_intra_path.copy()
-            new_intra_path.append(Folders.normalize_archive_intra_path(fpath[len(tmppath):]))
-            archive.files.append(FileInArchive(h, s, new_intra_path))
+            newintrapath = curintrapath.copy()
+            newintrapath.append(Folders.normalize_archive_intra_path(fpath[len(tmppath):]))
+            archive.files.append(FileInArchive(h, s, newintrapath))
 
             ext = os.path.split(fpath)[1].lower()
             if ext in pluginexts:
                 nested_plugin = pluginhandler.archive_plugin_for(fpath)
                 assert nested_plugin is not None
-                _hash_archive(archive, tmppath + str(nf) + '\\', new_intra_path, nested_plugin, fpath)
+                newtmppath = tmppath + str(nf) + '\\'
+                assert not os.path.isdir(newtmppath)
+                os.makedirs(newtmppath)
+                _hash_archive(archive, newtmppath, newintrapath, nested_plugin, fpath)
 
 
 ##### Tasks
@@ -190,11 +191,16 @@ def _load_archives_own_task_func(out: tuple[list[Archive], dict[str, any]], mga:
 
 
 def _archive_hashing_task_func(param: tuple[str, bytes, int, str]) -> tuple[Archive]:
-    (arpath, arhash, arsize, tmppath,) = param
+    (arpath, arhash, arsize, tmppath) = param
+    assert not os.path.isdir(tmppath)
+    os.makedirs(tmppath)
     plugin = pluginhandler.archive_plugin_for(arpath)
     assert plugin is not None
     archive = Archive(arhash, arsize, [])
     _hash_archive(archive, tmppath, [], plugin, arpath)
+    debug('MGA: about to remove temporary tree {}'.format(tmppath))
+    if False:
+        shutil.rmtree(tmppath)
     return (archive,)
 
 
@@ -219,6 +225,7 @@ class MasterGitArchives:
     cache_data: dict[str, any]
     archives_by_hash: dict[bytes, Archive] | None
     archived_files_by_hash: dict[bytes, tuple[Archive, FileInArchive]] | None
+    nhashes : int # number of hashes already requested
 
     def __init__(self, mastergitdir: str, cachedir: str, tmpdir: str, cache_data: dict[str, any]) -> None:
         self.master_git_dir = mastergitdir
@@ -227,6 +234,7 @@ class MasterGitArchives:
         self.cache_data = cache_data
         self.archives_by_hash = None
         self.archived_files_by_hash = None
+        self.nhashes = 0
 
     def start_tasks(self, parallel: tasks.Parallel) -> None:
         loadtaskname = 'mo2gitlib.mga.load'
@@ -241,8 +249,10 @@ class MasterGitArchives:
 
     def start_hashing_archive(self, arpath: str, arhash: bytes, arsize: int, parallel: tasks.Parallel) -> None:
         hashingtaskname = 'mo2gitlib.mga.hash.' + arpath
+        self.nhashes += 1
+        tmp_dir = self.tmp_dir + str(self.nhashes) + '\\'
         hashingtask = tasks.Task(hashingtaskname, _archive_hashing_task_func,
-                                 (arpath, arhash, arsize, self.tmp_dir), [])
+                                 (arpath, arhash, arsize, tmp_dir), [])
         parallel.add_task(hashingtask)
         hashingowntaskname = 'mo2gitlib.mga.hashown.' + arpath
         hashingowntask = tasks.OwnTask(hashingowntaskname,
