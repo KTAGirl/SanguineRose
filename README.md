@@ -22,7 +22,7 @@ modpack is similar to a *library* from traditional software development. It is a
 
 In essence, SanguineRose-based project is a [JSON5](https://json5.org/) *instruction on 'how to build mod pack on the target box'*. And as it is a text-based instruction - it can be managed by using standard GitHub mechanisms (history tracking, merges, pull requests, and so on). 
 
-## SanguineRose project as an automated 'how to build' instruction 
+#### SanguineRose project as an automated 'how to build' instruction 
 
 SanguineRose-based project is essentially just a (machine-executable, but human-readable) *instruction on 'how to build the MO2 folder' from Downloads folder"*. As in "go to such and such URL, get a file there, unpack it, and copy file X from the archive to this place within MO2 hierarchy". Rinse and repeat 10'000 times.
 
