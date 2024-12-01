@@ -387,7 +387,7 @@ class GitDataListWriter:
     def write_begin(self) -> None:
         pass
 
-    def write_line(self, handler: GitDataHandler, values: tuple[int | str | None, ...]) -> None:
+    def write_line(self, handler: GitDataHandler, values: tuple) -> None:
         assert len(values) == len(self.df.mandatory) + len(handler.optional)
         if self.line_num > 0:
             ln = ',\n{'
@@ -511,3 +511,44 @@ class GitDataListReader:
                 return True
 
         return False
+
+
+def skip_git_file_header(rfile: typing.TextIO, endline: typing.Pattern) -> int:
+    rdh = GitHeaderFooterReader()
+    lineno = 0
+    while True:
+        ln = rfile.readline()
+        lineno += 1
+        assert ln
+        processed = rdh.parse_line(ln)
+        if processed:
+            continue
+        if endline.search(ln):
+            return lineno
+
+
+def read_git_file_section(dlist: GitDataList, rfile: typing.TextIO, lineno: int, sectionend: re.Pattern) -> int:
+    rda = GitDataListReader(dlist)
+    while True:
+        ln = rfile.readline()
+        lineno += 1
+        assert ln
+        processed = rda.parse_line(ln)
+        if processed:
+            continue
+        if sectionend.search(ln):
+            return lineno
+
+
+def skip_git_file_footer(rfile: typing.TextIO, lineno: int) -> int:
+    rdh = GitHeaderFooterReader()
+    while True:
+        ln = rfile.readline()
+        lineno += 1
+        if not ln:
+            return lineno
+        processed = rdh.parse_line(ln)
+        if processed:
+            continue
+        critical('Unrecognized line #' + str(lineno) + ':' + ln)
+        abort_if_not(False)  # unknown pattern

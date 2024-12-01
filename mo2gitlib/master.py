@@ -268,33 +268,14 @@ class Master:
         assert len(self.archives) == 0
         assert len(self.files) == 0
 
-        lineno = 0
         # skipping header
         archivestart = re.compile(r'^\s*archives\s*:\s*\[\s*//')
-        rdh = GitHeaderFooterReader()
-        while True:
-            ln = rfile.readline()
-            lineno += 1
-            assert ln
-            processed = rdh.parse_line(ln)
-            if processed:
-                continue
-            if archivestart.search(ln):
-                break
+        lineno = skip_git_file_header(rfile, archivestart)
 
         # reading archives: [ ...
         filesstart = re.compile(r'^\s*]\s*,\s*files\s*:\s\[\s*//')
         da = GitDataList(self._a_mandatory, [ArchiveReadHandler(self.archives)])
-        rda = GitDataListReader(da)
-        while True:
-            ln = rfile.readline()
-            lineno += 1
-            assert ln
-            processed = rda.parse_line(ln)
-            if processed:
-                continue
-            if filesstart.search(ln):
-                break
+        lineno = read_git_file_section(da, rfile, lineno, filesstart)
 
         # reading files: [ ...
         filesend = re.compile(r'^\s*]\s*}')
@@ -309,25 +290,6 @@ class Master:
             handler_warning
         ]
         df = GitDataList(self._f_mandatory, handlers)
-        rdf = GitDataListReader(df)
-        while True:
-            ln = rfile.readline()
-            lineno += 1
-            assert ln
-            processed = rdf.parse_line(ln)
-            if processed:
-                continue
-            if filesend.search(ln):
-                break
+        lineno = read_git_file_section(df, rfile, lineno, filesend)
 
-        rdh = GitHeaderFooterReader()
-        while True:
-            ln = rfile.readline()
-            lineno += 1
-            if not ln:
-                return
-            processed = rdh.parse_line(ln)
-            if processed:
-                continue
-            critical('Unrecognized line #' + str(lineno) + ':' + ln)
-            abort_if_not(False)  # unknown pattern
+        skip_git_file_footer(rfile, lineno)
