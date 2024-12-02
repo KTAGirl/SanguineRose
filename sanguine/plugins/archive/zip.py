@@ -1,36 +1,38 @@
 import zipfile
 
+from sanguine.common import *
 from sanguine.pluginhandler import ArchivePluginBase
 
+
 class ZipArchivePlugin(ArchivePluginBase):
-    def extensions(self):
+    def extensions(self) -> list[str]:
         return ['.zip']
-        
-    def extract(self,archive,list_of_files,targetpath):
-        print('Extracting from '+archive+'...')
+
+    def extract(self, archive: str, list_of_files: list[str], targetpath: str) -> list[str]:
+        info('Extracting from {}...'.format(archive))
         z = zipfile.ZipFile(archive)
         names = z.namelist()
         lof_normalized = []
         for f in list_of_files:
-            normf = f.replace('\\','/')
+            normf = f.replace('\\', '/')
             lof_normalized.append(normf)
             if normf not in names:
-                print('WARNING: '+f+' NOT FOUND in '+archive)
+                warn('{} NOT FOUND in {}'.format(f, archive))
         out = []
         for f in lof_normalized:
-            z.extract(f,path=targetpath)
-            if os.path.isfile(targetpath+f):
-                out.append(targetpath+f)
+            z.extract(f, path=targetpath)
+            if os.path.isfile(targetpath + f):
+                out.append(targetpath + f)
             else:
-                print('WARNING: '+f+' NOT EXTRACTED from '+archive)
+                warn('{} NOT EXTRACTED from {}'.format(f, archive))
                 out.append(None)
         z.close()
         print('Extraction done')
         return out
-        
-    def extract_all(self, archive, targetpath):
-        print('Extracting from '+archive+'...')
+
+    def extract_all(self, archive: str, targetpath: str) -> None:
+        info('Extracting all from {}...'.format(archive))
         z = zipfile.ZipFile(archive)
         z.extractall(targetpath)
         z.close()
-        print('Extraction done')
+        info('Extraction done')

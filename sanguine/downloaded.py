@@ -179,8 +179,9 @@ def _append_archive(mga: "MasterGitArchives", ar: Archive) -> None:
     assert ar.archive_hash not in mga.archives_by_hash
     mga.archives_by_hash[ar.archive_hash] = ar
     for fi in ar.files:
-        assert fi.file_hash not in mga.archived_files_by_hash
-        mga.archived_files_by_hash[fi.file_hash] = (ar, fi)
+        if fi.file_hash not in mga.archived_files_by_hash:
+            mga.archived_files_by_hash[fi.file_hash] = []
+        mga.archived_files_by_hash[fi.file_hash].append((ar, fi))
 
 
 def _load_archives_own_task_func(out: tuple[list[Archive], dict[str, any]], mga: "MasterGitArchives") -> None:
@@ -228,7 +229,7 @@ class MasterGitArchives:
     tmp_dir: str
     cache_data: dict[str, any]
     archives_by_hash: dict[bytes, Archive] | None
-    archived_files_by_hash: dict[bytes, tuple[Archive, FileInArchive]] | None
+    archived_files_by_hash: dict[bytes, list[tuple[Archive, FileInArchive]]] | None
     nhashes: int  # number of hashes already requested; used to make name of tmp dir
 
     _LOADOWNTASKNAME = 'sanguine.downloaded.mga.loadown'
