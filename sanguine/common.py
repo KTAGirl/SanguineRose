@@ -53,25 +53,24 @@ logging.basicConfig(level=logging.DEBUG)
 
 def warn(msg: str) -> None:
     global _logger
-    _logger.warning(msg)
+    _logger.warning('\x1b[93;20m'+msg+'\x1b[0m')
 
 
 def info(msg: str) -> None:
     global _logger
-    _logger.info(msg)
+    _logger.info('\x1b[32m'+msg+'\x1b[0m')
 
 
 def critical(msg: str) -> None:
     global _logger
-    _logger.critical(msg)
+    _logger.critical('\x1b[91;1m'+msg+'\x1b[0m')
 
 
 def debug(msg: str) -> None:
     if not __debug__:
         return
     global _logger
-    _logger.debug(msg)
-
+    _logger.debug('\x1b[38;20m'+msg+'\x1b[0m')
 
 ###
 

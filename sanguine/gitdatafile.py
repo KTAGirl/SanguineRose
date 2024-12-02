@@ -349,9 +349,9 @@ class GitDataList:
                 for h in handlers:
                     assert not h.optional[0].can_skip  # otherwise regex parsing may become ambiguous
 
-            # handlers must distinguish by their first param (to avoid regex ambiguity)
-            first_param_names = [h.optional[0].name for h in handlers]
-            assert len(first_param_names) == len(set(first_param_names))
+                # handlers must distinguish by their first param (to avoid regex ambiguity)
+                first_param_names = [h.optional[0].name for h in handlers]
+                assert len(first_param_names) == len(set(first_param_names))
 
             # there must be no duplicate names for any handler, including mandatory fields (to be JSON5-compliant)
             for h in handlers:
@@ -451,6 +451,7 @@ class _GitDataListContentsReader:
         self.mandatory_decompressor = [_decompressor(manda) for manda in df.mandatory]
         self.last_handler = None
         self.comment_only_line = re.compile(r'^\s*//')
+        self.regexps = []
 
         for h in self.df.handlers:
             canskip = []
@@ -463,6 +464,13 @@ class _GitDataListContentsReader:
                 rex = ''
                 dmatched: list[tuple[int, GitParamDecompressor]] = []
                 dskipped: list[tuple[int, GitParamDecompressor]] = []
+                for d in self.mandatory_decompressor:
+                    if len(rex) != 0:
+                        rex += ','
+                    rex += d.regex_part()
+
+                assert len(self.mandatory_decompressor) == len(df.mandatory)
+                optoffset = len(self.mandatory_decompressor)
                 for i in range(len(h.optional)):
                     if i in canskip:
                         idx = canskip.index(i)
@@ -472,9 +480,9 @@ class _GitDataListContentsReader:
                     p = h.optional[i]
                     d = _decompressor(p)
                     if skip:
-                        dskipped.append((i, d))
+                        dskipped.append((optoffset+i, d))
                     else:
-                        dmatched.append((i, d))
+                        dmatched.append((optoffset+i, d))
                         if len(rex) != 0:
                             rex += ','
                         rex += d.regex_part()
@@ -491,14 +499,16 @@ class _GitDataListContentsReader:
             m = pattern.match(ln)
             if m:
                 assert len(dmatched) + len(dskipped) == len(h.optional)
-                param: list[str | int | None] = [None] * len(h.optional)
-                i = 1
+                param: list[str | int | None] = [None] * (len(self.df.mandatory)+len(h.optional))
+                #i = 1
+                for i in range(len(self.df.mandatory)):
+                    param[i] = m.group(i)
                 if h != self.last_handler:  # duplicating a bit of code to move comparison out of the loop and speed things up a bit
                     for matched in dmatched:
                         d: GitParamDecompressor = matched[1]
                         d.reset()
                         param[matched[0]] = d.matched(m.group(i))
-                        i += 1
+                        #i += 1
                     for skipped in dskipped:
                         d: GitParamDecompressor = skipped[1]
                         d.reset()
@@ -509,7 +519,7 @@ class _GitDataListContentsReader:
                         for matched in dmatched:
                             d: GitParamDecompressor = matched[1]
                             param[matched[0]] = d.matched(m.group(i))
-                            i += 1
+                            #i += 1
                         for skipped in dskipped:
                             d: GitParamDecompressor = skipped[1]
                             param[skipped[0]] = d.skipped()
@@ -542,7 +552,8 @@ def skip_git_file_header(rfile: typing.TextIO) -> tuple[str, int]:
 
 def read_git_file_list(dlist: GitDataList, rfile: typing.TextIO, lineno: int) -> int:
     ln = rfile.readline()
-    assert re.search(r'^\s*\[\s*//', ln)
+    # info(ln)
+    assert re.search(r'^\s*\[\s*$', ln)
     rda = _GitDataListContentsReader(dlist)
     while True:
         ln = rfile.readline()
@@ -550,7 +561,7 @@ def read_git_file_list(dlist: GitDataList, rfile: typing.TextIO, lineno: int) ->
         assert ln
         processed = rda.parse_line(ln)
         if not processed:
-            assert re.search(r'^\s*]\s*//', ln)
+            assert re.search(r'^\s*]\s*$', ln)
             return lineno
 
 

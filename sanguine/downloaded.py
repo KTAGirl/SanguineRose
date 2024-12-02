@@ -95,6 +95,7 @@ class GitArchivesJson:
         ln, lineno = skip_git_file_header(rfile)
 
         # reading archives:  ...
+        # info(ln)
         assert re.search(r'^\s*archives\s*:\s*//', ln)
 
         da = GitDataList(self._aentry_mandatory, [GitArchivesHandler(archives)])
@@ -284,18 +285,19 @@ class MasterGitArchives:
         return donehashingowntaskname
 
 
-_DONEHASHINGTASKNAME = 'sanguine.downloaded.donehashing'  # does not apply to MGA!
-
-
 def _downloaded_start_hashing_task_func(downloaded: "Downloaded", parallel: tasks.Parallel) -> None:
     for ar in downloaded.foldercache.all_files():
-        if os.path.splitext(ar.file_path)[1] == '.meta':
+        ext = os.path.splitext(ar.file_path)[1]
+        if ext == '.meta':
             continue
         if not ar.file_hash in downloaded.gitarchives.archives_by_hash:
-            downloaded.gitarchives.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
+            if ext in pluginhandler.all_archive_plugins_extensions():
+                downloaded.gitarchives.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
+            else:
+                warn('Downloaded: file with unknown extension {}, ignored'.format(ar.file_path))
 
     gitarchivesdonehashingtaskname: str = downloaded.gitarchives.start_done_hashing_task(parallel)
-    donehashingowntaskname = _DONEHASHINGTASKNAME
+    donehashingowntaskname = Downloaded._DONEHASHINGTASKNAME
     donehashingowntask = tasks.OwnTask(donehashingowntaskname, _sync_only_own_task_func, None,
                                        [gitarchivesdonehashingtaskname])
     parallel.add_task(donehashingowntask)
@@ -304,6 +306,7 @@ def _downloaded_start_hashing_task_func(downloaded: "Downloaded", parallel: task
 class Downloaded:
     foldercache: FolderCache
     gitarchives: MasterGitArchives
+    _DONEHASHINGTASKNAME = 'sanguine.downloaded.donehashing'  # does not apply to MGA!
 
     def __init__(self, cachedir: str, tmpdir: str, mastergitdir: str, downloads: list[str]) -> None:
         self.foldercache = FolderCache(cachedir, 'downloaded', [(d, []) for d in downloads])
@@ -322,7 +325,7 @@ class Downloaded:
 
     @staticmethod
     def ready_task_name() -> str:
-        return _DONEHASHINGTASKNAME
+        return Downloaded._DONEHASHINGTASKNAME
 
 
 if __name__ == '__main__':

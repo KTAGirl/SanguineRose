@@ -235,12 +235,15 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue) 
                         _log_time(), proc_num + 1, task.name))
                 (ex, out) = _run_task(task, tplus[1:])
                 if ex is not None:
-                    break  # while True
+                    break  # for tplus
                 elapsed = time.perf_counter() - t0
                 cpu = time.process_time() - tp0
                 info('{:.2f}: Process #{}: done task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
                     _log_time(), proc_num + 1, task.name, cpu, elapsed))
                 outtasks.append((task.name, (cpu, elapsed), out))
+                # end of for tplus
+            if ex is not None:
+                break # while True
             outq.put((proc_num, outtasks))
             # end of while True
 
@@ -313,6 +316,8 @@ class _TaskGraphNode:
         if self.max_leaf_weight < w:
             self.max_leaf_weight = w
             for p in self.parents:
+                if isinstance(p, str) or int(p.state) >= int(_TaskGraphNodeState.Ready):
+                    continue
                 p._adjust_leaf_weight(self.own_weight + self.max_leaf_weight)
 
     def total_weight(self) -> float:
@@ -415,6 +420,9 @@ class Parallel:
             assert patterns is None
             return False
         assert patterns is not None
+        if __debug__:
+            for p in taskparents:
+                assert isinstance(p, _TaskGraphNode)
 
         w = task.w
         explicitw = True
@@ -428,6 +436,7 @@ class Parallel:
 
         assert node.waiting_for_n_deps == 0
         for parent in node.parents:
+            assert isinstance(parent, _TaskGraphNode)
             parent.append_leaf(node)
             if int(parent.state) < int(_TaskGraphNodeState.Done):
                 node.waiting_for_n_deps += 1
@@ -677,7 +686,7 @@ class Parallel:
         t0 = time.perf_counter()
         tp0 = time.process_time()
 
-        nall = len(self.all_task_nodes)
+        # nall = len(self.all_task_nodes)
         # ATTENTION: ot.task.f(...) may call add_task() or add_task(s) within
         (ex, out) = _run_task(ot.task, params)
         if ex is not None:
@@ -806,6 +815,9 @@ class Parallel:
             len(self.all_task_nodes), len(self.pending_task_nodes), len(self.ready_task_nodes),
             len(self.ready_own_task_nodes), len(self.running_task_nodes), len(self.done_task_nodes))
         )
+        debug('Parallel: ready tasks: {}'.format(repr([t for t in self.ready_task_nodes])))
+        debug('Parallel: ready own tasks: {}'.format(repr([t for t in self.ready_own_task_nodes])))
+        debug('Parallel: running tasks: {}'.format(repr([t for t in self.running_task_nodes])))
         assert (len(self.all_task_nodes) == len(self.pending_task_nodes)
                 + len(self.ready_task_nodes) + len(self.ready_own_task_nodes)
                 + len(self.running_task_nodes) + len(self.done_task_nodes))
