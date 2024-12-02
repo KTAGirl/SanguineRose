@@ -6,7 +6,7 @@ import time
 from enum import IntEnum
 from multiprocessing import Process, Queue as PQueue, shared_memory
 
-from mo2gitlib.common import *
+from sanguine.common import *
 
 _proc_num: int = -1  # number of child process
 

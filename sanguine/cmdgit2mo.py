@@ -1,11 +1,11 @@
 import os
 
-from mo2gitlib.common import *
-import mo2gitlib.cache as cache
-from mo2gitlib.cmdcommon import _openCache,_csAndMasterModList
-from mo2gitlib.master import Master
-from mo2gitlib.folders import Folders
-import mo2gitlib.mo2compat as mo2compat
+from sanguine.common import *
+import sanguine.cache as cache
+from sanguine.cmdcommon import _openCache,_csAndMasterModList
+from sanguine.master import Master
+from sanguine.folders import Folders
+import sanguine.mo2compat as mo2compat
 
 def _git2mo(jsonconfigfname,config):
     compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)

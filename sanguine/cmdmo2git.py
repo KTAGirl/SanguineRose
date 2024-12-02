@@ -2,15 +2,15 @@ import json
 import re
 import shutil
 
-from mo2gitlib.common import *
-from mo2gitlib.installfile import manual_url_and_prompt
-from mo2gitlib.modlist import ModList
-from mo2gitlib.common import *
-from mo2gitlib.cmdcommon import _openCache,_csAndMasterModList
-import mo2gitlib.cache as cache
-from mo2gitlib.folders import Folders
-import mo2gitlib.master as master
-import mo2gitlib.mo2compat as mo2compat
+from sanguine.common import *
+from sanguine.installfile import manual_url_and_prompt
+from sanguine.modlist import ModList
+from sanguine.common import *
+from sanguine.cmdcommon import _openCache,_csAndMasterModList
+import sanguine.cache as cache
+from sanguine.folders import Folders
+import sanguine.master as master
+import sanguine.mo2compat as mo2compat
 
 def _writeManualDownloads(folders,md,modlist,config):
     mo2 = config['mo2']

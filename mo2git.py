@@ -5,11 +5,11 @@ import json
 
 sys.path.append(os.path.split(os.path.abspath(__file__))[0])
 
-from mo2gitlib.common import *
-from mo2gitlib.folders import Folders
-from mo2gitlib.cmdcommon import _openCache,_csAndMasterModList,enabledModSizes,_loadUserConfig
-import mo2gitlib.cmdmo2git as cmdmo2git
-import mo2gitlib.cmdgit2mo as cmdgit2mo
+from sanguine.common import *
+from sanguine.folders import Folders
+from sanguine.cmdcommon import _openCache,_csAndMasterModList,enabledModSizes,_loadUserConfig
+import sanguine.cmdmo2git as cmdmo2git
+import sanguine.cmdgit2mo as cmdgit2mo
 
 if __name__ == '__main__':
     if not sys.version_info >= (3, 10):

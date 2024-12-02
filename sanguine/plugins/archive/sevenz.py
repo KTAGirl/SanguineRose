@@ -1,6 +1,6 @@
 import py7zr
 
-from mo2gitlib.pluginhandler import ArchivePluginBase
+from sanguine.pluginhandler import ArchivePluginBase
 
 class SevenzArchivePlugin(ArchivePluginBase):
     def extensions(self):

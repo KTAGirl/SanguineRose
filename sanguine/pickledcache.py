@@ -1,7 +1,8 @@
+# noinspection PyUnresolvedReferences
 import pickle
 
-from mo2gitlib.common import *
-from mo2gitlib.folders import Folders
+from sanguine.common import *
+from sanguine.folders import Folders
 
 
 def pickled_cache(cachedir: str, cachedata: dict[str, any], prefix: str, origfiles: list[str],

@@ -1,6 +1,6 @@
 import win32file
 
-from mo2gitlib.common import *
+from sanguine.common import *
 
 
 class LockMO2Error(Exception):

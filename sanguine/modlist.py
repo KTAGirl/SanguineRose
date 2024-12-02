@@ -1,5 +1,5 @@
-from mo2gitlib.common import *
-from mo2gitlib.folders import Folders
+from sanguine.common import *
+from sanguine.folders import Folders
 
 
 class ModList:
@@ -8,14 +8,12 @@ class ModList:
     def __init__(self, dirpath: str) -> None:
         assert Folders.is_normalized_dir_path(dirpath)
         fname = dirpath + 'modlist.txt'
-        # print(fname)
         self.modlist = None
         with open_3rdparty_txt_file(fname) as rf:
             self.modlist = [line.rstrip() for line in rf]
         self.modlist = list(filter(lambda s: s.endswith('_separator') or not s.startswith('-'), self.modlist))
         self.modlist.reverse()  # 'natural' order
-        # print(self.modlist)
-        # dbgWait()
+
 
     def write(self, path: str) -> None:
         fname = path + 'modlist.txt'

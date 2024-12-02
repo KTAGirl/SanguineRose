@@ -4,10 +4,10 @@ import pickle
 import stat
 import time
 
-import mo2gitlib.tasks as tasks
-from mo2gitlib.common import *
-from mo2gitlib.files import File, calculate_file_hash
-from mo2gitlib.folders import Folders
+import sanguine.tasks as tasks
+from sanguine.common import *
+from sanguine.files import File, calculate_file_hash
+from sanguine.folders import Folders
 
 
 def _get_file_timestamp(fname: str) -> float:
@@ -119,31 +119,31 @@ def _hashing_file_time_estimate(fsize: int) -> float:
 
 def _scanned_task_name(cachename: str, dirpath: str) -> str:
     assert Folders.is_normalized_dir_path(dirpath)
-    return 'mo2gitlib.foldercache.' + cachename + '.' + dirpath
+    return 'sanguine.foldercache.' + cachename + '.' + dirpath
 
 
 def _scanned_own_task_name(cachename: str, dirpath: str) -> str:
     assert Folders.is_normalized_dir_path(dirpath)
-    return 'mo2gitlib.foldercache.own.' + cachename + '.' + dirpath
+    return 'sanguine.foldercache.own.' + cachename + '.' + dirpath
 
 
 def _reconcile_own_task_name(name: str) -> str:
-    return 'mo2gitlib.foldercache.reconcile.' + name
+    return 'sanguine.foldercache.reconcile.' + name
 
 
 def _hashing_task_name(cachename: str, fpath: str) -> str:
     assert Folders.is_normalized_file_path(fpath)
-    return 'mo2gitlib.foldercache.hash.' + cachename + '.' + fpath
+    return 'sanguine.foldercache.hash.' + cachename + '.' + fpath
 
 
 def _hashing_own_task_name(cachename: str, fpath: str) -> str:
     assert Folders.is_normalized_file_path(fpath)
-    return 'mo2gitlib.foldercache.hash.own.' + cachename + '.' + fpath
+    return 'sanguine.foldercache.hash.own.' + cachename + '.' + fpath
 
 
 def _hashing_own_wildcard_task_name(cachename: str, dirpath: str) -> str:
     assert Folders.is_normalized_dir_path(dirpath)
-    return 'mo2gitlib.foldercache.hash.own.' + cachename + '.' + dirpath + '*'
+    return 'sanguine.foldercache.hash.own.' + cachename + '.' + dirpath + '*'
 
 
 ### Tasks
@@ -157,7 +157,7 @@ def _load_files_task_func(param: tuple[str, str]) -> tuple[dict[str, File]]:
 
 
 def _load_files_own_task_func(out: tuple[dict[str, File]], foldercache: "FolderCache", parallel: tasks.Parallel) -> \
-tuple[tasks.SharedPubParam]:
+        tuple[tasks.SharedPubParam]:
     (filesbypath,) = out
     foldercache.files_by_path = {}
     foldercache.filtered_files = {}
@@ -441,11 +441,11 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         scannedfiles = {}
         stats = _FolderScanStats()
 
-        loadtaskname = 'mo2gitlib.foldercache.load.' + self.name
+        loadtaskname = 'sanguine.foldercache.load.' + self.name
         loadtask = tasks.Task(loadtaskname, _load_files_task_func, (self.cache_dir, self.name), [])
         parallel.add_task(loadtask)
 
-        loadowntaskname = 'mo2gitlib.foldercache.loadown.' + self.name
+        loadowntaskname = 'sanguine.foldercache.loadown.' + self.name
         loadowntask = tasks.OwnTask(loadowntaskname, lambda _, out: _load_files_own_task_func(out, self, parallel),
                                     None,
                                     [loadtaskname])
@@ -490,6 +490,9 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             if FolderCache.file_path_is_ok_simple(fpath, folderplus[0], folderplus[1]):
                 return True
         return False
+
+    def all_files(self) -> Iterable[File]:
+        return self.files_by_path.values()
 
     @staticmethod
     def _scan_dir(started: float, sdout: _FolderScanDirOut, stats: _FolderScanStats, root: str, dirpath: str,

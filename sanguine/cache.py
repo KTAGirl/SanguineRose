@@ -1,11 +1,11 @@
-import mo2gitlib.tasks as tasks
-import mo2gitlib.wjcompat.wjdb as wjdb
-from mo2gitlib.archivesdata import ArchiveEntriesCache
-from mo2gitlib.common import *
-from mo2gitlib.files import File
-from mo2gitlib.foldercache import FolderCache, FolderList
-from mo2gitlib.folders import Folders
-from mo2gitlib.pickledcache import pickled_cache
+import sanguine.tasks as tasks
+import sanguine.wjcompat.wjdb as wjdb
+from sanguine.downloaded import ArchiveEntriesCache
+from sanguine.common import *
+from sanguine.files import File
+from sanguine.foldercache import FolderCache, FolderList
+from sanguine.folders import Folders
+from sanguine.pickledcache import pickled_cache
 
 
 ### Loading WJ HashCache

@@ -1,6 +1,6 @@
 import zipfile
 
-from mo2gitlib.pluginhandler import ArchivePluginBase
+from sanguine.pluginhandler import ArchivePluginBase
 
 class ZipArchivePlugin(ArchivePluginBase):
     def extensions(self):

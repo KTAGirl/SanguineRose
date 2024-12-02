@@ -1,4 +1,4 @@
-from mo2gitlib.common import *
+from sanguine.common import *
 
 
 # mo2git is compatible with wj paths, which are os.abspath.lower()

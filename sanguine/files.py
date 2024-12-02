@@ -2,7 +2,7 @@ import base64
 import hashlib
 import stat
 
-from mo2gitlib.common import *
+from sanguine.common import *
 
 ZEROHASH = hashlib.sha256(b"")
 

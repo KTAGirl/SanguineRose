@@ -2,7 +2,7 @@ import importlib
 import inspect
 from abc import abstractmethod
 
-from mo2gitlib.common import *
+from sanguine.common import *
 
 
 def _load_plugins(plugindir: str, basecls: any, found: Callable[[any], None]) -> None:
@@ -15,7 +15,7 @@ def _load_plugins(plugindir: str, basecls: any, found: Callable[[any], None]) ->
         if modulename == '__init__' or modulename.startswith('_'):
             continue
         # print(modulename)
-        module = importlib.import_module('mo2gitlib.' + plugindir.replace('/', '.') + modulename)
+        module = importlib.import_module('sanguine.' + plugindir.replace('/', '.') + modulename)
         ok = False
         for name, obj in inspect.getmembers(module):
             if inspect.isclass(obj):

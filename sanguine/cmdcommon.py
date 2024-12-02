@@ -2,12 +2,12 @@ import os
 import re
 import json5 #only for user configs! Very slow for any other purpose
 
-from mo2gitlib.common import *
-from mo2gitlib.installfile import installfile_modid_manual_url_and_prompt
-from mo2gitlib.folders import Folders
-from mo2gitlib.modlist import ModList
-import mo2gitlib.cache as cache
-import mo2gitlib.mo2compat as mo2compat
+from sanguine.common import *
+from sanguine.installfile import installfile_modid_manual_url_and_prompt
+from sanguine.folders import Folders
+from sanguine.modlist import ModList
+import sanguine.cache as cache
+import sanguine.mo2compat as mo2compat
 
 def _loadUserConfig(rf): #don't use for anything except for hand-editable user configs! Very slow for any other purpose
     try:

@@ -1,6 +1,6 @@
 from cache import Cache
-from mo2gitlib.files import calculate_file_hash, ZEROHASH
-from mo2gitlib.gitdatafile import *
+from sanguine.files import calculate_file_hash, ZEROHASH
+from sanguine.gitdatafile import *
 
 
 class MasterArchiveItem:

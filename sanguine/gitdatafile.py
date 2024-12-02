@@ -8,8 +8,8 @@ import urllib.parse as urlparse
 from abc import ABC, abstractmethod
 from enum import Enum
 
-from mo2gitlib.common import *
-from mo2gitlib.files import from_json_hash, to_json_hash
+from sanguine.common import *
+from sanguine.files import from_json_hash, to_json_hash
 
 
 ### compressors
