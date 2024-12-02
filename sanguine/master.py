@@ -217,7 +217,7 @@ class Master:
         level = masterconfig.get('pcompression', 0) if masterconfig is not None else 0
         assert isinstance(level, int)
 
-        write_git_file_header_comment(wfile)
+        write_git_file_header(wfile)
         wfile.write('{ config: { pcompression: ' + str(level) + ' },\n')
         wfile.write('  archives: [ // Legend: n means "name", h means "hash"\n')
 
@@ -275,7 +275,7 @@ class Master:
         # reading archives: [ ...
         filesstart = re.compile(r'^\s*]\s*,\s*files\s*:\s\[\s*//')
         da = GitDataList(self._a_mandatory, [ArchiveReadHandler(self.archives)])
-        lineno = read_git_file_section(da, rfile, lineno, filesstart)
+        lineno = read_git_file_list(da, rfile, lineno, filesstart)
 
         # reading files: [ ...
         filesend = re.compile(r'^\s*]\s*}')
@@ -290,6 +290,6 @@ class Master:
             handler_warning
         ]
         df = GitDataList(self._f_mandatory, handlers)
-        lineno = read_git_file_section(df, rfile, lineno, filesend)
+        lineno = read_git_file_list(df, rfile, lineno, filesend)
 
         skip_git_file_footer(rfile, lineno)

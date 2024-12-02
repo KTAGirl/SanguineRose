@@ -1,7 +1,8 @@
 # we have reasons to have our own Json writer:
 #  1. major. we need very specific gitdiff-friendly format
-#  2. minor. we want to keep these files as small as feasible (while keeping it more or less readable),
-#            hence JSON5 quote-less names, and path and elements "compression". It was seen to save 3.8x (2x for default pcompression=0), for a 50M file it is quite a bit
+#  2. minor. we want to keep these files as small as feasible (while keeping them more or less readable),
+#            hence JSON5 quote-less names, and path and elements "compression". It was seen to save 3.8x (2x for default pcompression=0),
+#            for a 50M file, with overall GitHub limit being 100M, it is quite a bit
 
 import re
 import urllib.parse as urlparse
@@ -362,9 +363,14 @@ class GitDataList:
 
 ### writing
 
-def write_git_file_header_comment(wfile: typing.TextIO) -> None:
+def write_git_file_header(wfile: typing.TextIO) -> None:
     wfile.write('// This is JSON5 file, to save some space compared to JSON.\n')
-    wfile.write('// Still, do not edit it by hand, mo2git parses it itself using regex to save time\n')
+    wfile.write('// Still, do not edit it by hand, SanguineRose parses it itself using regex to save time\n')
+    wfile.write('{\n')
+
+
+def write_git_file_footer(wfile: typing.TextIO) -> None:
+    wfile.write('}\n')
 
 
 class GitDataListWriter:
@@ -385,7 +391,7 @@ class GitDataListWriter:
         self.line_num = 0
 
     def write_begin(self) -> None:
-        pass
+        self.wfile.write('[\n')
 
     def write_line(self, handler: GitDataHandler, values: tuple) -> None:
         assert len(values) == len(self.df.mandatory) + len(handler.optional)
@@ -414,6 +420,7 @@ class GitDataListWriter:
     def write_end(self) -> None:
         if self.line_num > 0:
             self.wfile.write('\n')
+        self.wfile.write(']\n')
 
 
 ### reading
@@ -430,7 +437,7 @@ class GitHeaderFooterReader:
         return False
 
 
-class GitDataListReader:
+class _GitDataListContentsReader:
     df: GitDataList
     mandatory_decompressor: list[GitParamDecompressor]
     last_handler: GitDataHandler | None
@@ -513,7 +520,9 @@ class GitDataListReader:
         return False
 
 
-def skip_git_file_header(rfile: typing.TextIO, endline: typing.Pattern) -> int:
+def skip_git_file_header(rfile: typing.TextIO) -> tuple[str, int]:
+    openbracketfound: bool = False
+    openbracket = re.compile(r'^\s*\{\s*$')
     rdh = GitHeaderFooterReader()
     lineno = 0
     while True:
@@ -521,34 +530,45 @@ def skip_git_file_header(rfile: typing.TextIO, endline: typing.Pattern) -> int:
         lineno += 1
         assert ln
         processed = rdh.parse_line(ln)
-        if processed:
-            continue
-        if endline.search(ln):
-            return lineno
+        if not processed:
+            m = openbracket.match(ln)
+            if m:
+                assert not openbracketfound
+                openbracketfound = True
+            else:
+                assert openbracketfound
+                return ln, lineno
 
 
-def read_git_file_section(dlist: GitDataList, rfile: typing.TextIO, lineno: int, sectionend: re.Pattern) -> int:
-    rda = GitDataListReader(dlist)
+def read_git_file_list(dlist: GitDataList, rfile: typing.TextIO, lineno: int) -> int:
+    ln = rfile.readline()
+    assert re.search(r'^\s*\[\s*//', ln)
+    rda = _GitDataListContentsReader(dlist)
     while True:
         ln = rfile.readline()
         lineno += 1
         assert ln
         processed = rda.parse_line(ln)
-        if processed:
-            continue
-        if sectionend.search(ln):
+        if not processed:
+            assert re.search(r'^\s*]\s*//', ln)
             return lineno
 
 
-def skip_git_file_footer(rfile: typing.TextIO, lineno: int) -> int:
+def skip_git_file_footer(rfile: typing.TextIO, lineno: int) -> None:
+    closebracketfound = False
+    closebracket = re.compile(r'^\s*}\s*$')
     rdh = GitHeaderFooterReader()
     while True:
         ln = rfile.readline()
         lineno += 1
         if not ln:
-            return lineno
+            assert closebracketfound
+            return
         processed = rdh.parse_line(ln)
-        if processed:
-            continue
-        critical('Unrecognized line #' + str(lineno) + ':' + ln)
-        abort_if_not(False)  # unknown pattern
+        if not processed:
+            if closebracket.match(ln):
+                assert not closebracketfound
+                closebracketfound = True
+            else:
+                critical('Unrecognized line #' + str(lineno) + ':' + ln)
+                abort_if_not(False)  # unknown pattern
