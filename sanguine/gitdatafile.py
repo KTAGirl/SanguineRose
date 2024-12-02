@@ -102,8 +102,9 @@ class GitParamPathCompressor(GitParamCompressor):
         # assert('>' not in path)
         path = path.replace('\\', '/')
         if self.level == 0:
-            path = self.prefix + '"' + GitParamPathCompressor._to_json_fpath(path) + '"'
-            assert '"' not in path[1:-1]
+            p0 = GitParamPathCompressor._to_json_fpath(path)
+            assert '"' not in p0
+            path = self.prefix + '"' + p0 + '"'
             return path
 
         spl = path.split('/')

@@ -71,6 +71,7 @@ class GitArchivesJson:
 
     def write(self, wfile: typing.TextIO, archives0: Iterable[Archive]) -> None:
         archives = sorted(archives0, key=lambda a: a.archive_hash)
+        # warn(str(len(archives)))
         write_git_file_header(wfile)
         wfile.write(
             '  archives: // Legend: i=intra_archive_path, j=intra_archive_path2, a=archive_hash, x=archive_size, h=file_hash, s=file_size\n')
@@ -79,7 +80,9 @@ class GitArchivesJson:
         da = GitDataList(self._aentry_mandatory, [ahandler])
         alwriter = GitDataListWriter(da, wfile)
         alwriter.write_begin()
+        # warn('archives: ' + str(len(archives)))
         for ar in archives:
+            # warn('files: ' + str(len(ar.files)))
             for fi in sorted(ar.files,
                              key=lambda f: f.intra_path[0] + (f.intra_path[1] if len(f.intra_path) > 1 else '')):
                 alwriter.write_line(ahandler, (
@@ -176,6 +179,7 @@ def _load_archives_task_func(param: tuple[str, str, dict[str, any]]) -> tuple[li
 
 
 def _append_archive(mga: "MasterGitArchives", ar: Archive) -> None:
+    # warn(str(len(ar.files)))
     assert ar.archive_hash not in mga.archives_by_hash
     mga.archives_by_hash[ar.archive_hash] = ar
     for fi in ar.files:
@@ -216,6 +220,13 @@ def _archive_hashing_own_task_func(out: tuple[Archive], mga: "MasterGitArchives"
 def _save_archives_task_func(param: tuple[str, list[Archive]]) -> None:
     (mastergitdir, archives) = param
     _write_git_archives(mastergitdir, archives)
+
+
+def _done_hashing_own_task_func(mga: "MasterGitArchives", parallel: tasks.Parallel) -> None:
+    savetaskname = 'sanguine.downloaded.mga.save'
+    savetask = tasks.Task(savetaskname, _save_archives_task_func,
+                          (mga.master_git_dir, list(mga.archives_by_hash.values())), [])
+    parallel.add_task(savetask)
 
 
 def _sync_only_own_task_func() -> None:
@@ -274,14 +285,9 @@ class MasterGitArchives:
                                 parallel: tasks.Parallel) -> str:
         donehashingowntaskname = 'sanguine.downloaded.mga.donehashing'
         donehashingowntask = tasks.OwnTask(donehashingowntaskname,
-                                           lambda _: _sync_only_own_task_func(), None,
+                                           lambda _: _done_hashing_own_task_func(self, parallel), None,
                                            ['sanguine.downloaded.mga.hashown.*'])
         parallel.add_task(donehashingowntask)
-
-        savetaskname = 'sanguine.downloaded.mga.save'
-        savetask = tasks.Task(savetaskname, _save_archives_task_func,
-                              (self.master_git_dir, list(self.archives_by_hash.values())), [])
-        parallel.add_task(savetask)
 
         return donehashingowntaskname
 
