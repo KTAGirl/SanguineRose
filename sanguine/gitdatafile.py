@@ -332,9 +332,9 @@ class GitDataHandler(ABC):
     def __init__(self, optional: list[GitDataParam]) -> None:
         self.optional = optional
 
-    @abstractmethod
-    def decompress(self, param: tuple[str | int, ...]) -> None:
-        pass
+    def decompress(self, param: tuple[str | int, ...]) -> None:  # we want to instantiate GitDataHandler,
+        # but for such instantiations we don't need decompress()
+        assert False
 
 
 class GitDataList:
@@ -345,7 +345,8 @@ class GitDataList:
         if __debug__:
             assert not mandatory[0].can_skip
 
-            if len(handlers) > 1:  # if there is only one handler, then there can be no problems distinguishing handlers, even if the only handler has no parameters whatsoever
+            if len(handlers) > 1:  # if there is only one handler, then there can be no problems distinguishing handlers,
+                # even if the only handler has no parameters whatsoever
                 for h in handlers:
                     assert not h.optional[0].can_skip  # otherwise regex parsing may become ambiguous
 
@@ -480,9 +481,9 @@ class _GitDataListContentsReader:
                     p = h.optional[i]
                     d = _decompressor(p)
                     if skip:
-                        dskipped.append((optoffset+i, d))
+                        dskipped.append((optoffset + i, d))
                     else:
-                        dmatched.append((optoffset+i, d))
+                        dmatched.append((optoffset + i, d))
                         if len(rex) != 0:
                             rex += ','
                         rex += d.regex_part()
@@ -499,8 +500,8 @@ class _GitDataListContentsReader:
             m = pattern.match(ln)
             if m:
                 assert len(dmatched) + len(dskipped) == len(h.optional)
-                param: list[str | int | None] = [None] * (len(self.df.mandatory)+len(h.optional))
-                #i = 1
+                param: list[str | int | None] = [None] * (len(self.df.mandatory) + len(h.optional))
+                # i = 1
                 for i in range(len(self.df.mandatory)):
                     param[i] = m.group(i)
                 if h != self.last_handler:  # duplicating a bit of code to move comparison out of the loop and speed things up a bit
@@ -508,7 +509,7 @@ class _GitDataListContentsReader:
                         d: GitParamDecompressor = matched[1]
                         d.reset()
                         param[matched[0]] = d.matched(m.group(i))
-                        #i += 1
+                        # i += 1
                     for skipped in dskipped:
                         d: GitParamDecompressor = skipped[1]
                         d.reset()
@@ -519,7 +520,7 @@ class _GitDataListContentsReader:
                         for matched in dmatched:
                             d: GitParamDecompressor = matched[1]
                             param[matched[0]] = d.matched(m.group(i))
-                            #i += 1
+                            # i += 1
                         for skipped in dskipped:
                             d: GitParamDecompressor = skipped[1]
                             param[skipped[0]] = d.skipped()

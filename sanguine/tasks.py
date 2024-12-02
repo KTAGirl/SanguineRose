@@ -243,7 +243,7 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue) 
                 outtasks.append((task.name, (cpu, elapsed), out))
                 # end of for tplus
             if ex is not None:
-                break # while True
+                break  # while True
             outq.put((proc_num, outtasks))
             # end of while True
 
@@ -538,7 +538,10 @@ class Parallel:
                 pass
             maintschedule += (time.perf_counter() - sch0)
 
-            # waiting for other processes to finish
+            if self.is_all_done():
+                break
+
+            # waiting for other processes to report
             waitt0 = time.perf_counter()
             got = self.outq.get()
             if __debug__:  # pickle.dumps is expensive by itself
@@ -811,13 +814,16 @@ class Parallel:
         del self.publications[name]
 
     def _stats(self) -> None:
-        debug('Parallel: {} tasks, including {} pending, {}/{} ready, {} running, {} done'.format(
-            len(self.all_task_nodes), len(self.pending_task_nodes), len(self.ready_task_nodes),
-            len(self.ready_own_task_nodes), len(self.running_task_nodes), len(self.done_task_nodes))
-        )
-        debug('Parallel: ready tasks: {}'.format(repr([t for t in self.ready_task_nodes])))
-        debug('Parallel: ready own tasks: {}'.format(repr([t for t in self.ready_own_task_nodes])))
-        debug('Parallel: running tasks: {}'.format(repr([t for t in self.running_task_nodes])))
+        if __debug__:
+            debug('Parallel: {} tasks, including {} pending, {}/{} ready, {} running, {} done'.format(
+                len(self.all_task_nodes), len(self.pending_task_nodes), len(self.ready_task_nodes),
+                len(self.ready_own_task_nodes), len(self.running_task_nodes), len(self.done_task_nodes))
+            )
+            debug(
+                'Parallel: pending tasks (up to 10 first): {}'.format(repr([t for t in self.pending_task_nodes][:10])))
+            debug('Parallel: ready tasks: {}'.format(repr([t for t in self.ready_task_nodes])))
+            debug('Parallel: ready own tasks: {}'.format(repr([t for t in self.ready_own_task_nodes])))
+            debug('Parallel: running tasks: {}'.format(repr([t for t in self.running_task_nodes])))
         assert (len(self.all_task_nodes) == len(self.pending_task_nodes)
                 + len(self.ready_task_nodes) + len(self.ready_own_task_nodes)
                 + len(self.running_task_nodes) + len(self.done_task_nodes))

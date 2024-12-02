@@ -204,8 +204,7 @@ def _archive_hashing_task_func(param: tuple[str, bytes, int, str]) -> tuple[Arch
     archive = Archive(arhash, arsize, [])
     _hash_archive(archive, tmppath, [], plugin, arpath)
     debug('MGA: about to remove temporary tree {}'.format(tmppath))
-    if False:
-        shutil.rmtree(tmppath)
+    shutil.rmtree(tmppath)
     return (archive,)
 
 
@@ -274,7 +273,8 @@ class MasterGitArchives:
     def start_done_hashing_task(self,  # should be called only after all start_hashing_archive() calls are done
                                 parallel: tasks.Parallel) -> str:
         donehashingowntaskname = 'sanguine.downloaded.mga.donehashing'
-        donehashingowntask = tasks.OwnTask(donehashingowntaskname, _sync_only_own_task_func, None,
+        donehashingowntask = tasks.OwnTask(donehashingowntaskname,
+                                           lambda _: _sync_only_own_task_func(), None,
                                            ['sanguine.downloaded.mga.hashown.*'])
         parallel.add_task(donehashingowntask)
 
@@ -291,6 +291,8 @@ def _downloaded_start_hashing_task_func(downloaded: "Downloaded", parallel: task
         ext = os.path.splitext(ar.file_path)[1]
         if ext == '.meta':
             continue
+        if ext == '.7z':
+            continue  # TODO! handle 7z decompression with BCJ2
         if not ar.file_hash in downloaded.gitarchives.archives_by_hash:
             if ext in pluginhandler.all_archive_plugins_extensions():
                 downloaded.gitarchives.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
@@ -299,7 +301,8 @@ def _downloaded_start_hashing_task_func(downloaded: "Downloaded", parallel: task
 
     gitarchivesdonehashingtaskname: str = downloaded.gitarchives.start_done_hashing_task(parallel)
     donehashingowntaskname = Downloaded._DONEHASHINGTASKNAME
-    donehashingowntask = tasks.OwnTask(donehashingowntaskname, _sync_only_own_task_func, None,
+    donehashingowntask = tasks.OwnTask(donehashingowntaskname,
+                                       lambda _, _1: _sync_only_own_task_func(), None,
                                        [gitarchivesdonehashingtaskname])
     parallel.add_task(donehashingowntask)
 
