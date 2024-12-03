@@ -1,6 +1,7 @@
-import sanguine.tasks as tasks
 import sanguine.wjcompat.wjdb as wjdb
-from sanguine.downloaded import ArchiveEntriesCache
+
+import sanguine.tasks as tasks
+from sanguine.available import ArchiveEntriesCache
 from sanguine.common import *
 from sanguine.files import File
 from sanguine.foldercache import FolderCache, FolderList

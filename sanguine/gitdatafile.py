@@ -54,7 +54,7 @@ class GitParamStrCompressor(GitParamCompressor):
         if self.can_skip and self.prev == val:
             return ''
         self.prev = val
-        return self.name + ':' + val
+        return self.name + ':"' + val + '"'
 
 
 class GitParamHashCompressor(GitParamCompressor):
@@ -134,8 +134,9 @@ class GitParamPathCompressor(GitParamCompressor):
             path = '"0' + GitParamPathCompressor._to_json_fpath(path)
         self.prevpath = spl
         self.prevn = nmatch
-        assert '"' not in path[1:]
-        return path
+        assert path.startswith(self.prefix+'"')
+        assert '"' not in path[len(self.prefix)+1:]
+        return path + '"'
 
 
 ### decompressors
@@ -292,17 +293,19 @@ class GitDataParam:
     name: str
     typ: GitDataType
     compress: bool
+    compress_level: int
 
-    def __init__(self, name: str, typ: GitDataType, can_skip: bool = True) -> None:
+    def __init__(self, name: str, typ: GitDataType, can_skip: bool = True, compress_level=2) -> None:
         self.name = name
         self.typ = typ
         self.can_skip = can_skip
+        self.compress_level = compress_level
 
 
 def _compressor(p: GitDataParam) -> GitParamCompressor:
     match p.typ:
         case GitDataType.Path:
-            return GitParamPathCompressor(p.name, 2 if p.can_skip else 0)
+            return GitParamPathCompressor(p.name, p.compress_level)
         case GitDataType.Hash:
             return GitParamHashCompressor(p.name, p.can_skip)
         case GitDataType.Int:
@@ -401,12 +404,17 @@ class GitDataListWriter:
             ln = ',\n{'
         else:
             ln = '{'
+        lnempty = True
         self.line_num += 1
         assert len(self.mandatory_compressor) == len(self.df.mandatory)
         for i in range(len(self.df.mandatory)):
-            if i > 0:
-                ln += ','
-            ln += self.mandatory_compressor[i].compress(values[i])
+            compressed = self.mandatory_compressor[i].compress(values[i])
+            if len(compressed):
+                if lnempty:
+                    lnempty = False
+                else:
+                    ln += ','
+                ln += compressed
 
         shift = len(self.df.mandatory)
         if handler == self.last_handler:
@@ -427,14 +435,16 @@ class GitDataListWriter:
 
 ### reading
 
-class GitHeaderFooterReader:
+class _GitHeaderFooterReader:
     comment_only_line: re.Pattern
+    empty_line: re.Pattern
 
     def __init__(self) -> None:
         self.comment_only_line = re.compile(r'^\s*//')
+        self.empty_line = re.compile(r'^\s*$')
 
     def parse_line(self, ln: str) -> bool:
-        if self.comment_only_line.search(ln):
+        if self.comment_only_line.search(ln) or self.empty_line.search(ln):
             return True
         return False
 
@@ -502,7 +512,7 @@ class _GitDataListContentsReader:
             if m:
                 assert len(dmatched) + len(dskipped) == len(h.optional)
                 param: list[str | int | None] = [None] * (len(self.df.mandatory) + len(h.optional))
-                # i = 1
+                i = 1
                 for i in range(len(self.df.mandatory)):
                     param[i] = m.group(i)
                 if h != self.last_handler:  # duplicating a bit of code to move comparison out of the loop and speed things up a bit
@@ -510,7 +520,7 @@ class _GitDataListContentsReader:
                         d: GitParamDecompressor = matched[1]
                         d.reset()
                         param[matched[0]] = d.matched(m.group(i))
-                        # i += 1
+                        i += 1
                     for skipped in dskipped:
                         d: GitParamDecompressor = skipped[1]
                         d.reset()
@@ -521,7 +531,7 @@ class _GitDataListContentsReader:
                         for matched in dmatched:
                             d: GitParamDecompressor = matched[1]
                             param[matched[0]] = d.matched(m.group(i))
-                            # i += 1
+                            i += 1
                         for skipped in dskipped:
                             d: GitParamDecompressor = skipped[1]
                             param[skipped[0]] = d.skipped()
@@ -535,8 +545,8 @@ class _GitDataListContentsReader:
 def skip_git_file_header(rfile: typing.TextIO) -> tuple[str, int]:
     openbracketfound: bool = False
     openbracket = re.compile(r'^\s*\{\s*$')
-    rdh = GitHeaderFooterReader()
-    lineno = 0
+    rdh = _GitHeaderFooterReader()
+    lineno = 1
     while True:
         ln = rfile.readline()
         lineno += 1
@@ -570,7 +580,7 @@ def read_git_file_list(dlist: GitDataList, rfile: typing.TextIO, lineno: int) ->
 def skip_git_file_footer(rfile: typing.TextIO, lineno: int) -> None:
     closebracketfound = False
     closebracket = re.compile(r'^\s*}\s*$')
-    rdh = GitHeaderFooterReader()
+    rdh = _GitHeaderFooterReader()
     while True:
         ln = rfile.readline()
         lineno += 1
