@@ -56,10 +56,10 @@ class MasterFileItem:
 
 class ArchiveReadHandler(GitDataHandler):
     archives: list[MasterArchiveItem]
-    optional: list[GitDataParam] = []
+    specific_fields: list[GitDataParam] = []
 
     def __init__(self, archives: list[MasterArchiveItem]) -> None:
-        super().__init__(self.optional)
+        super().__init__(self.specific_fields)
         self.archives = archives
 
     def decompress(self, param: tuple[str, int]) -> None:
@@ -70,12 +70,12 @@ class ArchiveReadHandler(GitDataHandler):
 
 class FilesDataHandlerS0(GitDataHandler):
     files: list[MasterFileItem]
-    optional: list[GitDataParam] = [
+    specific_fields: list[GitDataParam] = [
         GitDataParam('s', GitDataType.Int, False)
     ]
 
     def __init__(self, files: list[MasterFileItem]) -> None:
-        super().__init__(self.optional)
+        super().__init__(self.specific_fields)
         self.files = files
 
     def decompress(self, param: tuple[str, None, int]) -> None:
@@ -87,7 +87,7 @@ class FilesDataHandlerS0(GitDataHandler):
 
 class FilesDataHandlerA(GitDataHandler):
     files: list[MasterFileItem]
-    optional: list[GitDataParam] = [
+    specific_fields: list[GitDataParam] = [
         GitDataParam('i', GitDataType.Path, False),
         GitDataParam('i2', GitDataType.Path),
         GitDataParam('a', GitDataType.Hash),
@@ -95,7 +95,7 @@ class FilesDataHandlerA(GitDataHandler):
     ]
 
     def __init__(self, files: list[MasterFileItem]) -> None:
-        super().__init__(self.optional)
+        super().__init__(self.specific_fields)
         self.files = files
 
     def decompress(self, param: tuple[str, int, str, str | None, int, int]) -> None:
@@ -109,12 +109,12 @@ class FilesDataHandlerA(GitDataHandler):
 
 class FilesDataHandlerG(GitDataHandler):
     files: list[MasterFileItem]
-    optional: list[GitDataParam] = [
+    specific_fields: list[GitDataParam] = [
         GitDataParam('g', GitDataType.Path, False),
     ]
 
     def __init__(self, files: list[MasterFileItem]) -> None:
-        super().__init__(self.optional)
+        super().__init__(self.specific_fields)
         self.files = files
 
     def decompress(self, param: tuple[str, int, str]) -> None:
@@ -124,12 +124,12 @@ class FilesDataHandlerG(GitDataHandler):
 
 class FilesDataHandlerWarning(GitDataHandler):
     files: list[MasterFileItem]
-    optional: list[GitDataParam] = [
+    specific_fields: list[GitDataParam] = [
         GitDataParam('warning', GitDataType.Str, False),
     ]
 
     def __init__(self, files: list[MasterFileItem]) -> None:
-        super().__init__(self.optional)
+        super().__init__(self.specific_fields)
         self.files = files
 
     def decompress(self, param: tuple[str, int, str]) -> None:
@@ -141,12 +141,12 @@ class Master:
     archives: list[MasterArchiveItem]
     files: list[MasterFileItem]
 
-    _a_mandatory: list[GitDataParam] = [
+    _a_common_fields: list[GitDataParam] = [
         GitDataParam('n', GitDataType.Path, False),
         GitDataParam('h', GitDataType.Hash)
     ]
 
-    _f_mandatory: list[GitDataParam] = [
+    _f_common_fields: list[GitDataParam] = [
         GitDataParam('p', GitDataType.Path, False),
         GitDataParam('h', GitDataType.Hash)
     ]
@@ -221,8 +221,8 @@ class Master:
         wfile.write('{ config: { pcompression: ' + str(level) + ' },\n')
         wfile.write('  archives: [ // Legend: n means "name", h means "hash"\n')
 
-        ahandler = GitDataHandler(ArchiveReadHandler.optional)
-        da = GitDataList(self._a_mandatory, [ahandler])
+        ahandler = GitDataHandler(ArchiveReadHandler.specific_fields)
+        da = GitDataList(self._a_common_fields, [ahandler])
         writera = GitDataListWriter(da, wfile)
         writera.write_begin()
         for ar in self.archives:
@@ -231,17 +231,17 @@ class Master:
         wfile.write('\n], files: [ // Legend: p means "path", h means "hash", s means "size", f means "from",')
         wfile.write('\n            //         a means "archive_hash", i means "intra_path"\n')
 
-        handler_s0 = GitDataHandler(FilesDataHandlerS0.optional)
-        handler_a = GitDataHandler(FilesDataHandlerA.optional)
-        handler_g = GitDataHandler(FilesDataHandlerG.optional)
-        handler_warning = GitDataHandler(FilesDataHandlerWarning.optional)
+        handler_s0 = GitDataHandler(FilesDataHandlerS0.specific_fields)
+        handler_a = GitDataHandler(FilesDataHandlerA.specific_fields)
+        handler_g = GitDataHandler(FilesDataHandlerG.specific_fields)
+        handler_warning = GitDataHandler(FilesDataHandlerWarning.specific_fields)
         handlers = [
             handler_s0,
             handler_a,
             handler_g,
             handler_warning
         ]
-        df = GitDataList(self._f_mandatory, handlers)
+        df = GitDataList(self._f_common_fields, handlers)
         writer = GitDataListWriter(df, wfile)
         writer.write_begin()
         for fi in self.files:
@@ -274,7 +274,7 @@ class Master:
 
         # reading archives: [ ...
         filesstart = re.compile(r'^\s*]\s*,\s*files\s*:\s\[\s*//')
-        da = GitDataList(self._a_mandatory, [ArchiveReadHandler(self.archives)])
+        da = GitDataList(self._a_common_fields, [ArchiveReadHandler(self.archives)])
         lineno = read_git_file_list(da, rfile, lineno, filesstart)
 
         # reading files: [ ...
@@ -289,7 +289,7 @@ class Master:
             handler_g,
             handler_warning
         ]
-        df = GitDataList(self._f_mandatory, handlers)
+        df = GitDataList(self._f_common_fields, handlers)
         lineno = read_git_file_list(df, rfile, lineno, filesend)
 
         skip_git_file_footer(rfile, lineno)

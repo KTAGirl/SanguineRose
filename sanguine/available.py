@@ -37,10 +37,9 @@ class Archive:
 
 class GitArchivesHandler(GitDataHandler):
     archives: list[Archive]
-    optional: list[GitDataParam] = []
 
     def __init__(self, archives: list[Archive]) -> None:
-        super().__init__(self.optional)
+        super().__init__()
         self.archives = archives
 
     def decompress(self, param: tuple[str, bytes, int, bytes, int, str]) -> None:
@@ -59,7 +58,7 @@ class GitArchivesHandler(GitDataHandler):
 
 
 class GitArchivesJson:
-    _aentry_mandatory: list[GitDataParam] = [
+    _aentry_common_fields: list[GitDataParam] = [
         GitDataParam('i', GitDataType.Path, False),  # intra_path[0]
         GitDataParam('a', GitDataType.Hash),  # archive_hash
         GitDataParam('x', GitDataType.Int),  # archive_size
@@ -78,8 +77,8 @@ class GitArchivesJson:
         wfile.write(
             '  archives: // Legend: i=intra_archive_path, j=intra_archive_path2, a=archive_hash, x=archive_size, h=file_hash, s=file_size\n')
 
-        ahandler = GitDataHandler(GitArchivesHandler.optional)
-        da = GitDataList(self._aentry_mandatory, [ahandler])
+        ahandler = GitDataHandler()
+        da = GitDataList(self._aentry_common_fields, [ahandler])
         alwriter = GitDataListWriter(da, wfile)
         alwriter.write_begin()
         # warn('archives: ' + str(len(archives)))
@@ -103,7 +102,7 @@ class GitArchivesJson:
         # info(ln)
         assert re.search(r'^\s*archives\s*:\s*//', ln)
 
-        da = GitDataList(self._aentry_mandatory, [GitArchivesHandler(archives)])
+        da = GitDataList(self._aentry_common_fields, [GitArchivesHandler(archives)])
         lineno = read_git_file_list(da, rfile, lineno)
 
         # skipping footer

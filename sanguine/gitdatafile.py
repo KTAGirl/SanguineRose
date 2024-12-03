@@ -134,8 +134,8 @@ class GitParamPathCompressor(GitParamCompressor):
             path = '"0' + GitParamPathCompressor._to_json_fpath(path)
         self.prevpath = spl
         self.prevn = nmatch
-        assert path.startswith(self.prefix+'"')
-        assert '"' not in path[len(self.prefix)+1:]
+        assert path.startswith(self.prefix + '"')
+        assert '"' not in path[len(self.prefix) + 1:]
         return path + '"'
 
 
@@ -331,10 +331,10 @@ def _decompressor(p: GitDataParam) -> GitParamDecompressor:
 
 
 class GitDataHandler(ABC):
-    optional: list[GitDataParam]
+    specific_fields: list[GitDataParam]  # fields in the list entry which are specific to handler
 
-    def __init__(self, optional: list[GitDataParam]) -> None:
-        self.optional = optional
+    def __init__(self, specific_fields: list[GitDataParam] = None) -> None:
+        self.specific_fields = specific_fields if specific_fields is not None else []
 
     def decompress(self, param: tuple[str | int, ...]) -> None:  # we want to instantiate GitDataHandler,
         # but for such instantiations we don't need decompress()
@@ -342,27 +342,27 @@ class GitDataHandler(ABC):
 
 
 class GitDataList:
-    mandatory: list[GitDataParam]
+    common_fields: list[GitDataParam]  # fields which are common for all handlers
     handlers: list[GitDataHandler]
 
-    def __init__(self, mandatory: list[GitDataParam], handlers: list[GitDataHandler]) -> None:
+    def __init__(self, common_fields: list[GitDataParam], handlers: list[GitDataHandler]) -> None:
         if __debug__:
-            assert not mandatory[0].can_skip
+            assert not common_fields[0].can_skip
 
             if len(handlers) > 1:  # if there is only one handler, then there can be no problems distinguishing handlers,
                 # even if the only handler has no parameters whatsoever
                 for h in handlers:
-                    assert not h.optional[0].can_skip  # otherwise regex parsing may become ambiguous
+                    assert not h.specific_fields[0].can_skip  # otherwise regex parsing may become ambiguous
 
                 # handlers must distinguish by their first param (to avoid regex ambiguity)
-                first_param_names = [h.optional[0].name for h in handlers]
+                first_param_names = [h.specific_fields[0].name for h in handlers]
                 assert len(first_param_names) == len(set(first_param_names))
 
-            # there must be no duplicate names for any handler, including mandatory fields (to be JSON5-compliant)
+            # there must be no duplicate names for any handler, including common_fields fields (to be JSON5-compliant)
             for h in handlers:
-                all_param_names = [manda.name for manda in mandatory] + [opt.name for opt in h.optional]
+                all_param_names = [manda.name for manda in common_fields] + [opt.name for opt in h.specific_fields]
                 assert len(all_param_names) == len(set(all_param_names))
-        self.mandatory = mandatory
+        self.common_fields = common_fields
         self.handlers = handlers
 
 
@@ -381,7 +381,7 @@ def write_git_file_footer(wfile: typing.TextIO) -> None:
 class GitDataListWriter:
     df: GitDataList
     wfile: typing.TextIO
-    mandatory_compressor: list[GitParamCompressor]
+    common_fields_compressor: list[GitParamCompressor]
     last_handler: GitDataHandler | None
     last_handler_compressor: list[
         GitParamCompressor]  # we never go beyond last line, so only one (last) per-handler compressor is ever necessary
@@ -390,7 +390,7 @@ class GitDataListWriter:
     def __init__(self, df: GitDataList, wfile: typing.TextIO) -> None:
         self.df = df
         self.wfile = wfile
-        self.mandatory_compressor = [_compressor(manda) for manda in df.mandatory]
+        self.common_fields_compressor = [_compressor(manda) for manda in df.common_fields]
         self.last_handler = None
         self.last_handler_compressor = []
         self.line_num = 0
@@ -399,16 +399,16 @@ class GitDataListWriter:
         self.wfile.write('[\n')
 
     def write_line(self, handler: GitDataHandler, values: tuple) -> None:
-        assert len(values) == len(self.df.mandatory) + len(handler.optional)
+        assert len(values) == len(self.df.common_fields) + len(handler.specific_fields)
         if self.line_num > 0:
             ln = ',\n{'
         else:
             ln = '{'
         lnempty = True
         self.line_num += 1
-        assert len(self.mandatory_compressor) == len(self.df.mandatory)
-        for i in range(len(self.df.mandatory)):
-            compressed = self.mandatory_compressor[i].compress(values[i])
+        assert len(self.common_fields_compressor) == len(self.df.common_fields)
+        for i in range(len(self.df.common_fields)):
+            compressed = self.common_fields_compressor[i].compress(values[i])
             if len(compressed):
                 if lnempty:
                     lnempty = False
@@ -416,13 +416,13 @@ class GitDataListWriter:
                     ln += ','
                 ln += compressed
 
-        shift = len(self.df.mandatory)
+        shift = len(self.df.common_fields)
         if handler == self.last_handler:
-            for i in range(len(handler.optional)):
+            for i in range(len(handler.specific_fields)):
                 ln += self.last_handler_compressor[i].compress(values[shift + i])
         else:
             self.last_handler = handler
-            self.last_handler_compressor = [_compressor(opt) for opt in handler.optional]
+            self.last_handler_compressor = [_compressor(opt) for opt in handler.specific_fields]
 
         ln += '}'
         self.wfile.write(ln)
@@ -451,7 +451,7 @@ class _GitHeaderFooterReader:
 
 class _GitDataListContentsReader:
     df: GitDataList
-    mandatory_decompressor: list[GitParamDecompressor]
+    common_fields_decompressor: list[GitParamDecompressor]
     last_handler: GitDataHandler | None
     comment_only_line: re.Pattern
     regexps: list[
@@ -460,47 +460,70 @@ class _GitDataListContentsReader:
 
     def __init__(self, df: GitDataList) -> None:
         self.df = df
-        self.mandatory_decompressor = [_decompressor(manda) for manda in df.mandatory]
+        self.common_fields_decompressor = [_decompressor(manda) for manda in df.common_fields]
         self.last_handler = None
         self.comment_only_line = re.compile(r'^\s*//')
         self.regexps = []
 
+        ncommon = len(self.df.common_fields)
         for h in self.df.handlers:
             canskip = []
-            for i in range(len(h.optional)):
-                if h.optional[i].can_skip:
+            for i in range(ncommon):
+                if self.df.common_fields[i].can_skip:
                     canskip.append(i)
+            for i in range(len(h.specific_fields)):
+                if h.specific_fields[i].can_skip:
+                    canskip.append(ncommon + i)
 
+            # warn(str(len(canskip)))
+            assert len(canskip) <= ncommon + len(h.specific_fields)
             for mask in range(2 ** len(canskip)):  # scanning all pf them to get all 2**n possible bit mask patterns
-                skip = False
-                rex = ''
+                rex = '{'
                 dmatched: list[tuple[int, GitParamDecompressor]] = []
                 dskipped: list[tuple[int, GitParamDecompressor]] = []
-                for d in self.mandatory_decompressor:
-                    if len(rex) != 0:
-                        rex += ','
-                    rex += d.regex_part()
 
-                assert len(self.mandatory_decompressor) == len(df.mandatory)
-                optoffset = len(self.mandatory_decompressor)
-                for i in range(len(h.optional)):
+                assert len(self.common_fields_decompressor) == len(df.common_fields) == ncommon
+                for i in range(ncommon):
+                    skip = False
                     if i in canskip:
                         idx = canskip.index(i)
+                        assert idx >= 0
+                        # warn('i='+str(i)+' idx='+str(idx))
                         if mask & (1 << idx):
                             skip = True
+                            # warn('skip')
 
-                    p = h.optional[i]
-                    d = _decompressor(p)
+                    d = self.common_fields_decompressor[i]
                     if skip:
-                        dskipped.append((optoffset + i, d))
+                        dskipped.append((i, d))
                     else:
-                        dmatched.append((optoffset + i, d))
-                        if len(rex) != 0:
+                        dmatched.append((i, d))
+                        if len(rex) != 1:
                             rex += ','
                         rex += d.regex_part()
 
+                for i in range(len(h.specific_fields)):
+                    j = ncommon + i
+                    skip = False
+                    if j in canskip:
+                        idx = canskip.index(j)
+                        if mask & (1 << idx):
+                            skip = True
+
+                    p = h.specific_fields[i]
+                    d = _decompressor(p)
+                    if skip:
+                        dskipped.append((j, d))
+                    else:
+                        dmatched.append((j, d))
+                        if len(rex) != 1:
+                            rex += ','
+                        rex += d.regex_part()
+
+                rex += '}'
+                # warn(rex)
                 rexc: re.Pattern = re.compile(rex)
-                assert len(dmatched) + len(dskipped) == len(h.optional)
+                assert len(dmatched) + len(dskipped) == ncommon + len(h.specific_fields)
                 self.regexps.append((rexc, h, dmatched, dskipped))
 
     def parse_line(self, ln) -> bool:  # returns False if didn't handle lm
@@ -508,12 +531,13 @@ class _GitDataListContentsReader:
             return True
         for rex in self.regexps:
             (pattern, h, dmatched, dskipped) = rex
+            # warn(pattern.pattern)
             m = pattern.match(ln)
             if m:
-                assert len(dmatched) + len(dskipped) == len(h.optional)
-                param: list[str | int | None] = [None] * (len(self.df.mandatory) + len(h.optional))
+                assert len(dmatched) + len(dskipped) == len(self.df.common_fields) + len(h.specific_fields)
+                param: list[str | int | None] = [None] * (len(self.df.common_fields) + len(h.specific_fields))
                 i = 1
-                for i in range(len(self.df.mandatory)):
+                for i in range(len(self.df.common_fields)):
                     param[i] = m.group(i)
                 if h != self.last_handler:  # duplicating a bit of code to move comparison out of the loop and speed things up a bit
                     for matched in dmatched:
@@ -573,6 +597,7 @@ def read_git_file_list(dlist: GitDataList, rfile: typing.TextIO, lineno: int) ->
         assert ln
         processed = rda.parse_line(ln)
         if not processed:
+            warn(ln)
             assert re.search(r'^\s*]\s*$', ln)
             return lineno
 
