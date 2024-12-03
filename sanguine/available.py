@@ -228,6 +228,7 @@ class MasterGitArchives:
     archived_files_by_hash: dict[bytes, list[tuple[Archive, FileInArchive]]] | None
     nhashes: int  # number of hashes already requested; used to make name of tmp dir
     by: str
+    dirty: bool
 
     _LOADOWNTASKNAME = 'sanguine.available.mga.loadown'
 
@@ -240,6 +241,7 @@ class MasterGitArchives:
         self.archives_by_hash = None
         self.archived_files_by_hash = None
         self.nhashes = 0
+        self.dirty = False
 
     def _append_archive(self, ar: Archive) -> None:
         # warn(str(len(ar.files)))
@@ -264,12 +266,14 @@ class MasterGitArchives:
         (archives,) = out
         for ar in archives:
             self._append_archive(ar)
+        self.dirty = True
 
     def _done_hashing_own_task_func(self, parallel: tasks.Parallel) -> None:
-        savetaskname = 'sanguine.available.mga.save'
-        savetask = tasks.Task(savetaskname, _save_archives_task_func,
-                              (self.master_git_dir, list(self.archives_by_hash.values())), [])
-        parallel.add_task(savetask)
+        if self.dirty:
+            savetaskname = 'sanguine.available.mga.save'
+            savetask = tasks.Task(savetaskname, _save_archives_task_func,
+                                  (self.master_git_dir, list(self.archives_by_hash.values())), [])
+            parallel.add_task(savetask)
 
     def start_tasks(self, parallel: tasks.Parallel) -> None:
         loadtaskname = 'sanguine.available.mga.load'
