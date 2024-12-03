@@ -191,7 +191,7 @@ class GitParamStrDecompressor(GitParamDecompressor):
         self.prev = None
 
     def regex_part(self) -> str:
-        return self.name + r':("([^"]*)"*)'
+        return self.name + r':"([^"]*)"'
 
     def matched(self, match: str) -> str:
         self.prev = match
@@ -214,7 +214,7 @@ class GitParamHashDecompressor(GitParamDecompressor):
         self.prev = None
 
     def regex_part(self) -> str:
-        return self.name + r':("([^"]*)"*)'
+        return self.name + r':"([^"]*)"'
 
     def matched(self, match: str) -> bytes:
         self.prev = from_json_hash(match)
@@ -237,7 +237,7 @@ class GitParamPathDecompressor(GitParamDecompressor):
         self.prev = None
 
     def regex_part(self) -> str:
-        return self.name + r':("([^"]*)"*)'
+        return self.name + r':"([^"]*)"'
 
     def matched(self, match: str) -> str:
         return self._decompress_json_path(match)
@@ -266,8 +266,8 @@ class GitParamPathDecompressor(GitParamDecompressor):
             assert False
         out = ''
 
-        # print(prevpath)
-        # print(nmatch)
+        # warn(path)
+        # warn(str(nmatch))
         for i in range(nmatch):
             if i > 0:
                 out += '/'
@@ -460,7 +460,7 @@ class _GitDataListContentsReader:
 
     def __init__(self, df: GitDataList) -> None:
         self.df = df
-        self.common_fields_decompressor = [_decompressor(manda) for manda in df.common_fields]
+        self.common_fields_decompressor = [_decompressor(cf) for cf in df.common_fields]
         self.last_handler = None
         self.comment_only_line = re.compile(r'^\s*//')
         self.regexps = []
@@ -524,6 +524,9 @@ class _GitDataListContentsReader:
                 # warn(rex)
                 rexc: re.Pattern = re.compile(rex)
                 assert len(dmatched) + len(dskipped) == ncommon + len(h.specific_fields)
+                # warn(rex)
+                # warn(repr(dmatched))
+                # warn(repr(dskipped))
                 self.regexps.append((rexc, h, dmatched, dskipped))
 
     def parse_line(self, ln) -> bool:  # returns False if didn't handle lm
@@ -536,29 +539,30 @@ class _GitDataListContentsReader:
             if m:
                 assert len(dmatched) + len(dskipped) == len(self.df.common_fields) + len(h.specific_fields)
                 param: list[str | int | None] = [None] * (len(self.df.common_fields) + len(h.specific_fields))
-                i = 1
-                for i in range(len(self.df.common_fields)):
-                    param[i] = m.group(i)
+
                 if h != self.last_handler:  # duplicating a bit of code to move comparison out of the loop and speed things up a bit
-                    for matched in dmatched:
+                    for i in range(len(dmatched)):
+                        matched = dmatched[i]
+                        # warn(repr(pattern.pattern))
+                        # warn('i='+str(i)+': '+repr(matched))
+                        # warn(repr(m.group(i+1)))
                         d: GitParamDecompressor = matched[1]
                         d.reset()
-                        param[matched[0]] = d.matched(m.group(i))
-                        i += 1
+                        param[matched[0]] = d.matched(m.group(i + 1))
                     for skipped in dskipped:
                         d: GitParamDecompressor = skipped[1]
                         d.reset()
                         param[skipped[0]] = d.skipped()
                     self.last_handler = h
                 else:
-                    if h != self.last_handler:
-                        for matched in dmatched:
-                            d: GitParamDecompressor = matched[1]
-                            param[matched[0]] = d.matched(m.group(i))
-                            i += 1
-                        for skipped in dskipped:
-                            d: GitParamDecompressor = skipped[1]
-                            param[skipped[0]] = d.skipped()
+                    for i in range(len(dmatched)):
+                        matched = dmatched[i]
+                        d: GitParamDecompressor = matched[1]
+                        param[matched[0]] = d.matched(m.group(i + 1))
+                    for skipped in dskipped:
+                        d: GitParamDecompressor = skipped[1]
+                        param[skipped[0]] = d.skipped()
+                    self.last_handler = h
 
                 h.decompress(tuple(param))
                 return True
