@@ -5,6 +5,7 @@ import os
 import pickle
 import traceback
 import typing
+import base64
 # noinspection PyUnresolvedReferences
 from collections.abc import Callable, Generator, Iterable
 # noinspection PyUnresolvedReferences
@@ -76,7 +77,9 @@ def debug(msg: str) -> None:
 
 class JsonEncoder(json.JSONEncoder):
     def default(self, o: any) -> any:
-        if isinstance(o, object):
+        if isinstance(o, bytes):
+            return base64.b64encode(o).decode('ascii')
+        elif isinstance(o, object):
             return o.__dict__
         else:
             return o

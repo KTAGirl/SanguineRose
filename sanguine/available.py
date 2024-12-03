@@ -26,10 +26,11 @@ class Archive:
     files: list[FileInArchive]
     by: str
 
-    def __init__(self, archive_hash: bytes, archive_size: int, by: str) -> None:
+    def __init__(self, archive_hash: bytes, archive_size: int, by: str,
+                 files: list[FileInArchive] | None = None) -> None:
         self.archive_hash = archive_hash
         self.archive_size = archive_size
-        self.files = []
+        self.files = files if files is not None else []
         self.by = by
 
 
@@ -43,6 +44,8 @@ class GitArchivesHandler(GitDataHandler):
         self.archives = archives
 
     def decompress(self, param: tuple[str, bytes, int, bytes, int, str]) -> None:
+        # warn(repr(param))
+        # time.sleep(1)
         (i, a, x, h, s, b) = param
         found = None
         if len(self.archives) > 0:
@@ -53,13 +56,14 @@ class GitArchivesHandler(GitDataHandler):
 
         if found is None:
             found = Archive(a, x, b)
+            self.archives.append(found)
 
         found.files.append(FileInArchive(h, s, i))
 
 
 class GitArchivesJson:
     _aentry_common_fields: list[GitDataParam] = [
-        GitDataParam('i', GitDataType.Path, False),  # intra_path[0]
+        GitDataParam('i', GitDataType.Path, False),  # intra_path
         GitDataParam('a', GitDataType.Hash),  # archive_hash
         GitDataParam('x', GitDataType.Int),  # archive_size
         GitDataParam('h', GitDataType.Hash, False),  # file_hash (truncated)
@@ -75,7 +79,7 @@ class GitArchivesJson:
         # warn(str(len(archives)))
         write_git_file_header(wfile)
         wfile.write(
-            '  archives: // Legend: i=intra_archive_path, j=intra_archive_path2, a=archive_hash, x=archive_size, h=file_hash, s=file_size\n')
+            '  archives: // Legend: i=intra_archive_path, a=archive_hash, x=archive_size, h=file_hash, s=file_size, b=by\n')
 
         ahandler = GitDataHandler()
         da = GitDataList(self._aentry_common_fields, [ahandler])
@@ -85,10 +89,10 @@ class GitArchivesJson:
         for ar in archives:
             # warn('files: ' + str(len(ar.files)))
             for fi in sorted(ar.files,
-                             key=lambda f: f.intra_path[0] + (f.intra_path[1] if len(f.intra_path) > 1 else '')):
+                             key=lambda f: f.intra_path):
                 alwriter.write_line(ahandler, (
                     fi.intra_path, ar.archive_hash,
-                    ar.archive_size, truncate_file_hash(fi.file_hash), fi.file_size, ar.by))
+                    ar.archive_size, fi.file_hash, fi.file_size, ar.by))
         alwriter.write_end()
         write_git_file_footer(wfile)
 
@@ -111,6 +115,7 @@ class GitArchivesJson:
         if __debug__:
             assert len(set([ar.archive_hash for ar in archives])) == len(archives)
 
+        # warn(str(len(archives)))
         return archives
 
 
@@ -160,7 +165,8 @@ def _hash_archive(archives: list[Archive], by: str, tmppath: str,  # recursive!
             # print(fpath)
             s, h = calculate_file_hash(fpath)
             assert fpath.startswith(tmppath)
-            ar.files.append(FileInArchive(h, s, Folders.normalize_archive_intra_path(fpath[len(tmppath):])))
+            ar.files.append(
+                FileInArchive(truncate_file_hash(h), s, Folders.normalize_archive_intra_path(fpath[len(tmppath):])))
 
             ext = os.path.split(fpath)[1].lower()
             if ext in pluginexts:
@@ -196,6 +202,21 @@ def _archive_hashing_task_func(param: tuple[str, str, bytes, int, str]) -> tuple
 def _save_archives_task_func(param: tuple[str, list[Archive]]) -> None:
     (mastergitdir, archives) = param
     _write_git_archives(mastergitdir, archives)
+    if __debug__:
+        saved_loaded = _read_git_archives((mastergitdir + 'known-archives.json',))
+        # warn(str(len(archives)))
+        # warn(str(len(saved_loaded)))
+        sorted_archives = sorted([Archive(ar.archive_hash, ar.archive_size, ar.by,
+                                          sorted([fi for fi in ar.files], key=lambda f: f.intra_path))
+                                  for ar in archives], key=lambda a: a.archive_hash)
+        assert len(saved_loaded) == len(archives)
+        for i in range(len(archives)):
+            olda = JsonEncoder().encode(sorted_archives[i])
+            newa = JsonEncoder().encode(saved_loaded[i])
+            if olda != newa:
+                warn(olda)
+                warn(newa)
+                assert False
 
 
 class MasterGitArchives:
