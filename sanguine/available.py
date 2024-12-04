@@ -371,7 +371,7 @@ if __name__ == '__main__':
 
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
         ttmppath = Folders.normalize_dir_path('..\\..\\mo2git.tmp\\')
-        add_file_logging(ttmppath + 'sanguine.log')
+        add_file_logging(ttmppath + 'sanguine.log.html')
         with TmpPath(ttmppath) as ttmpdir:
             tavailable = AvailableFiles('KTAGirl',
                                         Folders.normalize_dir_path('..\\..\\mo2git.cache\\'),

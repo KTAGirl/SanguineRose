@@ -54,7 +54,7 @@ def abort_if_not(cond: bool,
 ### logging
 
 class _SanguineFormatter(logging.Formatter):
-    FORMAT: str = "[%(levelname)s]: %(message)s (%(filename)s:%(lineno)d)"
+    FORMAT: str = '[%(levelname)s]: %(message)s (%(filename)s:%(lineno)d)'
     FORMATS: dict[int, str] = {
         logging.DEBUG: '\x1b[38;20m' + FORMAT + '\x1b[0m',
         logging.INFO: '\x1b[32m' + FORMAT + '\x1b[0m',
@@ -69,8 +69,34 @@ class _SanguineFormatter(logging.Formatter):
         return formatter.format(record)
 
 
+_FORMAT: str = '[%(levelname)s@%(asctime)s]: %(message)s (%(filename)s:%(lineno)d)'
+
+
+def _html_format(color: str, bold: bool = False) -> str:
+    return '<div style="margin: -1em -1em; padding: 0.5em 1em; font-size:1.2em; background-color:black; color:' + color + (
+        '; font-weight:600' if bold else '') + '; font-family:monospace;">' + _FORMAT + '</div>'
+
+
+class _SanguineFileFormatter(logging.Formatter):
+    FORMATS: dict[int, str] = {
+        logging.DEBUG: _html_format('#888888'),
+        logging.INFO: _html_format('#008000'),
+        logging.WARNING: _html_format('#e5bf00'),
+        logging.ERROR: _html_format('red'),  # not really using it (yet?)
+        logging.CRITICAL: _html_format('#ff0000', True)
+    }
+
+    def __init__(self):
+        super().__init__(datefmt='%H:%M:%S')
+
+    def format(self, record) -> str:
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+
 _logger = logging.getLogger('sanguine-rose')
-_logger.setLevel(logging.DEBUG)
+_logger.setLevel(logging.DEBUG if __debug__ else logging.INFO)
 
 _console_handler = logging.StreamHandler()
 _console_handler.setLevel(logging.DEBUG)
@@ -84,9 +110,8 @@ def add_file_logging(fpath: str) -> None:
     # file_handler = logging.FileHandler(fpath)
     # file_handler = logging.FileHandler(fpath)
     file_handler = logging.handlers.RotatingFileHandler(fpath, mode='w', backupCount=5)
-    file_handler.setLevel(logging.DEBUG)
-    file_formatter = logging.Formatter('[%(levelname)s@%(asctime)s]: %(message)s (%(filename)s:%(lineno)d)', '%H:%M:%S')
-    file_handler.setFormatter(file_formatter)
+    file_handler.setLevel(logging.DEBUG if __debug__ else logging.INFO)
+    file_handler.setFormatter(_SanguineFileFormatter())
     _logger.addHandler(file_handler)
 
 
