@@ -2,7 +2,6 @@
 
 # noinspection PyUnresolvedReferences
 import pickle
-import time
 from enum import IntEnum
 from multiprocessing import Process, Queue as PQueue, shared_memory
 
@@ -376,7 +375,8 @@ class Parallel:
 
     def __enter__(self) -> "Parallel":
         self.processes = []
-        self.processesload = []  # we'll aim to have it at 2
+        self.processesload = []  # we'll aim to have it at 1; improvements to keep pressure are possible,
+        # but not as keeping simplistic processesload[i] == 2 (it disbalances end of processing way too much)
         self.inqueues = []
         self.procrunningconfirmed = []  # otherwise join() on a not running yet process may hang
         self.outq = PQueue()
@@ -736,10 +736,10 @@ class Parallel:
             pl = self.processesload[i]
             if pl == 0:  # cannot be better
                 return i
-            if pl > 1:
-                continue
-            if besti < 0 or self.processesload[besti] > pl:
-                besti = i
+            # if pl > 1:
+            #    continue
+            # if besti < 0 or self.processesload[besti] > pl:
+            #    besti = i
         return besti
 
     def received_shared_return(self, sharedparam: SharedReturnParam) -> any:

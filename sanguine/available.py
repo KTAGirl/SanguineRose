@@ -1,5 +1,3 @@
-import shutil
-
 import sanguine.pluginhandler as pluginhandler
 import sanguine.tasks as tasks
 from sanguine.files import calculate_file_hash, truncate_file_hash
@@ -136,14 +134,14 @@ def _read_git_archives(params: tuple[str]) -> list[Archive]:
 def _read_cached_git_archives(mastergitdir: str, cachedir: str,
                               cachedata: dict[str, any]) -> tuple[list[Archive], dict[str, any]]:
     assert Folders.is_normalized_dir_path(mastergitdir)
-    mastergitfile = mastergitdir + 'known-archives.json'
+    mastergitfile = mastergitdir + 'known-archives.json5'
     return pickled_cache(cachedir, cachedata, 'archivesdata', [mastergitfile],
                          _read_git_archives, (mastergitfile,))
 
 
 def _write_git_archives(mastergitdir: str, archives: list[Archive]) -> None:
     assert Folders.is_normalized_dir_path(mastergitdir)
-    fpath = mastergitdir + 'known-archives.json'
+    fpath = mastergitdir + 'known-archives.json5'
     with open(fpath, 'wt', encoding='utf-8') as wf:
         GitArchivesJson().write(wf, archives)
 
@@ -161,7 +159,9 @@ def _hash_archive(archives: list[Archive], by: str, tmppath: str,  # recursive!
         for f in files:
             nf += 1
             fpath = os.path.join(root, f)
-            assert os.path.isfile(fpath)
+            # if not os.path.isfile(fpath):
+            #    critical('_hash_archive(): not path.isfile({})'.format(fpath))
+            #    abort_if_not(False)
             # print(fpath)
             s, h = calculate_file_hash(fpath)
             assert fpath.startswith(tmppath)
@@ -172,7 +172,10 @@ def _hash_archive(archives: list[Archive], by: str, tmppath: str,  # recursive!
             if ext in pluginexts:
                 nested_plugin = pluginhandler.archive_plugin_for(fpath)
                 assert nested_plugin is not None
-                newtmppath = tmppath + str(nf) + '\\'
+                newtmppath = TmpPath.tmp_in_tmp(tmppath,
+                                                'T3lIzNDx.',  # tmp is not from root,
+                                                # so randomly-looking prefix is necessary
+                                                nf)
                 assert not os.path.isdir(newtmppath)
                 os.makedirs(newtmppath)
                 _hash_archive(archives, by, newtmppath, nested_plugin, fpath, h, s)
@@ -195,7 +198,7 @@ def _archive_hashing_task_func(param: tuple[str, str, bytes, int, str]) -> tuple
     archives = []
     _hash_archive(archives, by, tmppath, plugin, arpath, arhash, arsize)
     debug('MGA: about to remove temporary tree {}'.format(tmppath))
-    shutil.rmtree(tmppath)
+    TmpPath.rm_tmp_tree(tmppath)
     return (archives,)
 
 
@@ -203,7 +206,7 @@ def _save_archives_task_func(param: tuple[str, list[Archive]]) -> None:
     (mastergitdir, archives) = param
     _write_git_archives(mastergitdir, archives)
     if __debug__:
-        saved_loaded = _read_git_archives((mastergitdir + 'known-archives.json',))
+        saved_loaded = _read_git_archives((mastergitdir + 'known-archives.json5',))
         # warn(str(len(archives)))
         # warn(str(len(saved_loaded)))
         sorted_archives = sorted([Archive(ar.archive_hash, ar.archive_size, ar.by,
@@ -293,7 +296,7 @@ class MasterGitArchives:
     def start_hashing_archive(self, parallel: tasks.Parallel, arpath: str, arhash: bytes, arsize: int) -> None:
         hashingtaskname = 'sanguine.available.mga.hash.' + arpath
         self.nhashes += 1
-        tmp_dir = self.tmp_dir + str(self.nhashes) + '\\'
+        tmp_dir = TmpPath.tmp_in_tmp(self.tmp_dir, 'ah.', self.nhashes)
         hashingtask = tasks.Task(hashingtaskname, _archive_hashing_task_func,
                                  (self.by, arpath, arhash, arsize, tmp_dir), [])
         parallel.add_task(hashingtask)
@@ -328,8 +331,8 @@ class AvailableFiles:
             ext = os.path.splitext(ar.file_path)[1]
             if ext == '.meta':
                 continue
-            if ext == '.7z':
-                continue  # TODO! handle 7z decompression with BCJ2
+            # if ext == '.7z':
+            #    continue  # TODO! handle 7z decompression with BCJ2
             if not ar.file_hash in self.gitarchives.archives_by_hash:
                 if ext in pluginhandler.all_archive_plugins_extensions():
                     self.gitarchives.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
@@ -367,11 +370,14 @@ if __name__ == '__main__':
     import sys
 
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
-        tavailable = AvailableFiles('KTAGirl',
-                                    Folders.normalize_dir_path('..\\..\\mo2git.cache\\'),
-                                    Folders.normalize_dir_path('..\\..\\mo2git.tmp\\'),
-                                    Folders.normalize_dir_path('..\\..\\skyrim-universe\\'),
-                                    [Folders.normalize_dir_path('..\\..\\..\\mo2\\downloads')])
-        with tasks.Parallel(None) as tparallel:
-            tavailable.start_tasks(tparallel)
-            tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()
+        ttmppath = Folders.normalize_dir_path('..\\..\\mo2git.tmp\\')
+        add_file_logging(ttmppath + 'sanguine.log')
+        with TmpPath(ttmppath) as ttmpdir:
+            tavailable = AvailableFiles('KTAGirl',
+                                        Folders.normalize_dir_path('..\\..\\mo2git.cache\\'),
+                                        ttmpdir.tmp_dir(),
+                                        Folders.normalize_dir_path('..\\..\\sanguine-skyrim-root\\'),
+                                        [Folders.normalize_dir_path('..\\..\\..\\mo2\\downloads')])
+            with tasks.Parallel(None) as tparallel:
+                tavailable.start_tasks(tparallel)
+                tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()

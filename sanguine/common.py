@@ -1,11 +1,14 @@
+import base64
 import glob
 import json
 import logging
+import logging.handlers
 import os
 import pickle
+import shutil
+import time
 import traceback
 import typing
-import base64
 # noinspection PyUnresolvedReferences
 from collections.abc import Callable, Generator, Iterable
 # noinspection PyUnresolvedReferences
@@ -48,30 +51,66 @@ def abort_if_not(cond: bool,
         raise Mo2gitError(msg)
 
 
-_logger = logging.getLogger('mo2git')
-logging.basicConfig(level=logging.DEBUG)
+### logging
+
+class _SanguineFormatter(logging.Formatter):
+    FORMAT: str = "[%(levelname)s]: %(message)s (%(filename)s:%(lineno)d)"
+    FORMATS: dict[int, str] = {
+        logging.DEBUG: '\x1b[38;20m' + FORMAT + '\x1b[0m',
+        logging.INFO: '\x1b[32m' + FORMAT + '\x1b[0m',
+        logging.WARNING: '\x1b[93;20m' + FORMAT + '\x1b[0m',
+        logging.ERROR: FORMAT,  # not really using it (yet?)
+        logging.CRITICAL: '\x1b[91;1m' + FORMAT + '\x1b[0m'
+    }
+
+    def format(self, record) -> str:
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+
+_logger = logging.getLogger('sanguine-rose')
+_logger.setLevel(logging.DEBUG)
+
+_console_handler = logging.StreamHandler()
+_console_handler.setLevel(logging.DEBUG)
+_console_handler.setFormatter(_SanguineFormatter())
+
+_logger.addHandler(_console_handler)
+
+
+def add_file_logging(fpath: str) -> None:
+    global _logger
+    # file_handler = logging.FileHandler(fpath)
+    # file_handler = logging.FileHandler(fpath)
+    file_handler = logging.handlers.RotatingFileHandler(fpath, mode='w', backupCount=5)
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter('[%(levelname)s@%(asctime)s]: %(message)s (%(filename)s:%(lineno)d)', '%H:%M:%S')
+    file_handler.setFormatter(file_formatter)
+    _logger.addHandler(file_handler)
 
 
 def warn(msg: str) -> None:
     global _logger
-    _logger.warning('\x1b[93;20m'+msg+'\x1b[0m')
+    _logger.warning(msg)
 
 
 def info(msg: str) -> None:
     global _logger
-    _logger.info('\x1b[32m'+msg+'\x1b[0m')
+    _logger.info(msg)
 
 
 def critical(msg: str) -> None:
     global _logger
-    _logger.critical('\x1b[91;1m'+msg+'\x1b[0m')
+    _logger.critical(msg)
 
 
 def debug(msg: str) -> None:
     if not __debug__:
         return
     global _logger
-    _logger.debug('\x1b[38;20m'+msg+'\x1b[0m')
+    _logger.debug(msg)
+
 
 ###
 
@@ -138,6 +177,80 @@ def read_dict_from_json_file(fpath: str) -> dict[str, any]:
     except Exception as e:
         warn('error loading ' + fpath + ': ' + str(e) + '. Will continue without it')
         return {}
+
+
+class TmpPath:  # as we're playing with rmtree() here, we need to be super-careful not to delete too much
+    tmpdir: str
+    ADDED_FOLDER: str = 'JBSLtet9'  # seriously unique
+    MAX_RMTREE_RETRIES: int = 3
+    MAX_RESERVE_FOLDERS: int = 10
+
+    def __init__(self, basetmpdir: str) -> None:
+        assert basetmpdir.endswith('\\')
+        self.tmpdir = basetmpdir + TmpPath.ADDED_FOLDER + '\\'
+
+    def __enter__(self) -> "TmpPath":
+        if os.path.isdir(self.tmpdir):
+            try:
+                shutil.rmtree(
+                    self.tmpdir)  # safe not to remove too much as we're removing a folder with a UUID-based name
+            except Exception as e:
+                warn('Error removing {}: {}'.format(self.tmpdir, e))
+                # we cannot remove whole tmpdir, but maybe we'll have luck with one of 'reserve' subfolders?
+                ok = False
+                for i in range(self.MAX_RESERVE_FOLDERS):
+                    reservefolder = self.tmpdir + '_' + str(i) + '\\'
+                    if not os.path.isdir(reservefolder):
+                        self.tmpdir = reservefolder
+                        ok = True
+                        break  # for i
+                    try:
+                        shutil.rmtree(reservefolder)
+                        self.tmpdir = reservefolder
+                        ok = True
+                        break  # for i
+                    except Exception as e2:
+                        warn('Error removing {}: {}'.format(reservefolder, e2))
+
+                abort_if_not(ok)
+                info('Will use {} as tmpdir'.format(self.tmpdir))
+
+        os.makedirs(self.tmpdir)
+        return self
+
+    def tmp_dir(self) -> str:
+        return self.tmpdir
+
+    @staticmethod
+    def tmp_in_tmp(tmpbase: str, prefix: str, num: int) -> str:
+        assert tmpbase.endswith('\\')
+        assert '\\' + TmpPath.ADDED_FOLDER + '\\' in tmpbase
+        return tmpbase + prefix + str(num) + '\\'
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        TmpPath.rm_tmp_tree(self.tmpdir)
+        if exc_val is not None:
+            raise exc_val
+
+    @staticmethod
+    def rm_tmp_tree(
+            tmppath) -> None:  # Sometimes, removing tmp tree doesn't work right after work with archive is done.
+        # I suspect f...ing indexing service, but have not much choice rather than retrying.
+        assert '\\' + TmpPath.ADDED_FOLDER + '\\' in tmppath
+        nretries = TmpPath.MAX_RMTREE_RETRIES
+        while True:
+            nretries -= 1
+            try:
+                shutil.rmtree(tmppath)
+                return
+            except OSError as e:
+                if nretries <= 0:
+                    warn('Error trying to remove temp tree {}: {}. Will not retry, should be removed on restart'.format(
+                        tmppath, e))
+                    return
+                warn('Error trying to remove temp tree {}: {}. Will retry in 1 sec, {} retries left'.format(
+                    tmppath, e, nretries))
+                time.sleep(1.)
 
 
 class Val:
