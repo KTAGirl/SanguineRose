@@ -1,4 +1,3 @@
-import base64
 import hashlib
 import stat
 
@@ -17,12 +16,12 @@ def calculate_file_hash(
     with open(fpath, 'rb') as f:
         while True:
             bb = f.read(blocksize)
+            if not bb:
+                break
             h.update(bb)
             lbb = len(bb)
             assert lbb <= blocksize
             fsize += lbb
-            if lbb != blocksize:
-                break
 
     # were there any changes while we were working?
     assert st.st_size == fsize

@@ -370,8 +370,12 @@ if __name__ == '__main__':
     import sys
 
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
+        from sanguine.sanguine_install_helpers import check_sanguine_prerequisites
         ttmppath = Folders.normalize_dir_path('..\\..\\mo2git.tmp\\')
         add_file_logging(ttmppath + 'sanguine.log.html')
+
+        check_sanguine_prerequisites()
+
         with TmpPath(ttmppath) as ttmpdir:
             tavailable = AvailableFiles('KTAGirl',
                                         Folders.normalize_dir_path('..\\..\\mo2git.cache\\'),

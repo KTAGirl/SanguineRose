@@ -1,3 +1,5 @@
+# common is used by sanguine_install_helpers, so it must not import any installable modules
+
 import base64
 import glob
 import json
