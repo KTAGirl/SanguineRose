@@ -92,7 +92,17 @@ def _install_7z_exe() -> None:
     x64exe = _download_file_nice_name(url)
     _run_installer([x64exe, '/S', '/D=' + toolsdir + '\\7z'], url)
     os.remove(x64exe)
-    _print_green('7z successfully installed to sanguine-rose\\tools folder.')
+    _print_green('7z successfully installed to sanguine-rose\\tools\\7z folder.')
+
+
+def _install_unrar_exe() -> None:
+    toolsdir = _tools_dir()
+    os.makedirs(toolsdir + '\\unrar', exist_ok=True)
+    url = 'https://www.rarlab.com/rar/unrarw64.exe'
+    unrarexe = _download_file_nice_name(url)
+    _run_installer([unrarexe, '/S', '/D' + toolsdir + '\\unrar'], url)
+    os.remove(unrarexe)
+    _print_green('unrar successfully installed to sanguine-rose\\tools\\unrar folder.')
 
 
 def install_sanguine_prerequisites() -> None:
@@ -103,6 +113,7 @@ def install_sanguine_prerequisites() -> None:
         _print_green('pip module {} successfully installed.'.format(m))
 
     _install_7z_exe()
+    _install_unrar_exe()
 
 
 ##### checks
@@ -122,6 +133,8 @@ def _not_installed(msg: str) -> None:
 
 
 def check_sanguine_prerequisites() -> None:
+    # we don't really need to check for MSVC being installed, as without it pip modules won't be available
+
     for m in REQUIRED_PIP_MODULES:
         if m in PIP2PYTHON_MODULE_NAME_REMAPPING:
             m = PIP2PYTHON_MODULE_NAME_REMAPPING[m]
@@ -130,5 +143,7 @@ def check_sanguine_prerequisites() -> None:
 
     if not os.path.isfile(_tools_dir() + '\\7z\\7z.exe'):
         _not_installed('tools\\7z\\7z.exe is not installed.')
+    if not os.path.isfile(_tools_dir() + '\\unrar\\unrar.exe'):
+        _not_installed('tools\\unrar\\unrar.exe is not installed.')
 
     info('All sanguine prerequisites are ok.')
