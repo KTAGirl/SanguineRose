@@ -83,9 +83,8 @@ BTW, with Sanguine Rose (and unlike with WJ), you can easily see this instructio
 - *Steam*
 - *Skyrim* (Make sure it’s a PRISTINE install folder)
 - *You don’t necessarily need to install MO2 or tools like LOOT or xEdit separately. If you set up your YOUR-MODPACK project right, those will get installed into your portable MO2 instance by Sanguine Rose.*
-- *MSVC*, which can be downloaded from [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/). Just check the `Desktop Development with C++` box. You’ll need this to install the `py7zr` and `bethesda-structs` Python modules.
 - *Python v3.10+*. Grab it from [Python Releases for Windows](https://www.python.org/downloads/windows/). The latest version is perfect, and no, I'm not going to support Python 2. Make sure to add `py` to your PATH environment variable.
-- You’ll also need quite a few of the following Python modules. To install all of them, simply run `sanguine-pip.bat` from Sanguine Rose project. **Prerequisite: MSVC (see above)**
+- You’ll also need to run sanguine-install.py from sanguine-rose project. It will download and install several things we need. 
 
 ### Recommended
 - *GitHub Desktop* [Download GitHub Desktop](https://desktop.github.com/download/)
