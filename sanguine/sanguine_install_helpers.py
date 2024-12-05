@@ -13,7 +13,8 @@ def _install_pip_module(module: str) -> None:
 
 
 REQUIRED_PIP_MODULES = ['json5', 'bethesda-structs']
-PIP2PYTHON_MODULE_NAME_REMAPPING = {'bethesda-structs':'bethesda_structs'}
+PIP2PYTHON_MODULE_NAME_REMAPPING = {'bethesda-structs': 'bethesda_structs'}
+
 
 def _print_yellow(s: str) -> None:
     print('\x1b[93;20m' + s + '\x1b[0m')
@@ -21,6 +22,10 @@ def _print_yellow(s: str) -> None:
 
 def _print_redbold(s: str) -> None:
     print('\x1b[91;1m' + s + '\x1b[0m')
+
+
+def _print_green(s: str) -> None:
+    print('\x1b[32m' + s + '\x1b[0m')
 
 
 ##### install
@@ -34,6 +39,8 @@ def _run_installer(cmd: list[str], sitefrom: str, localonly: bool = True) -> Non
     if localonly:
         _print_yellow(
             "We'll tell installer not to install anything system-wide, only into sanguine-rose\\tools folder.")
+    else:
+        _print_yellow("It will be installed system-wide.")
     while True:
         ok = input('Do you want to proceed (Y/N)?')
         if ok == 'Y' or ok == 'y':
@@ -49,6 +56,28 @@ def _tools_dir() -> str:
     return os.path.abspath(os.path.split(os.path.abspath(__file__))[0] + '\\..\\tools')
 
 
+def _download_file_nice_name(url: str) -> str:
+    tfname = simple_download.download_temp(url)
+    desired_fname = url.split('/')[-1]
+    new_fname = os.path.split(tfname)[0] + '\\' + desired_fname
+    assert os.path.isfile(tfname)
+    shutil.move(tfname, new_fname)
+    assert os.path.isfile(new_fname)
+    return new_fname
+
+
+### Specific installers
+
+def _install_vs_build_tools() -> None:
+    urls = simple_download.pattern_from_url('https://visualstudio.microsoft.com/visual-cpp-build-tools/',
+                                            r'href="(https://aka.ms/vs/.*/release/vs_BuildTools.exe)"')
+    assert len(urls) == 1
+    url = urls[0]
+    exe = _download_file_nice_name(url)
+    _run_installer([exe, '--quiet', '--norestart'], url, False)
+    _print_green('Visual C++ build tools successfully installed.')
+
+
 def _install_7z_exe() -> None:
     toolsdir = _tools_dir()
     os.makedirs(toolsdir + '\\7z', exist_ok=True)
@@ -60,19 +89,18 @@ def _install_7z_exe() -> None:
     assert 0 <= mx < len(ix64s)
     exename = '7z' + x64s[mx] + '-x64.exe'
     url = 'https://7-zip.org/a/' + exename
-    x64exedl = simple_download.download_temp(url)
-    x64exe = os.path.split(x64exedl)[0] + '\\' + exename
-    assert os.path.isfile(x64exedl)
-    shutil.move(x64exedl, x64exe)
-    assert os.path.isfile(x64exe)
-
+    x64exe = _download_file_nice_name(url)
     _run_installer([x64exe, '/S', '/D=' + toolsdir + '\\7z'], url)
     os.remove(x64exe)
+    _print_green('7z successfully installed to sanguine-rose\\tools folder.')
 
 
 def install_sanguine_prerequisites() -> None:
+    _install_vs_build_tools()  # should run before installing pip modules
+
     for m in REQUIRED_PIP_MODULES:
         _install_pip_module(m)
+        _print_green('pip module {} successfully installed.'.format(m))
 
     _install_7z_exe()
 
