@@ -22,6 +22,6 @@ class SevenzArchivePlugin(ArchivePluginBase):
         info('Extracting all from {}...'.format(archive))
 
         syscall = [_7z_exe(), 'x', '-o' + targetpath, archive]
-        warn(repr(syscall))
+        # warn(repr(syscall))
         subprocess.check_call(syscall)
         info('Extraction done')
