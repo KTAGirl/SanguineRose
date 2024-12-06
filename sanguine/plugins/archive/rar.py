@@ -7,7 +7,7 @@ from sanguine.pluginhandler import ArchivePluginBase
 
 
 def _unrar_exe() -> str:
-    return os.path.abspath(os.path.split(__file__)[0] + '\\..\\..\\..\\tools\\unrar\\UnRAR.exe')
+    return os.path.abspath(os.path.split(__file__)[0] + '\\..\\..\\..\\tools\\UnRAR.exe')
 
 
 class RarArchivePlugin(ArchivePluginBase):

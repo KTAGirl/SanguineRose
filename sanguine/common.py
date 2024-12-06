@@ -5,6 +5,7 @@ import glob
 import json
 import logging
 import logging.handlers
+import multiprocessing
 import os
 import pickle
 import shutil
@@ -75,7 +76,7 @@ _FORMAT: str = '[%(levelname)s@%(asctime)s]: %(message)s (%(filename)s:%(lineno)
 
 
 def _html_format(color: str, bold: bool = False) -> str:
-    return '<div style="margin: -1em -1em; padding: 0.5em 1em; font-size:1.2em; background-color:black; color:' + color + (
+    return '<div style="margin: -1em -1em; padding: 0.5em 1em; white-space:nowrap; font-size:1.2em; background-color:black; color:' + color + (
         '; font-weight:600' if bold else '') + '; font-family:monospace;">' + _FORMAT + '</div>'
 
 
@@ -88,7 +89,7 @@ class _SanguineFileFormatter(logging.Formatter):
         logging.CRITICAL: _html_format('#ff0000', True)
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(datefmt='%H:%M:%S')
 
     def format(self, record) -> str:
@@ -97,7 +98,7 @@ class _SanguineFileFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-_logger = logging.getLogger('sanguine-rose')
+_logger = multiprocessing.get_logger()
 _logger.setLevel(logging.DEBUG if __debug__ else logging.INFO)
 
 _console_handler = logging.StreamHandler()
@@ -109,8 +110,6 @@ _logger.addHandler(_console_handler)
 
 def add_file_logging(fpath: str) -> None:
     global _logger
-    # file_handler = logging.FileHandler(fpath)
-    # file_handler = logging.FileHandler(fpath)
     file_handler = logging.handlers.RotatingFileHandler(fpath, mode='w', backupCount=5)
     file_handler.setLevel(logging.DEBUG if __debug__ else logging.INFO)
     file_handler.setFormatter(_SanguineFileFormatter())
@@ -119,24 +118,24 @@ def add_file_logging(fpath: str) -> None:
 
 def warn(msg: str) -> None:
     global _logger
-    _logger.warning(msg)
+    _logger.warning(msg, stacklevel=2)
 
 
 def info(msg: str) -> None:
     global _logger
-    _logger.info(msg)
+    _logger.info(msg, stacklevel=2)
 
 
 def critical(msg: str) -> None:
     global _logger
-    _logger.critical(msg)
+    _logger.critical(msg, stacklevel=2)
 
 
 def debug(msg: str) -> None:
     if not __debug__:
         return
     global _logger
-    _logger.debug(msg)
+    _logger.debug(msg, stacklevel=2)
 
 
 ###

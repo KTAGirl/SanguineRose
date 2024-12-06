@@ -7,7 +7,7 @@ from sanguine.pluginhandler import ArchivePluginBase
 
 
 def _7z_exe() -> str:
-    return os.path.abspath(os.path.split(__file__)[0] + '\\..\\..\\..\\tools\\7z\\7z.exe')
+    return os.path.abspath(os.path.split(__file__)[0] + '\\..\\..\\..\\tools\\7za.exe')
 
 
 class SevenzArchivePlugin(ArchivePluginBase):

@@ -30,17 +30,16 @@ def _print_green(s: str) -> None:
 
 ##### install
 
-def _run_installer(cmd: list[str], sitefrom: str, localonly: bool = True) -> None:
+def _run_installer(cmd: list[str], sitefrom: str, msg:str) -> None:
     _print_redbold("We're about to run the following installer: {}".format(cmd[0]))
     _print_yellow("It was downloaded from {}".format(sitefrom))
     _print_yellow("Feel free to run it through your favorite virus checker,")
     _print_yellow("     but when, after entering 'Y' below, Windows will ask you stupid questions,")
     _print_redbold("     please make sure to tell Windows that you're ok with it")
-    if localonly:
-        _print_yellow(
-            "We'll tell installer not to install anything system-wide, only into sanguine-rose\\tools folder.")
-    else:
-        _print_yellow("It will be installed system-wide.")
+
+    if msg:
+        _print_redbold(msg)
+
     while True:
         ok = input('Do you want to proceed (Y/N)?')
         if ok == 'Y' or ok == 'y':
@@ -73,36 +72,11 @@ def _install_vs_build_tools() -> None:
                                             r'href="(https://aka.ms/vs/.*/release/vs_BuildTools.exe)"')
     assert len(urls) == 1
     url = urls[0]
+    _print_green('Downloading {}...'.format(url))
     exe = _download_file_nice_name(url)
-    _run_installer([exe, '--quiet', '--norestart'], url, False)
+    _print_green('Download complete.')
+    _run_installer([exe], url,'Make sure to check "Desktop Development with C++" checkbox.')
     _print_green('Visual C++ build tools successfully installed.')
-
-
-def _install_7z_exe() -> None:
-    toolsdir = _tools_dir()
-    os.makedirs(toolsdir + '\\7z', exist_ok=True)
-    assert os.path.isdir(toolsdir)
-    x64s = simple_download.pattern_from_url('https://7-zip.org/download.html', r'href="a/7z([0-9]*)-x64\.exe"')
-    assert len(x64s) > 0
-    ix64s = [int(x) for x in x64s]
-    mx = ix64s.index(max(ix64s))
-    assert 0 <= mx < len(ix64s)
-    exename = '7z' + x64s[mx] + '-x64.exe'
-    url = 'https://7-zip.org/a/' + exename
-    x64exe = _download_file_nice_name(url)
-    _run_installer([x64exe, '/S', '/D=' + toolsdir + '\\7z'], url)
-    os.remove(x64exe)
-    _print_green('7z successfully installed to sanguine-rose\\tools\\7z folder.')
-
-
-def _install_unrar_exe() -> None:
-    toolsdir = _tools_dir()
-    os.makedirs(toolsdir + '\\unrar', exist_ok=True)
-    url = 'https://www.rarlab.com/rar/unrarw64.exe'
-    unrarexe = _download_file_nice_name(url)
-    _run_installer([unrarexe, '/S', '/D' + toolsdir + '\\unrar'], url)
-    os.remove(unrarexe)
-    _print_green('unrar successfully installed to sanguine-rose\\tools\\unrar folder.')
 
 
 def install_sanguine_prerequisites() -> None:
@@ -111,9 +85,6 @@ def install_sanguine_prerequisites() -> None:
     for m in REQUIRED_PIP_MODULES:
         _install_pip_module(m)
         _print_green('pip module {} successfully installed.'.format(m))
-
-    _install_7z_exe()
-    _install_unrar_exe()
 
 
 ##### checks
@@ -141,9 +112,9 @@ def check_sanguine_prerequisites() -> None:
         if not _check_module_installed(m):
             _not_installed('Module {} is not installed.'.format(m))
 
-    if not os.path.isfile(_tools_dir() + '\\7z\\7z.exe'):
-        _not_installed('tools\\7z\\7z.exe is not installed.')
-    if not os.path.isfile(_tools_dir() + '\\unrar\\unrar.exe'):
-        _not_installed('tools\\unrar\\unrar.exe is not installed.')
+    if subprocess.call(['git', '--version']) != 0:
+        critical('git is not found in PATH.')
+        critical(
+            'Aborting. Please make sure to install "Git for Windows" or "GitHub Desktop" (preferred) and include folder with git.exe into PATH.')
 
     info('All sanguine prerequisites are ok.')

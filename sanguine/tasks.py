@@ -821,7 +821,7 @@ class Parallel:
             )
             debug(
                 'Parallel: pending tasks (up to 10 first): {}'.format(repr([t for t in self.pending_task_nodes][:10])))
-            debug('Parallel: ready tasks: {}'.format(repr([t for t in self.ready_task_nodes])))
+            debug('Parallel: ready tasks (up to 10 first): {}'.format(repr([t for t in self.ready_task_nodes][:10])))
             debug('Parallel: ready own tasks: {}'.format(repr([t for t in self.ready_own_task_nodes])))
             debug('Parallel: running tasks: {}'.format(repr([t for t in self.running_task_nodes])))
         assert (len(self.all_task_nodes) == len(self.pending_task_nodes)
