@@ -51,7 +51,7 @@ BTW, with Sanguine Rose (and unlike with WJ), you can easily see this instructio
 ### Advantages over Wabbajack
 
 - 📂 modpacks. Modpack is a *Sanguine Rose*-described bunch of closely related mods, which are only loosely related to the rest of the mod universe. For example, making a nice-looking female appearance modpack (such as 3BA) is a piece of art by itself, but it does not interfere too much with environment modding, or with male appearance modpack, or with quest mods. I hope that with time, there will be various modpacks all over github, so you can choose which ones to use as building blocks for your own modpack or setup. It is all about division of labor,   specialization, and encouraging collaboration. 
-- 🗽*Sanguine Rose* is independent and neutral. This is in contrast with Wabbajack, where top 2 contributors are from Nexus Mods. While WJ does not allow paid mods, Sanguine Rose is completely neutral about it; as a piece of really free software, Sanguine Rose doesn't feel like imposing any restrictions on the users, period. 
+- 🗽*Sanguine Rose* is independent and neutral. This is in contrast with Wabbajack, where top 2 contributors are from Nexus Mods. Among other things it means that while WJ does not allow paid mods, Sanguine Rose is completely neutral about it; as a piece of truly free software, Sanguine Rose doesn't feel like imposing any restrictions on the users, period. 
 - 📄 *Sanguine Rose* image is not a monolithic binary. Instead, it is a github project (with JSON5 file at its heart), with all the changes visible and most of them even understandable.
 - 👫 multiple ppl can now work on the same *Sanguine Rose* modpack.
 - ♻️ *Sanguine Rose* allows to share and re-use information such as "what's inside this particular archive", speeding things up (for such known archives, there is no need to extract and hash them locally on each box, saving time and CO2 footprint).  
@@ -75,7 +75,7 @@ BTW, with Sanguine Rose (and unlike with WJ), you can easily see this instructio
 - *You’ll also need additional disk space, quite a bit of it.*
 
 ### Accounts
-- *Steam* - You’ll need this for Skyrim.
+- *Steam* - You’ll need this for Skyrim or Fallout.
 - *[NexusMods](https://www.nexusmods.com/)* (preferably premium) - You’ll use this for downloads.
 - Accounts for all the other mod sites you are going to use (such as [LoversLab](https://www.loverslab.com/))
 
@@ -133,13 +133,13 @@ So, let’s assume you’ve got your hands on a *Sanguine Rose*-based GitHub mod
 4. Set up your folders:
    - By default, you’d set up C:\Modding\, with the *Sanguine Rose*-based project in C:\Modding\<YOUR-MODPACK>, and the GitHub stuff in C:\Modding\Github\sanguine-rose and C:\Modding\Github\<YOUR-MODPACK>. It should work with other setups too, but let me know if you hit any issues.
    
-5. Run `YOUR-MODPACK.py -mo2git` from inside the YOUR-MODPACK folder.
+5. Run `YOUR-MODPACK.bat -mo2git` from inside the YOUR-MODPACK folder.
    - This is where the magic happens. It will update your C:\Modding\Github\<YOUR-MODPACK> to show your changes. 
    - Even though it’s written in single-threaded Python, it usually wraps up in just a few minutes.
    
 6. Now you’ve got your modified C:\Modding\Github\YOUR-MODPACK. Now you can see the differences and commit directly to the project (if you’ve got permissions) or submit a pull request.
    - To merge:
-     - Every time you pull into \Modding\Github\YOUR-MODPACK, you *have to* run `YOUR-MODPACK.py -git2mo` (yep, that’s different from the one above 🤯). This updates your \Modding\YOUR-MODPACK project with new changes from GitHub.
+     - Every time you pull into \Modding\Github\YOUR-MODPACK, you *have to* run `YOUR-MODPACK.bat -git2mo` (yep, that’s different from the one above 🤯). This updates your \Modding\YOUR-MODPACK project with new changes from GitHub.
      - After that, keep merging your changes. As long as your edits don’t mess with the same files as the new GitHub changes, you’re golden. If there are conflicts, the usual GitHub merge rules apply for text files, and Sanguine Rose tries to keep binary file changes separate, so sometimes it’ll still work out. Just know that conflicts can still happen, but it’s pretty rare IRL.
      - ([Github Desktop](https://desktop.github.com/download/) is super recommended, but if you love the command line, that works too!)
    
@@ -147,6 +147,6 @@ So, let’s assume you’ve got your hands on a *Sanguine Rose*-based GitHub mod
    
 8. To pull the new version, you’ll need to:
    - Pull the new version of \Modding\Github\YOUR-MODPACK
-   - Run `YOUR-MODPACK.py -git2mo`
+   - Run `YOUR-MODPACK.bat -git2mo`
 
 I know it sounds complicated, especially if you’re used to solo modding, but the perks of working together on modpacks, like one person handling NPCs, another tweaking the environment, and someone else working on ENB or scripting—are huge!
