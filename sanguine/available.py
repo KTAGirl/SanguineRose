@@ -4,7 +4,7 @@ from sanguine.files import calculate_file_hash, truncate_file_hash
 from sanguine.foldercache import FolderCache
 from sanguine.folders import Folders
 from sanguine.gitdatafile import *
-from sanguine.meta import file_origin, GameUniverse, FileOrigin
+from sanguine.meta import file_origin, GameUniverse, FileOrigin, NexusFileOrigin
 from sanguine.pickledcache import pickled_cache
 
 
@@ -61,7 +61,7 @@ class GitArchivesHandler(GitDataHandler):
 
 
 class GitArchivesJson:
-    _aentry_common_fields: list[GitDataParam] = [
+    _COMMON_FIELDS: list[GitDataParam] = [
         GitDataParam('i', GitDataType.Path, False),  # intra_path
         GitDataParam('a', GitDataType.Hash),  # archive_hash
         GitDataParam('x', GitDataType.Int),  # archive_size
@@ -81,7 +81,7 @@ class GitArchivesJson:
             '  archives: // Legend: i=intra_archive_path, a=archive_hash, x=archive_size, h=file_hash, s=file_size, b=by\n')
 
         ahandler = GitDataHandler()
-        da = GitDataList(self._aentry_common_fields, [ahandler])
+        da = GitDataList(self._COMMON_FIELDS, [ahandler])
         alwriter = GitDataListWriter(da, wfile)
         alwriter.write_begin()
         # warn('archives: ' + str(len(archives)))
@@ -105,7 +105,7 @@ class GitArchivesJson:
         # info(ln)
         assert re.search(r'^\s*archives\s*:\s*//', ln)
 
-        da = GitDataList(self._aentry_common_fields, [GitArchivesHandler(archives)])
+        da = GitDataList(self._COMMON_FIELDS, [GitArchivesHandler(archives)])
         lineno = read_git_file_list(da, rfile, lineno)
 
         # skipping footer
@@ -116,6 +116,81 @@ class GitArchivesJson:
 
         # warn(str(len(archives)))
         return archives
+
+
+# GitFileOriginsJson
+
+class GitFileOriginsHandler(GitDataHandler):
+    file_origins: dict[bytes, FileOrigin]
+    COMMON_FIELDS: list[GitDataParam] = [
+        GitDataParam('h', GitDataType.Hash, False),
+        GitDataParam('n', GitDataType.Str)
+    ]
+
+    def __init__(self, file_origins: dict[bytes, FileOrigin]) -> None:
+        super().__init__()
+        self.file_origins = file_origins
+
+
+class GitNexusFileOriginsHandler(GitFileOriginsHandler):
+    SPECIFIC_FIELDS: list[GitDataParam] = [
+        GitDataParam('f', GitDataType.Int, False),
+        GitDataParam('m', GitDataType.Int),
+    ]
+
+    def decompress(self, param: tuple[bytes, str, int, int]) -> None:
+        (h, n, f, m) = param
+
+        assert h not in self.file_origins
+        self.file_origins[h] = NexusFileOrigin(n, f, m)
+
+
+class GitFileOriginsJson:
+    def __init__(self) -> None:
+        pass
+
+    def write(self, wfile: typing.TextIO, forigins0: dict[bytes, FileOrigin]) -> None:
+        forigins: list[tuple[bytes, FileOrigin]] = sorted(forigins0.items())
+        write_git_file_header(wfile)
+        wfile.write(
+            '  file_origins: // Legend: h=hash, n=tentative_name, \n')
+        wfile.write(
+            '                // [f=nexus_fileid, m=nexus_modid if Nexus]\n')
+
+        nexus_handler = GitDataHandler(GitNexusFileOriginsHandler.SPECIFIC_FIELDS)
+        da = GitDataList(GitFileOriginsHandler.COMMON_FIELDS, [nexus_handler])
+        writer = GitDataListWriter(da, wfile)
+        writer.write_begin()
+        for fox in forigins:
+            (h, fo) = fox
+            if isinstance(fo, NexusFileOrigin):
+                writer.write_line(nexus_handler, (h, fo.tentative_name, fo.fileid, fo.modid))
+            else:
+                assert False
+        writer.write_end()
+        write_git_file_footer(wfile)
+
+    def read_from_file(self, rfile: typing.TextIO) -> dict[bytes, FileOrigin]:
+        file_origins: dict[bytes, FileOrigin] = {}
+
+        # skipping header
+        ln, lineno = skip_git_file_header(rfile)
+
+        # reading archives:  ...
+        # info(ln)
+        assert re.search(r'^\s*file_origins\s*:\s*//', ln)
+
+        da = GitDataList(GitFileOriginsHandler.COMMON_FIELDS, [GitNexusFileOriginsHandler(file_origins)])
+        lineno = read_git_file_list(da, rfile, lineno)
+
+        # skipping footer
+        skip_git_file_footer(rfile, lineno)
+
+        if __debug__:
+            assert len(set([h for h in file_origins])) == len(file_origins)
+
+        # warn(str(len(archives)))
+        return file_origins
 
 
 ##### Helpers
