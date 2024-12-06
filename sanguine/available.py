@@ -4,6 +4,7 @@ from sanguine.files import calculate_file_hash, truncate_file_hash
 from sanguine.foldercache import FolderCache
 from sanguine.folders import Folders
 from sanguine.gitdatafile import *
+from sanguine.meta import file_origin, GameUniverse, FileOrigin
 from sanguine.pickledcache import pickled_cache
 
 
@@ -320,19 +321,28 @@ class MasterGitArchives:
 class AvailableFiles:
     foldercache: FolderCache
     gitarchives: MasterGitArchives
+    origins: dict[bytes, FileOrigin]
     _DONEHASHINGTASKNAME = 'sanguine.available.donehashing'  # does not apply to MGA!
 
     def __init__(self, by: str, cachedir: str, tmpdir: str, mastergitdir: str, downloads: list[str]) -> None:
         self.foldercache = FolderCache(cachedir, 'downloads', [(d, []) for d in downloads])
         self.gitarchives = MasterGitArchives(by, mastergitdir, cachedir, tmpdir, {})
+        self.origins = {}
 
     def _start_hashing_own_task_func(self, parallel: tasks.Parallel) -> None:
         for ar in self.foldercache.all_files():
             ext = os.path.splitext(ar.file_path)[1]
             if ext == '.meta':
                 continue
-            # if ext == '.7z':
-            #    continue  # TODO! handle 7z decompression with BCJ2
+
+            origin = file_origin(GameUniverse.Skyrim, ar.file_path)
+            if origin is None:
+                warn('Available: file without known origin {}'.format(ar.file_path))
+            elif origin not in self.origins:
+                self.origins[ar.file_hash] = origin
+            else:
+                assert JsonEncoder().encode(self.origins[ar.file_hash]) == JsonEncoder().encode(origin)
+
             if not ar.file_hash in self.gitarchives.archives_by_hash:
                 if ext in pluginhandler.all_archive_plugins_extensions():
                     self.gitarchives.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
@@ -371,6 +381,7 @@ if __name__ == '__main__':
 
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
         from sanguine.sanguine_install_helpers import check_sanguine_prerequisites
+
         ttmppath = Folders.normalize_dir_path('..\\..\\mo2git.tmp\\')
         add_file_logging(ttmppath + 'sanguine.log.html')
 
@@ -385,3 +396,5 @@ if __name__ == '__main__':
             with tasks.Parallel(None) as tparallel:
                 tavailable.start_tasks(tparallel)
                 tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()
+
+            print(JsonEncoder().encode(tavailable.origins))

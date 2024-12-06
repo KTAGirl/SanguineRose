@@ -153,13 +153,28 @@ def debug(msg: str) -> None:
 ###
 
 class JsonEncoder(json.JSONEncoder):
+    def encode(self, o: any) -> any:
+        return json.JSONEncoder.encode(self, self.default(o))
+
     def default(self, o: any) -> any:
         if isinstance(o, bytes):
             return base64.b64encode(o).decode('ascii')
+        elif isinstance(o, dict):
+            return self._adjust_dict(o)
+        elif o is None or isinstance(o, tuple) or isinstance(o, list):
+            return o
         elif isinstance(o, object):
             return o.__dict__
         else:
             return o
+
+    def _adjust_dict(self, d: dict[str, any]) -> dict[str, any]:
+        out = {}
+        for k, v in d.items():
+            if isinstance(k, bytes):
+                k = base64.b64encode(k).decode('ascii')
+            out[k] = self.default(v)
+        return out
 
 
 def open_3rdparty_txt_file(fname: str) -> typing.TextIO:

@@ -11,10 +11,10 @@ class GameUniverse(Enum):
 
 
 class FileOrigin:
-    name: str
+    tentative_name: str
 
     def __init__(self, name: str) -> None:
-        self.name = name
+        self.tentative_name = name
 
 
 class NexusFileOrigin(FileOrigin):
@@ -35,7 +35,7 @@ class NexusFileOrigin(FileOrigin):
         assert False
 
 
-def file_origin(game: GameUniverse, fpath: str, nexusgameids: list[int]) -> FileOrigin | None:
+def file_origin(game: GameUniverse, fpath: str) -> FileOrigin | None:
     assert Folders.is_normalized_file_path(fpath)
     assert os.path.isfile(fpath)
     metafpath = fpath + '.meta'
@@ -44,8 +44,8 @@ def file_origin(game: GameUniverse, fpath: str, nexusgameids: list[int]) -> File
             fname = os.path.split(fpath)[1]
             modidpattern = re.compile(r'^modID\s*=\s*([0-9]+)\s*$', re.IGNORECASE)
             fileidpattern = re.compile(r'^fileID\s*=\s*([0-9]+)\s*$', re.IGNORECASE)
-            urlpattern = re.compile(r'^url\s*=\s"([^"])"\s*$', re.IGNORECASE)
-            httpspattern = re.compile(r'^https://.*.nexusmods.com/cdn/([0-9]*)/([0-9]*)/([^?]*).*[?&]md5=([^&]*)&.*',
+            urlpattern = re.compile(r'^url\s*=\s*"([^"]*)"\s*$', re.IGNORECASE)
+            httpspattern = re.compile(r'^https://.*\.nexus.*\.com.*/([0-9]*)/([0-9]*)/([^?]*).*[?&]md5=([^&]*)&.*',
                                       re.IGNORECASE)
 
             modid = None
@@ -89,9 +89,16 @@ def file_origin(game: GameUniverse, fpath: str, nexusgameids: list[int]) -> File
                     if filename is None:
                         fname = filename
 
+            # warn(str(modid))
+            # warn(str(fileid))
+            # warn(url)
             if modid is not None and fileid is not None and url is not None:
                 return NexusFileOrigin(fname, modid, fileid)
             elif modid is None and fileid is None and url is None:
                 return None
+            elif modid is not None and fileid is not None and url is None:
+                warn('meta: missing url in {}, will do without'.format(metafpath))
+                return NexusFileOrigin(fname, modid, fileid)
             else:
                 warn('meta: incomplete modid+fileid+url in {}'.format(metafpath))
+                return None
