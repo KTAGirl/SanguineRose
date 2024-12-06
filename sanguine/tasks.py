@@ -4,6 +4,7 @@
 import pickle
 from enum import IntEnum
 from multiprocessing import Process, Queue as PQueue, shared_memory
+from threading import Thread  # only for logging!
 
 from sanguine.common import *
 
@@ -13,6 +14,17 @@ _proc_num: int = -1  # number of child process
 def this_proc_num() -> int:
     global _proc_num
     return _proc_num
+
+
+class _ChildProcessLogHandler(logging.StreamHandler):
+    logq: PQueue
+
+    def __init__(self, logq: PQueue) -> None:
+        super().__init__()
+        self.logq = logq
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.logq.put(record)
 
 
 class SharedReturn:
@@ -186,18 +198,29 @@ def from_publication(sharedparam: SharedPubParam, should_cache=True) -> any:
     return out
 
 
+def _log_proc_func(loqq: PQueue) -> None:
+    while True:
+        record = loqq.get()
+        if record is None:
+            break
+        log_to_file_only(record)
+
+
 class _Started:
     def __init__(self, proc_num: int) -> None:
         self.proc_num = proc_num
 
 
-def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue) -> None:
+def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue, logq: PQueue) -> None:
     try:
         global _started
         _started = parent_started
         global _proc_num
         assert _proc_num == -1
         _proc_num = proc_num
+
+        add_logging_handler(_ChildProcessLogHandler(logq))
+
         debug('Process #{} started'.format(proc_num + 1))
         outq.put(_Started(_proc_num))
         ex = None
@@ -324,6 +347,14 @@ class _TaskGraphNode:
 
 
 class Parallel:
+    outq: PQueue
+    logq: PQueue
+    processes: list[Process]
+    processesload: list[int]  # we'll aim to have it at 1; improvements to keep pressure are possible,
+    inqueues: list[PQueue]
+    procrunningconfirmed: list[bool]  # otherwise join() on a not running yet process may hang
+    logthread: Thread
+
     nprocesses: int
     json_fname: str
     json_weights: dict[str, float]
@@ -380,10 +411,13 @@ class Parallel:
         self.inqueues = []
         self.procrunningconfirmed = []  # otherwise join() on a not running yet process may hang
         self.outq = PQueue()
+        self.logq = PQueue()
+        self.logthread = Thread(target=_log_proc_func, args=(self.logq,))
+        self.logthread.start()
         for i in range(self.nprocesses):
             inq = PQueue()
             self.inqueues.append(inq)
-            p = Process(target=_proc_func, args=(_started, i, inq, self.outq))
+            p = Process(target=_proc_func, args=(_started, i, inq, self.outq, self.logq))
             self.processes.append(p)
             p.start()
             self.processesload.append(0)
@@ -546,6 +580,7 @@ class Parallel:
             got = self.outq.get()
             if __debug__:  # pickle.dumps is expensive by itself
                 debug('Parallel: response size: {}'.format(len(pickle.dumps(got))))
+            # warn(str(self.logq.qsize()))
             if isinstance(got, Exception):
                 critical('Parallel: An exception within child process reported. Shutting down')
 
@@ -785,6 +820,7 @@ class Parallel:
         assert not self.shutting_down
         for i in range(self.nprocesses):
             self.inqueues[i].put(None)
+        self.logq.put(None)
         self.shutting_down = True
 
     def join_all(self) -> None:
@@ -806,6 +842,7 @@ class Parallel:
         for i in range(self.nprocesses):
             self.processes[i].join()
             debug('Process #{} joined'.format(i + 1))
+        self.logthread.join()
         self.has_joined = True
 
     def unpublish(self, name: str) -> None:

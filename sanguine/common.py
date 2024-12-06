@@ -5,7 +5,6 @@ import glob
 import json
 import logging
 import logging.handlers
-import multiprocessing
 import os
 import pickle
 import shutil
@@ -98,7 +97,7 @@ class _SanguineFileFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-_logger = multiprocessing.get_logger()
+_logger = logging.getLogger()
 _logger.setLevel(logging.DEBUG if __debug__ else logging.INFO)
 
 _console_handler = logging.StreamHandler()
@@ -107,13 +106,26 @@ _console_handler.setFormatter(_SanguineFormatter())
 
 _logger.addHandler(_console_handler)
 
+_logger_file_handler: logging.StreamHandler | None = None
+
 
 def add_file_logging(fpath: str) -> None:
+    global _logger, _logger_file_handler
+    assert _logger_file_handler is None
+    _logger_file_handler = logging.handlers.RotatingFileHandler(fpath, 'w', backupCount=5)
+    _logger_file_handler.setLevel(logging.DEBUG if __debug__ else logging.INFO)
+    _logger_file_handler.setFormatter(_SanguineFileFormatter())
+    _logger.addHandler(_logger_file_handler)
+
+
+def add_logging_handler(handler: logging.StreamHandler) -> None:
     global _logger
-    file_handler = logging.handlers.RotatingFileHandler(fpath, mode='w', backupCount=5)
-    file_handler.setLevel(logging.DEBUG if __debug__ else logging.INFO)
-    file_handler.setFormatter(_SanguineFileFormatter())
-    _logger.addHandler(file_handler)
+    _logger.addHandler(handler)
+
+
+def log_to_file_only(record: logging.LogRecord) -> None:
+    global _logger_file_handler
+    _logger_file_handler.emit(record)
 
 
 def warn(msg: str) -> None:
