@@ -10,13 +10,15 @@ from sanguine.gitdatafile import GitDataParam, GitDataType
 ### FileOrigin
 
 class NexusFileOrigin(fileorigin.FileOrigin):
+    gameid: int  # nexus game #
     modid: int
     fileid: int
 
     # md5: bytes
 
-    def __init__(self, name: str, modid: int, fileid: int):
+    def __init__(self, name: str, gameid: int, modid: int, fileid: int):
         super().__init__(name)
+        self.gameid = gameid
         self.modid = modid
         self.fileid = fileid
 
@@ -36,12 +38,13 @@ class GitNexusFileOriginsHandler(fileorigin.GitFileOriginsHandler):
     SPECIFIC_FIELDS: list[GitDataParam] = [
         GitDataParam('f', GitDataType.Int, False),
         GitDataParam('m', GitDataType.Int),
+        GitDataParam('g', GitDataType.Int),
     ]
 
-    def decompress(self, param: tuple[bytes, str, int, int]) -> None:
-        (h, n, f, m) = param
+    def decompress(self, param: tuple[bytes, str, int, int, int]) -> None:
+        (h, n, f, m, g) = param
 
-        fo = NexusFileOrigin(n, f, m)
+        fo = NexusFileOrigin(n, g, m, f)
         if h not in self.file_origins:
             self.file_origins[h] = [fo]
         else:
@@ -57,7 +60,7 @@ class GitNexusFileOriginsWriteHandler(fileorigin.GitFileOriginsWriteHandler):
 
     def write_line(self, writer: gitdatafile.GitDataListWriter, h: bytes, fo: fileorigin.FileOrigin) -> None:
         assert isinstance(fo, NexusFileOrigin)
-        writer.write_line(self, (fo.tentative_name, h, fo.fileid, fo.modid))
+        writer.write_line(self, (fo.tentative_name, h, fo.gameid, fo.modid, fo.fileid))
 
     def legend(self) -> str:
         return '[]'
@@ -72,6 +75,7 @@ class NexusMetaFileParser(MetaFileParser):
     HTTPS_PATTERN = re.compile(r'^https://.*\.nexus.*\.com.*/([0-9]*)/([0-9]*)/([^?]*).*[?&]md5=([^&]*)&.*',
                                re.IGNORECASE)
 
+    game_id: int | None
     mod_id: int | None
     file_id: int | None
     url: str | None
@@ -79,6 +83,7 @@ class NexusMetaFileParser(MetaFileParser):
 
     def __init__(self, meta_file_path: str) -> None:
         super().__init__(meta_file_path)
+        self.game_id = None
         self.mod_id = None
         self.file_id = None
         self.url = None
@@ -100,24 +105,29 @@ class NexusMetaFileParser(MetaFileParser):
             for u in urls:
                 m2 = NexusMetaFileParser.HTTPS_PATTERN.match(u)
                 if not m2:
-                    warn('meta: unrecognized url {} in {}'.format(u, self.meta_file_path))
+                    warn('meta/nexus: unrecognized url {} in {}'.format(u, self.meta_file_path))
                     continue
                 urlgameid = int(m2.group(1))
                 urlmodid = int(m2.group(2))
                 urlfname = m2.group(3)
                 urlmd5 = m2.group(4)
-                if not NexusFileOrigin.is_nexus_gameid_ok(game_universe(), urlgameid):
-                    warn('meta: unexpected gameid {} in {}'.format(urlgameid, self.meta_file_path))
+                if NexusFileOrigin.is_nexus_gameid_ok(game_universe(), urlgameid):
+                    if self.game_id is None:
+                        self.game_id = urlgameid
+                    elif self.game_id != urlgameid:
+                        warn('meta/nexus: mismatching game id {} in {}'.format(urlgameid, self.meta_file_path))
+                else:
+                    warn('meta/nexus: unexpected gameid {} in {}'.format(urlgameid, self.meta_file_path))
                 if urlmodid != self.mod_id:
-                    warn('meta: unmatching url modid {} in {}'.format(urlmodid, self.meta_file_path))
+                    warn('meta/nexus: unmatching url modid {} in {}'.format(urlmodid, self.meta_file_path))
                 if filename_from_url is None:
                     filename_from_url = urlfname
                 elif urlfname != filename_from_url:
-                    warn('meta: unmatching url filename {} in {}'.format(urlfname, self.meta_file_path))
+                    warn('meta/nexus: unmatching url filename {} in {}'.format(urlfname, self.meta_file_path))
                 if md5 is None:
                     md5 = urlmd5
                 elif urlmd5 != md5:
-                    warn('meta: unmatching url md5 {} in {}'.format(urlmd5, self.meta_file_path))
+                    warn('meta/nexus: unmatching url md5 {} in {}'.format(urlmd5, self.meta_file_path))
             if filename_from_url is not None:
                 self.file_name = filename_from_url
 
@@ -125,15 +135,15 @@ class NexusMetaFileParser(MetaFileParser):
         # warn(str(modid))
         # warn(str(fileid))
         # warn(url)
-        if self.mod_id is not None and self.file_id is not None and self.url is not None:
-            return NexusFileOrigin(self.file_name, self.mod_id, self.file_id)
-        elif self.mod_id is None and self.file_id is None and self.url is None:
+        if self.game_id is not None and self.mod_id is not None and self.file_id is not None and self.url is not None:
+            return NexusFileOrigin(self.file_name, self.game_id, self.mod_id, self.file_id)
+        elif self.game_id is None and self.mod_id is None and self.file_id is None and self.url is None:
             return None
-        elif self.mod_id is not None and self.file_id is not None and self.url is None:
-            warn('meta: missing url in {}, will do without'.format(self.meta_file_path))
-            return NexusFileOrigin(self.file_name, self.mod_id, self.file_id)
+        elif self.game_id is not None and self.mod_id is not None and self.file_id is not None and self.url is None:
+            warn('meta/nexus: missing url in {}, will do without'.format(self.meta_file_path))
+            return NexusFileOrigin(self.file_name, self.game_id, self.mod_id, self.file_id)
         else:
-            warn('meta: incomplete modid+fileid+url in {}'.format(self.meta_file_path))
+            warn('meta/nexus: incomplete modid+fileid+url in {}'.format(self.meta_file_path))
             return None
 
 
