@@ -1,4 +1,5 @@
 import re
+from abc import abstractmethod
 from enum import Enum
 
 from sanguine.common import *
@@ -15,6 +16,13 @@ class FileOrigin:
 
     def __init__(self, name: str) -> None:
         self.tentative_name = name
+
+    @abstractmethod
+    def eq(self, b: "FileOrigin") -> bool:
+        pass
+
+    def parent_eq(self, b: "FileOrigin") -> bool:
+        return self.tentative_name == b.tentative_name
 
 
 class NexusFileOrigin(FileOrigin):
@@ -33,6 +41,9 @@ class NexusFileOrigin(FileOrigin):
         if game == GameUniverse.Skyrim:
             return nexusgameid in [1704, 110]  # SE, LE
         assert False
+
+    def eq(self, b: "NexusFileOrigin") -> bool:
+        return self.parent_eq(b) and self.fileid == b.fileid and self.modid == b.modid
 
 
 def file_origin(game: GameUniverse, fpath: str) -> FileOrigin | None:

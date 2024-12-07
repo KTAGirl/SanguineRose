@@ -121,13 +121,14 @@ class GitArchivesJson:
 # GitFileOriginsJson
 
 class GitFileOriginsHandler(GitDataHandler):
-    file_origins: dict[bytes, FileOrigin]
+    file_origins: dict[bytes, list[FileOrigin]]
     COMMON_FIELDS: list[GitDataParam] = [
-        GitDataParam('h', GitDataType.Hash, False),
-        GitDataParam('n', GitDataType.Str)
+        GitDataParam('n', GitDataType.Str, False),
+        GitDataParam('h', GitDataType.Hash),
+        # duplicate h can occur if the same file is available from multiple origins
     ]
 
-    def __init__(self, file_origins: dict[bytes, FileOrigin]) -> None:
+    def __init__(self, file_origins: dict[bytes, list[FileOrigin]]) -> None:
         super().__init__()
         self.file_origins = file_origins
 
@@ -141,19 +142,24 @@ class GitNexusFileOriginsHandler(GitFileOriginsHandler):
     def decompress(self, param: tuple[bytes, str, int, int]) -> None:
         (h, n, f, m) = param
 
-        assert h not in self.file_origins
-        self.file_origins[h] = NexusFileOrigin(n, f, m)
+        fo = NexusFileOrigin(n, f, m)
+        if h not in self.file_origins:
+            self.file_origins[h] = [fo]
+        else:
+            self.file_origins[h].append(fo)
 
 
 class GitFileOriginsJson:
     def __init__(self) -> None:
         pass
 
-    def write(self, wfile: typing.TextIO, forigins0: dict[bytes, FileOrigin]) -> None:
-        forigins: list[tuple[bytes, FileOrigin]] = sorted(forigins0.items())
+    def write(self, wfile: typing.TextIO, forigins: dict[bytes, list[FileOrigin]]) -> None:
+        folist: list[tuple[bytes, list[FileOrigin]]] = sorted(forigins.items())
+        for fox in folist:
+            fox[1].sort(key=lambda fo2: fo2.tentative_name)
         write_git_file_header(wfile)
         wfile.write(
-            '  file_origins: // Legend: h=hash, n=tentative_name, \n')
+            '  file_origins: // Legend: n=tentative_name,  h=hash\n')
         wfile.write(
             '                // [f=nexus_fileid, m=nexus_modid if Nexus]\n')
 
@@ -161,17 +167,17 @@ class GitFileOriginsJson:
         da = GitDataList(GitFileOriginsHandler.COMMON_FIELDS, [nexus_handler])
         writer = GitDataListWriter(da, wfile)
         writer.write_begin()
-        for fox in forigins:
+        for fox in folist:
             (h, fo) = fox
             if isinstance(fo, NexusFileOrigin):
-                writer.write_line(nexus_handler, (h, fo.tentative_name, fo.fileid, fo.modid))
+                writer.write_line(nexus_handler, (fo.tentative_name, h, fo.fileid, fo.modid))
             else:
                 assert False
         writer.write_end()
         write_git_file_footer(wfile)
 
-    def read_from_file(self, rfile: typing.TextIO) -> dict[bytes, FileOrigin]:
-        file_origins: dict[bytes, FileOrigin] = {}
+    def read_from_file(self, rfile: typing.TextIO) -> dict[bytes, list[FileOrigin]]:
+        file_origins: dict[bytes, list[FileOrigin]] = {}
 
         # skipping header
         ln, lineno = skip_git_file_header(rfile)
@@ -184,9 +190,6 @@ class GitFileOriginsJson:
 
         # skipping footer
         skip_git_file_footer(rfile, lineno)
-
-        if __debug__:
-            assert len(set([h for h in file_origins])) == len(file_origins)
 
         # warn(str(len(archives)))
         return file_origins
@@ -240,10 +243,6 @@ def _hash_archive(archives: list[Archive], by: str, tmppath: str,  # recursive!
         for f in files:
             nf += 1
             fpath = os.path.join(root, f)
-            # if not os.path.isfile(fpath):
-            #    critical('_hash_archive(): not path.isfile({})'.format(fpath))
-            #    abort_if_not(False)
-            # print(fpath)
             s, h = calculate_file_hash(fpath)
             assert fpath.startswith(tmppath)
             ar.files.append(
@@ -262,7 +261,7 @@ def _hash_archive(archives: list[Archive], by: str, tmppath: str,  # recursive!
                 _hash_archive(archives, by, newtmppath, nested_plugin, fpath, h, s)
 
 
-def _read_git_file_origins(params: tuple[str]) -> dict[bytes, FileOrigin]:
+def _read_git_file_origins(params: tuple[str]) -> dict[bytes, list[FileOrigin]]:
     (fogitfile,) = params
     assert Folders.is_normalized_file_path(fogitfile)
     with open(fogitfile, 'rt', encoding='utf-8') as rf:
@@ -271,14 +270,14 @@ def _read_git_file_origins(params: tuple[str]) -> dict[bytes, FileOrigin]:
 
 
 def _read_cached_file_origins(mastergitdir: str, cachedir: str,
-                              cachedata: dict[str, any]) -> tuple[dict[bytes, FileOrigin], dict[str, any]]:
+                              cachedata: dict[str, any]) -> tuple[dict[bytes, list[FileOrigin]], dict[str, any]]:
     assert Folders.is_normalized_dir_path(mastergitdir)
     mastergitfile = mastergitdir + _KNOWN_FILE_ORIGINS_FNAME
     return pickled_cache(cachedir, cachedata, 'known_file_origins', [mastergitfile],
                          _read_git_file_origins, (mastergitfile,))
 
 
-def _write_git_file_origins(mastergitdir: str, forigins: dict[bytes, FileOrigin]) -> None:
+def _write_git_file_origins(mastergitdir: str, forigins: dict[bytes, list[FileOrigin]]) -> None:
     assert Folders.is_normalized_dir_path(mastergitdir)
     fpath = mastergitdir + _KNOWN_FILE_ORIGINS_FNAME
     with open(fpath, 'wt', encoding='utf-8') as wf:
@@ -331,20 +330,23 @@ def _save_archives_task_func(param: tuple[str, list[Archive]]) -> None:
 
 
 def _load_file_origins_task_func(param: tuple[str, str, dict[str, any]]) -> tuple[
-    dict[bytes, FileOrigin], dict[str, any]]:
+    dict[bytes, list[FileOrigin]], dict[str, any]]:
     (mastergitdir, cachedir, cachedata) = param
     (forigins, cacheoverrides) = _read_cached_file_origins(mastergitdir, cachedir, cachedata)
     return forigins, cacheoverrides
 
 
-def _save_file_origins_task_func(param: tuple[str, dict[bytes, FileOrigin]]) -> None:
+def _save_file_origins_task_func(param: tuple[str, dict[bytes, list[FileOrigin]]]) -> None:
     (mastergitdir, forigins) = param
     _write_git_file_origins(mastergitdir, forigins)
     if __debug__:
         saved_loaded = list(_read_git_file_origins((mastergitdir + _KNOWN_FILE_ORIGINS_FNAME,)).items())
         # warn(str(len(forigins)))
         # warn(str(len(saved_loaded)))
-        sorted_forigins = sorted(forigins.items())
+        sorted_forigins: list[tuple[bytes, list[FileOrigin]]] = sorted(forigins.items())
+        for i in range(len(sorted_forigins)):
+            fox = sorted_forigins[i]
+            sorted_forigins[i] = (fox[0], sorted(fox[1], key=lambda fo2: fo2.tentative_name))
         _debug_assert_eq_list(saved_loaded, sorted_forigins)
 
 
@@ -357,7 +359,7 @@ class MasterGitData:
     cache_data: dict[str, any]
     archives_by_hash: dict[bytes, Archive] | None
     archived_files_by_hash: dict[bytes, list[tuple[Archive, FileInArchive]]] | None
-    file_origins_by_hash: dict[bytes, FileOrigin] | None
+    file_origins_by_hash: dict[bytes, list[FileOrigin]] | None
     nhashes: int  # number of hashes already requested; used to make name of tmp dir
     by: str
     dirtyar: bool
@@ -411,7 +413,7 @@ class MasterGitData:
                                   (self.master_git_dir, list(self.archives_by_hash.values())), [])
             parallel.add_task(savetask)
 
-    def _load_file_origins_own_task_func(self, out: tuple[dict[bytes, FileOrigin], dict[str, any]]) -> None:
+    def _load_file_origins_own_task_func(self, out: tuple[dict[bytes, list[FileOrigin]], dict[str, any]]) -> None:
         (forigins, cacheoverrides) = out
         assert self.file_origins_by_hash is None
         self.file_origins_by_hash = forigins
@@ -459,10 +461,14 @@ class MasterGitData:
                                        [hashingtaskname])
         parallel.add_task(hashingowntask)
 
-    def add_file_origin(self,h:bytes,fo:FileOrigin) -> None:
+    def add_file_origin(self, h: bytes, fo: FileOrigin) -> None:
         self.dirtyfo = True
-        assert h not in self.file_origins_by_hash
-        self.file_origins_by_hash[h] = fo
+        if h in self.file_origins_by_hash:
+            for oldfo in self.file_origins_by_hash[h]:
+                assert not fo.eq(oldfo)
+            self.file_origins_by_hash[h].append(fo)
+        else:
+            self.file_origins_by_hash[h] = [fo]
 
     def start_done_hashing_task(self,  # should be called only after all start_hashing_archive() calls are done
                                 parallel: tasks.Parallel) -> str:
@@ -474,13 +480,14 @@ class MasterGitData:
 
         return donehashingowntaskname
 
-    def start_done_adding_file_origins_task(self, # should be called only after all add_file_origin() calls are done
-                                parallel: tasks.Parallel) -> None:
+    def start_done_adding_file_origins_task(self,  # should be called only after all add_file_origin() calls are done
+                                            parallel: tasks.Parallel) -> None:
         if self.dirtyfo:
             save2taskname = 'sanguine.available.mga.savefo'
             save2task = tasks.Task(save2taskname, _save_file_origins_task_func,
-                                  (self.master_git_dir, self.file_origins_by_hash), [])
+                                   (self.master_git_dir, self.file_origins_by_hash), [])
             parallel.add_task(save2task)
+
 
 ##### AvailableFiles
 

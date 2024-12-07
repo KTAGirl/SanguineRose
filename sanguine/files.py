@@ -74,7 +74,6 @@ class File:
         if self.file_path != other.file_path:
             return False
         return True
-    '''
 
     def to_json(self) -> str:
         if self.file_hash is None:
@@ -82,3 +81,4 @@ class File:
         else:
             return '{{"file_hash":"{}","file_modified":{},"file_path":"{}"}}'.format(to_json_hash(self.file_hash),
                                                                                      self.file_modified, self.file_path)
+    '''

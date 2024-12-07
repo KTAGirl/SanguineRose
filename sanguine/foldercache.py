@@ -2,7 +2,6 @@ import os.path
 # noinspection PyUnresolvedReferences
 import pickle
 import stat
-import time
 
 import sanguine.tasks as tasks
 from sanguine.common import *
@@ -36,7 +35,7 @@ def _write_dict_of_files(dirpath: str, name: str, files: dict[str, File], filter
     with open_3rdparty_txt_file_w(fpath2) as wf2:
         srt: list[tuple[str, File]] = sorted(outfiles.items())
         for item in srt:
-            wf2.write(item[1].to_json() + '\n')
+            wf2.write(JsonEncoder().encode(item[1]) + '\n')
 
 
 def _read_all_scan_stats(dirpath: str, name: str) -> dict[str, dict[str, int]]:
