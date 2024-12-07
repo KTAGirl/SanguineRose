@@ -1,10 +1,14 @@
+import re
+
+import sanguine.gitdatafile as gitdatafile
 import sanguine.pluginhandler as pluginhandler
 import sanguine.tasks as tasks
+from sanguine.common import *
+from sanguine.fileorigin import file_origins_for_file, FileOrigin, GitFileOriginsJson
 from sanguine.files import calculate_file_hash, truncate_file_hash
 from sanguine.foldercache import FolderCache
 from sanguine.folders import Folders
-from sanguine.gitdatafile import *
-from sanguine.meta import file_origin, GameUniverse, FileOrigin, NexusFileOrigin
+from sanguine.gitdatafile import GitDataParam, GitDataType, GitDataHandler
 from sanguine.pickledcache import pickled_cache
 
 
@@ -76,13 +80,13 @@ class GitArchivesJson:
     def write(self, wfile: typing.TextIO, archives0: Iterable[Archive]) -> None:
         archives = sorted(archives0, key=lambda a: a.archive_hash)
         # warn(str(len(archives)))
-        write_git_file_header(wfile)
+        gitdatafile.write_git_file_header(wfile)
         wfile.write(
             '  archives: // Legend: i=intra_archive_path, a=archive_hash, x=archive_size, h=file_hash, s=file_size, b=by\n')
 
         ahandler = GitDataHandler()
-        da = GitDataList(self._COMMON_FIELDS, [ahandler])
-        alwriter = GitDataListWriter(da, wfile)
+        da = gitdatafile.GitDataList(self._COMMON_FIELDS, [ahandler])
+        alwriter = gitdatafile.GitDataListWriter(da, wfile)
         alwriter.write_begin()
         # warn('archives: ' + str(len(archives)))
         for ar in archives:
@@ -93,106 +97,29 @@ class GitArchivesJson:
                     fi.intra_path, ar.archive_hash,
                     ar.archive_size, fi.file_hash, fi.file_size, ar.by))
         alwriter.write_end()
-        write_git_file_footer(wfile)
+        gitdatafile.write_git_file_footer(wfile)
 
     def read_from_file(self, rfile: typing.TextIO) -> list[Archive]:
         archives: list[Archive] = []
 
         # skipping header
-        ln, lineno = skip_git_file_header(rfile)
+        ln, lineno = gitdatafile.skip_git_file_header(rfile)
 
         # reading archives:  ...
         # info(ln)
         assert re.search(r'^\s*archives\s*:\s*//', ln)
 
-        da = GitDataList(self._COMMON_FIELDS, [GitArchivesHandler(archives)])
-        lineno = read_git_file_list(da, rfile, lineno)
+        da = gitdatafile.GitDataList(self._COMMON_FIELDS, [GitArchivesHandler(archives)])
+        lineno = gitdatafile.read_git_file_list(da, rfile, lineno)
 
         # skipping footer
-        skip_git_file_footer(rfile, lineno)
+        gitdatafile.skip_git_file_footer(rfile, lineno)
 
         if __debug__:
             assert len(set([ar.archive_hash for ar in archives])) == len(archives)
 
         # warn(str(len(archives)))
         return archives
-
-
-# GitFileOriginsJson
-
-class GitFileOriginsHandler(GitDataHandler):
-    file_origins: dict[bytes, list[FileOrigin]]
-    COMMON_FIELDS: list[GitDataParam] = [
-        GitDataParam('n', GitDataType.Str, False),
-        GitDataParam('h', GitDataType.Hash),
-        # duplicate h can occur if the same file is available from multiple origins
-    ]
-
-    def __init__(self, file_origins: dict[bytes, list[FileOrigin]]) -> None:
-        super().__init__()
-        self.file_origins = file_origins
-
-
-class GitNexusFileOriginsHandler(GitFileOriginsHandler):
-    SPECIFIC_FIELDS: list[GitDataParam] = [
-        GitDataParam('f', GitDataType.Int, False),
-        GitDataParam('m', GitDataType.Int),
-    ]
-
-    def decompress(self, param: tuple[bytes, str, int, int]) -> None:
-        (h, n, f, m) = param
-
-        fo = NexusFileOrigin(n, f, m)
-        if h not in self.file_origins:
-            self.file_origins[h] = [fo]
-        else:
-            self.file_origins[h].append(fo)
-
-
-class GitFileOriginsJson:
-    def __init__(self) -> None:
-        pass
-
-    def write(self, wfile: typing.TextIO, forigins: dict[bytes, list[FileOrigin]]) -> None:
-        folist: list[tuple[bytes, list[FileOrigin]]] = sorted(forigins.items())
-        for fox in folist:
-            fox[1].sort(key=lambda fo2: fo2.tentative_name)
-        write_git_file_header(wfile)
-        wfile.write(
-            '  file_origins: // Legend: n=tentative_name,  h=hash\n')
-        wfile.write(
-            '                // [f=nexus_fileid, m=nexus_modid if Nexus]\n')
-
-        nexus_handler = GitDataHandler(GitNexusFileOriginsHandler.SPECIFIC_FIELDS)
-        da = GitDataList(GitFileOriginsHandler.COMMON_FIELDS, [nexus_handler])
-        writer = GitDataListWriter(da, wfile)
-        writer.write_begin()
-        for fox in folist:
-            (h, fo) = fox
-            if isinstance(fo, NexusFileOrigin):
-                writer.write_line(nexus_handler, (fo.tentative_name, h, fo.fileid, fo.modid))
-            else:
-                assert False
-        writer.write_end()
-        write_git_file_footer(wfile)
-
-    def read_from_file(self, rfile: typing.TextIO) -> dict[bytes, list[FileOrigin]]:
-        file_origins: dict[bytes, list[FileOrigin]] = {}
-
-        # skipping header
-        ln, lineno = skip_git_file_header(rfile)
-
-        # reading file_origins:  ...
-        assert re.search(r'^\s*file_origins\s*:\s*//', ln)
-
-        da = GitDataList(GitFileOriginsHandler.COMMON_FIELDS, [GitNexusFileOriginsHandler(file_origins)])
-        lineno = read_git_file_list(da, rfile, lineno)
-
-        # skipping footer
-        skip_git_file_footer(rfile, lineno)
-
-        # warn(str(len(archives)))
-        return file_origins
 
 
 ##### MasterGitData
@@ -491,11 +418,12 @@ class MasterGitData:
 
 ##### AvailableFiles
 
-def _file_origins_task_func(param: tuple[list[bytes, str]]) -> tuple[list[tuple[bytes, FileOrigin]]]:
+def _file_origins_task_func(param: tuple[list[bytes, str]]) -> tuple[list[tuple[bytes, list[FileOrigin]]]]:
     (filtered_files,) = param
-    origins: list[tuple[bytes, FileOrigin]] = []
+    origins: list[tuple[bytes, list[FileOrigin]]] = []
     for fhash, fpath in filtered_files:
-        origin = file_origin(GameUniverse.Skyrim, fpath)
+        # TODO: multi-picklecache for file origins
+        origin = file_origins_for_file(fpath)
         if origin is None:
             warn('Available: file without known origin {}'.format(fpath))
         origins.append((fhash, origin))
@@ -531,6 +459,7 @@ class AvailableFiles:
                 continue
 
             filtered_files.append((ar.file_hash, ar.file_path))
+
         originstaskname = 'sanguine.available.fileorigins'
         originstask = tasks.Task(originstaskname, _file_origins_task_func,
                                  (filtered_files,), [])

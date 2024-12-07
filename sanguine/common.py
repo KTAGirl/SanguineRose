@@ -1,6 +1,7 @@
 # common is used by sanguine_install_helpers, so it must not import any installable modules
 
 import base64
+import enum
 import glob
 import json
 import logging
@@ -17,6 +18,15 @@ from collections.abc import Callable, Generator, Iterable
 from types import TracebackType
 
 Type = typing.Type
+
+
+class GameUniverse(enum.Enum):
+    Skyrim = 0,
+    Fallout = 1
+
+
+def game_universe() -> GameUniverse:
+    return GameUniverse.Skyrim
 
 
 def dbgwait() -> None:

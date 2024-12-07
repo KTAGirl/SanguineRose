@@ -1,6 +1,10 @@
+import re
+
+import sanguine.gitdatafile as gitdatafile
 from cache import Cache
+from sanguine.common import *
 from sanguine.files import calculate_file_hash, ZEROHASH
-from sanguine.gitdatafile import *
+from sanguine.gitdatafile import GitDataParam, GitDataType
 
 
 class MasterArchiveItem:
@@ -54,7 +58,7 @@ class MasterFileItem:
         return True
 
 
-class ArchiveReadHandler(GitDataHandler):
+class ArchiveReadHandler(gitdatafile.GitDataHandler):
     archives: list[MasterArchiveItem]
     specific_fields: list[GitDataParam] = []
 
@@ -68,7 +72,7 @@ class ArchiveReadHandler(GitDataHandler):
         self.archives.append(MasterArchiveItem(p, h))
 
 
-class FilesDataHandlerS0(GitDataHandler):
+class FilesDataHandlerS0(gitdatafile.GitDataHandler):
     files: list[MasterFileItem]
     specific_fields: list[GitDataParam] = [
         GitDataParam('s', GitDataType.Int, False)
@@ -85,7 +89,7 @@ class FilesDataHandlerS0(GitDataHandler):
         self.files.append(MasterFileItem(p, file_hash=ZEROHASH, file_size=0))
 
 
-class FilesDataHandlerA(GitDataHandler):
+class FilesDataHandlerA(gitdatafile.GitDataHandler):
     files: list[MasterFileItem]
     specific_fields: list[GitDataParam] = [
         GitDataParam('i', GitDataType.Path, False),
@@ -107,7 +111,7 @@ class FilesDataHandlerA(GitDataHandler):
         self.files.append(MasterFileItem(p, file_hash=h, file_size=s, archive_hash=a, intra_path=inpath))
 
 
-class FilesDataHandlerG(GitDataHandler):
+class FilesDataHandlerG(gitdatafile.GitDataHandler):
     files: list[MasterFileItem]
     specific_fields: list[GitDataParam] = [
         GitDataParam('g', GitDataType.Path, False),
@@ -122,7 +126,7 @@ class FilesDataHandlerG(GitDataHandler):
         self.files.append(MasterFileItem(p, file_hash=h, gitpath=g))
 
 
-class FilesDataHandlerWarning(GitDataHandler):
+class FilesDataHandlerWarning(gitdatafile.GitDataHandler):
     files: list[MasterFileItem]
     specific_fields: list[GitDataParam] = [
         GitDataParam('warning', GitDataType.Str, False),
@@ -217,13 +221,13 @@ class Master:
         level = masterconfig.get('pcompression', 0) if masterconfig is not None else 0
         assert isinstance(level, int)
 
-        write_git_file_header(wfile)
+        gitdatafile.write_git_file_header(wfile)
         wfile.write('{ config: { pcompression: ' + str(level) + ' },\n')
         wfile.write('  archives: [ // Legend: n means "name", h means "hash"\n')
 
-        ahandler = GitDataHandler(ArchiveReadHandler.specific_fields)
-        da = GitDataList(self._a_common_fields, [ahandler])
-        writera = GitDataListWriter(da, wfile)
+        ahandler = gitdatafile.GitDataHandler(ArchiveReadHandler.specific_fields)
+        da = gitdatafile.GitDataList(self._a_common_fields, [ahandler])
+        writera = gitdatafile.GitDataListWriter(da, wfile)
         writera.write_begin()
         for ar in self.archives:
             writera.write_line(ahandler, (ar.name, ar.item_hash))
@@ -231,18 +235,18 @@ class Master:
         wfile.write('\n], files: [ // Legend: p means "path", h means "hash", s means "size", f means "from",')
         wfile.write('\n            //         a means "archive_hash", i means "intra_path"\n')
 
-        handler_s0 = GitDataHandler(FilesDataHandlerS0.specific_fields)
-        handler_a = GitDataHandler(FilesDataHandlerA.specific_fields)
-        handler_g = GitDataHandler(FilesDataHandlerG.specific_fields)
-        handler_warning = GitDataHandler(FilesDataHandlerWarning.specific_fields)
+        handler_s0 = gitdatafile.GitDataHandler(FilesDataHandlerS0.specific_fields)
+        handler_a = gitdatafile.GitDataHandler(FilesDataHandlerA.specific_fields)
+        handler_g = gitdatafile.GitDataHandler(FilesDataHandlerG.specific_fields)
+        handler_warning = gitdatafile.GitDataHandler(FilesDataHandlerWarning.specific_fields)
         handlers = [
             handler_s0,
             handler_a,
             handler_g,
             handler_warning
         ]
-        df = GitDataList(self._f_common_fields, handlers)
-        writer = GitDataListWriter(df, wfile)
+        df = gitdatafile.GitDataList(self._f_common_fields, handlers)
+        writer = gitdatafile.GitDataListWriter(df, wfile)
         writer.write_begin()
         for fi in self.files:
             if fi.file_hash == ZEROHASH:
@@ -270,12 +274,12 @@ class Master:
 
         # skipping header
         archivestart = re.compile(r'^\s*archives\s*:\s*\[\s*//')
-        lineno = skip_git_file_header(rfile, archivestart)
+        lineno = gitdatafile.skip_git_file_header(rfile, archivestart)
 
         # reading archives: [ ...
         filesstart = re.compile(r'^\s*]\s*,\s*files\s*:\s\[\s*//')
-        da = GitDataList(self._a_common_fields, [ArchiveReadHandler(self.archives)])
-        lineno = read_git_file_list(da, rfile, lineno, filesstart)
+        da = gitdatafile.GitDataList(self._a_common_fields, [ArchiveReadHandler(self.archives)])
+        lineno = gitdatafile.read_git_file_list(da, rfile, lineno, filesstart)
 
         # reading files: [ ...
         filesend = re.compile(r'^\s*]\s*}')
@@ -289,7 +293,7 @@ class Master:
             handler_g,
             handler_warning
         ]
-        df = GitDataList(self._f_common_fields, handlers)
-        lineno = read_git_file_list(df, rfile, lineno, filesend)
+        df = gitdatafile.GitDataList(self._f_common_fields, handlers)
+        lineno = gitdatafile.read_git_file_list(df, rfile, lineno, filesend)
 
-        skip_git_file_footer(rfile, lineno)
+        gitdatafile.skip_git_file_footer(rfile, lineno)

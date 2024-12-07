@@ -443,6 +443,9 @@ class Parallel:
         return taskparents, patterns
 
     def _internal_add_task_if(self, task: Task) -> bool:
+        global _proc_num
+        assert _proc_num == -1
+
         assert task.name not in self.all_task_nodes
         islambda = callable(task.f) and task.f.__name__ == '<lambda>'
         # if islambda:

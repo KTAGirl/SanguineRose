@@ -5,11 +5,12 @@ from abc import abstractmethod
 from sanguine.common import *
 
 
-def _load_plugins(plugindir: str, basecls: any, found: Callable[[any], None]) -> None:
+def load_plugins(plugindir: str, basecls: any, found: Callable[[any], None]) -> None:
     # plugindir is relative to the path of this very file
     thisdir = os.path.split(os.path.abspath(__file__))[0] + '/'
     # print(thisdir)
-    for py in glob.glob(thisdir + plugindir + '*.py'):
+    sortedpys = sorted([py for py in glob.glob(thisdir + plugindir + '*.py')])
+    for py in sortedpys:
         # print(py)
         modulename = os.path.splitext(os.path.split(py)[1])[0]
         if modulename == '__init__' or modulename.startswith('_'):
@@ -54,7 +55,7 @@ _archive_plugins: dict[str, ArchivePluginBase] = {}  # file_extension -> Archive
 _archive_exts: list[str] = []
 
 
-def _found_archive_plugin(plugin: "ArchivePluginBase"):
+def _found_archive_plugin(plugin: ArchivePluginBase):
     global _archive_plugins
     global _archive_exts
     for ext in plugin.extensions():
@@ -63,7 +64,7 @@ def _found_archive_plugin(plugin: "ArchivePluginBase"):
         _archive_exts.append(ext)
 
 
-_load_plugins('plugins/archive/', ArchivePluginBase, lambda plugin: _found_archive_plugin(plugin))
+load_plugins('plugins/archive/', ArchivePluginBase, lambda plugin: _found_archive_plugin(plugin))
 
 
 def archive_plugin_for(path: str) -> ArchivePluginBase:
