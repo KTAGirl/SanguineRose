@@ -121,6 +121,7 @@ def _scanned_task_name(cachename: str, dirpath: str) -> str:
     return 'sanguine.foldercache.' + cachename + '.' + dirpath
 
 
+# TODO: refactor own tasks to member functions
 def _scanned_own_task_name(cachename: str, dirpath: str) -> str:
     assert Folders.is_normalized_dir_path(dirpath)
     return 'sanguine.foldercache.own.' + cachename + '.' + dirpath

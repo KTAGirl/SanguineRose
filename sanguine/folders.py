@@ -168,7 +168,7 @@ class Folders:
             assert Folders.is_normalized_dir_path(out)
             yield out
 
-    # TODO: all_enabled_mod_dirs()
+    # TODO?: all_enabled_mod_dirs()
 
     def file_path_to_short_path(self, fpath: str) -> str:
         assert (_is_normalized_file_path(fpath))
@@ -186,6 +186,7 @@ class Folders:
         assert (_is_short_dir_path(dirpath))
         return self.mo2_dir + dirpath
 
+    # TODO: move static methods to common global space
     @staticmethod
     def normalize_file_name(fname: str) -> str:
         assert ('\\' not in fname and '/' not in fname)
