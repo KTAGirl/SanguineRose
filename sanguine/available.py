@@ -491,16 +491,25 @@ class MasterGitData:
 
 ##### AvailableFiles
 
+def _file_origins_task_func(param: tuple[list[bytes, str]]) -> tuple[list[tuple[bytes, FileOrigin]]]:
+    (filtered_files,) = param
+    origins: list[tuple[bytes, FileOrigin]] = []
+    for fhash, fpath in filtered_files:
+        origin = file_origin(GameUniverse.Skyrim, fpath)
+        if origin is None:
+            warn('Available: file without known origin {}'.format(fpath))
+        origins.append((fhash, origin))
+    return (origins,)
+
+
 class AvailableFiles:
     foldercache: FolderCache
-    gitarchives: MasterGitData
-    origins: dict[bytes, FileOrigin]
-    _DONEHASHINGTASKNAME = 'sanguine.available.donehashing'  # does not apply to MGA!
+    gitdata: MasterGitData
+    _READYOWNTASKNAME = 'sanguine.available.readyown'
 
     def __init__(self, by: str, cachedir: str, tmpdir: str, mastergitdir: str, downloads: list[str]) -> None:
         self.foldercache = FolderCache(cachedir, 'downloads', [(d, []) for d in downloads])
-        self.gitarchives = MasterGitData(by, mastergitdir, cachedir, tmpdir, {})
-        self.origins = {}
+        self.gitdata = MasterGitData(by, mastergitdir, cachedir, tmpdir, {})
 
     def _start_hashing_own_task_func(self, parallel: tasks.Parallel) -> None:
         for ar in self.foldercache.all_files():
@@ -508,26 +517,42 @@ class AvailableFiles:
             if ext == '.meta':
                 continue
 
-            origin = file_origin(GameUniverse.Skyrim, ar.file_path)
-            if origin is None:
-                warn('Available: file without known origin {}'.format(ar.file_path))
-            elif origin not in self.origins:
-                self.origins[ar.file_hash] = origin
-            else:
-                assert JsonEncoder().encode(self.origins[ar.file_hash]) == JsonEncoder().encode(origin)
-
-            if not ar.file_hash in self.gitarchives.archives_by_hash:
+            if not ar.file_hash in self.gitdata.archives_by_hash:
                 if ext in pluginhandler.all_archive_plugins_extensions():
-                    self.gitarchives.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
+                    self.gitdata.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
                 else:
                     warn('Available: file with unknown extension {}, ignored'.format(ar.file_path))
 
-        gitarchivesdonehashingtaskname: str = self.gitarchives.start_done_hashing_task(parallel)
-        donehashingowntaskname = AvailableFiles._DONEHASHINGTASKNAME
-        donehashingowntask = tasks.OwnTask(donehashingowntaskname,
-                                           lambda _, _1: AvailableFiles._sync_only_own_task_func(), None,
-                                           [gitarchivesdonehashingtaskname])
-        parallel.add_task(donehashingowntask)
+    def _start_origins_own_task_func(self, parallel: tasks.Parallel) -> None:
+        filtered_files: list[tuple[bytes, str]] = []
+        for ar in self.foldercache.all_files():
+            ext = os.path.splitext(ar.file_path)[1]
+            if ext == '.meta':
+                continue
+
+            filtered_files.append((ar.file_hash, ar.file_path))
+        originstaskname = 'sanguine.available.fileorigins'
+        originstask = tasks.Task(originstaskname, _file_origins_task_func,
+                                 (filtered_files,), [])
+        parallel.add_task(originstask)
+        startoriginsowntaskname = 'sanguine.available.ownfileorigins'
+        originsowntask = tasks.OwnTask(startoriginsowntaskname,
+                                       lambda _, out, _1: self._file_origins_own_task_func(parallel, out), None,
+                                       [originstaskname,
+                                        MasterGitData.ready_to_start_adding_file_origins_task_name()])
+        parallel.add_task(originsowntask)
+
+    def _file_origins_own_task_func(self, parallel: tasks.Parallel, out: tuple[list[tuple[bytes, FileOrigin]]]) -> None:
+        (origins,) = out
+        for fox in origins:
+            self.gitdata.add_file_origin(fox[0], fox[1])
+
+        gitarchivesdonehashingtaskname: str = self.gitdata.start_done_hashing_task(parallel)
+        readyowntaskname = AvailableFiles._READYOWNTASKNAME
+        readyowntask = tasks.OwnTask(readyowntaskname,
+                                     lambda _, _1: AvailableFiles._sync_only_own_task_func(), None,
+                                     [gitarchivesdonehashingtaskname])
+        parallel.add_task(readyowntask)
 
     @staticmethod
     def _sync_only_own_task_func() -> None:
@@ -535,7 +560,7 @@ class AvailableFiles:
 
     def start_tasks(self, parallel: tasks.Parallel):
         self.foldercache.start_tasks(parallel)
-        self.gitarchives.start_tasks(parallel)
+        self.gitdata.start_tasks(parallel)
 
         starthashingowntaskname = 'sanguine.available.starthashing'
         starthashingowntask = tasks.OwnTask(starthashingowntaskname,
@@ -544,9 +569,15 @@ class AvailableFiles:
                                              MasterGitData.ready_to_start_hashing_task_name()])
         parallel.add_task(starthashingowntask)
 
+        startoriginsowntaskname = 'sanguine.available.startfileorigins'
+        startoriginsowntask = tasks.OwnTask(startoriginsowntaskname,
+                                            lambda _, _1: self._start_origins_own_task_func(parallel), None,
+                                            [self.foldercache.ready_task_name()])
+        parallel.add_task(startoriginsowntask)
+
     @staticmethod
     def ready_task_name() -> str:
-        return AvailableFiles._DONEHASHINGTASKNAME
+        return AvailableFiles._READYOWNTASKNAME
 
 
 if __name__ == '__main__':
@@ -569,5 +600,3 @@ if __name__ == '__main__':
             with tasks.Parallel(None) as tparallel:
                 tavailable.start_tasks(tparallel)
                 tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()
-
-            print(JsonEncoder().encode(tavailable.origins))
