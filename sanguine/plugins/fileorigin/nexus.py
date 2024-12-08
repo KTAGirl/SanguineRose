@@ -63,7 +63,7 @@ class GitNexusFileOriginsWriteHandler(fileorigin.GitFileOriginsWriteHandler):
 
     def write_line(self, writer: gitdatafile.GitDataListWriter, h: bytes, fo: fileorigin.FileOrigin) -> None:
         assert isinstance(fo, NexusFileOrigin)
-        writer.write_line(self, (fo.tentative_name, h, fo.gameid, fo.modid, fo.fileid))
+        writer.write_line(self, (fo.tentative_name, h, fo.fileid, fo.modid, fo.gameid))
 
     def legend(self) -> str:
         return '[ f:fileid, m:modid, g:gameid if Nexus ]'

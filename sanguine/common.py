@@ -134,8 +134,10 @@ def add_logging_handler(handler: logging.StreamHandler) -> None:
     _logger.addHandler(handler)
 
 
-def log_to_file_only(record: logging.LogRecord) -> None:
+def log_to_file_only(record: logging.LogRecord, prefix: str = None) -> None:
     global _logger_file_handler
+    if prefix:
+        record.msg = prefix + record.msg
     _logger_file_handler.emit(record)
 
 

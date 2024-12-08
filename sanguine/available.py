@@ -265,7 +265,7 @@ def _load_file_origins_task_func(param: tuple[str, str, dict[str, any]]) -> tupl
 
 def _save_file_origins_task_func(param: tuple[str, dict[bytes, list[FileOrigin]]]) -> None:
     (mastergitdir, forigins) = param
-    #warn(repr(forigins))
+    # warn(repr(forigins))
     _write_git_file_origins(mastergitdir, forigins)
     if __debug__:
         saved_loaded = list(_read_git_file_origins((mastergitdir + _KNOWN_FILE_ORIGINS_FNAME,)).items())
@@ -531,6 +531,6 @@ if __name__ == '__main__':
                                         ttmpdir.tmp_dir(),
                                         Folders.normalize_dir_path('..\\..\\sanguine-skyrim-root\\'),
                                         [Folders.normalize_dir_path('..\\..\\..\\mo2\\downloads')])
-            with tasks.Parallel(None) as tparallel:
+            with tasks.Parallel(None, dbg_serialize=False) as tparallel:
                 tavailable.start_tasks(tparallel)
                 tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()

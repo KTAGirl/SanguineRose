@@ -103,6 +103,7 @@ class Folders:
     github_dir: str
     own_mod_names: list[str]
 
+    # TODO: check that sanguine-rose itself doesn't overlap with any of the dirs
     def __init__(self, jsonconfigfname: str, jsonconfig: dict[str, any]) -> None:
         self.config_dir = _normalize_dir_path(os.path.split(jsonconfigfname)[0])
         abort_if_not('mo2' in jsonconfig, lambda: "'mo2' must be present in config")

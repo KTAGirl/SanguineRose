@@ -24,7 +24,8 @@ class _ChildProcessLogHandler(logging.StreamHandler):
         self.logq = logq
 
     def emit(self, record: logging.LogRecord) -> None:
-        self.logq.put(record)
+        global _proc_num
+        self.logq.put((_proc_num,record))
 
 
 class SharedReturn:
@@ -203,12 +204,40 @@ def _log_proc_func(loqq: PQueue) -> None:
         record = loqq.get()
         if record is None:
             break
-        log_to_file_only(record)
+        (procnum, rec) = record
+        log_to_file_only(rec, 'Process #{}: '.format(procnum))
 
 
 class _Started:
     def __init__(self, proc_num: int) -> None:
         self.proc_num = proc_num
+
+def _process_nonown_tasks(tasks:list[list],proc_num:int,dwait:float|None) -> tuple[Exception | None, any]:
+    assert isinstance(tasks, list)
+    outtasks: list[tuple[str, tuple[float, float], any]] = []
+    for tplus in tasks:
+        task = tplus[0]
+        ndep = len(task.dependencies)
+        assert len(tplus) == 1 + ndep
+        t0 = time.perf_counter()
+        tp0 = time.process_time()
+        if dwait is not None:
+            info('{:.2f}: Process #{}: after waiting for {:.2f}s, starting task {}'.format(
+                _log_time(), proc_num + 1, dwait, task.name))
+            dwait = None
+        else:
+            info('{:.2f}: Process #{}: starting task {}'.format(
+                _log_time(), proc_num + 1, task.name))
+        (ex, out) = _run_task(task, tplus[1:])
+        if ex is not None:
+            return ex,None  # for tplus
+        elapsed = time.perf_counter() - t0
+        cpu = time.process_time() - tp0
+        info('{:.2f}: Process #{}: done task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
+            _log_time(), proc_num + 1, task.name, cpu, elapsed))
+        outtasks.append((task.name, (cpu, elapsed), out))
+        # end of for tplus
+    return None, outtasks
 
 
 def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue, logq: PQueue) -> None:
@@ -240,30 +269,7 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue, 
                 _pool_of_shared_returns.done_with(processedshm)
                 continue  # while True
 
-            assert isinstance(tasks, list)
-            outtasks: list[tuple[str, tuple[float, float], any]] = []
-            for tplus in tasks:
-                task = tplus[0]
-                ndep = len(task.dependencies)
-                assert len(tplus) == 1 + ndep
-                t0 = time.perf_counter()
-                tp0 = time.process_time()
-                if dwait is not None:
-                    info('{:.2f}: Process #{}: after waiting for {:.2f}s, starting task {}'.format(
-                        _log_time(), proc_num + 1, dwait, task.name))
-                    dwait = None
-                else:
-                    info('{:.2f}: Process #{}: starting task {}'.format(
-                        _log_time(), proc_num + 1, task.name))
-                (ex, out) = _run_task(task, tplus[1:])
-                if ex is not None:
-                    break  # for tplus
-                elapsed = time.perf_counter() - t0
-                cpu = time.process_time() - tp0
-                info('{:.2f}: Process #{}: done task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
-                    _log_time(), proc_num + 1, task.name, cpu, elapsed))
-                outtasks.append((task.name, (cpu, elapsed), out))
-                # end of for tplus
+            ex, outtasks = _process_nonown_tasks(tasks,proc_num,dwait)
             if ex is not None:
                 break  # while True
             outq.put((proc_num, outtasks))
@@ -371,14 +377,17 @@ class Parallel:
     running_task_nodes: dict[str, tuple[int, float, _TaskGraphNode]]  # name->(procnum,started,node)
     done_task_nodes: dict[str, tuple[_TaskGraphNode, any]]  # name->(node,out)
     pending_patterns: list[tuple[str, _TaskGraphNode]]  # pattern, node
+    dbg_serialize: bool
 
-    def __init__(self, jsonfname: str | None, nproc: int = 0) -> None:
+    def __init__(self, jsonfname: str | None, nproc: int = 0, dbg_serialize:bool=False) -> None:
+            # dbg_serialize allows debugging non-own Tasks
         assert nproc >= 0
         if nproc:
             self.nprocesses = nproc
         else:
             self.nprocesses = os.cpu_count() - 1  # -1 for the master process
         assert self.nprocesses >= 0
+        self.dbg_serialize = dbg_serialize
         info('Parallel: using {} processes...'.format(self.nprocesses))
         self.json_fname = jsonfname
         self.json_weights = {}
@@ -612,29 +621,7 @@ class Parallel:
             assert self.processesload[procnum] > 0
             self.processesload[procnum] -= 1
 
-            for taskname, times, out in tasks:
-                assert taskname in self.running_task_nodes
-                (expectedprocnum, started, node) = self.running_task_nodes[taskname]
-                assert node.state == _TaskGraphNodeState.Running
-                (cput, taskt) = times
-                assert procnum == expectedprocnum
-                dt = time.perf_counter() - started
-                if strwait is not None:
-                    info(
-                        '{:.2f}: Parallel: after waiting for {}, received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
-                            _log_time(), strwait, taskname, procnum + 1, dt, taskt, cput))
-                else:
-                    info(
-                        '{:.2f}: Parallel: received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
-                            _log_time(), taskname, procnum + 1, dt, taskt, cput))
-
-                strwait = None
-                self._update_weight(taskname, taskt)
-                del self.running_task_nodes[taskname]
-                assert taskname not in self.done_task_nodes
-                node.mark_as_done_and_handle_children(self.pending_task_nodes, self.ready_task_nodes,
-                                                      self.ready_own_task_nodes)
-                self.done_task_nodes[taskname] = (node, out)
+            self._process_out_tasks(procnum,tasks,strwait)
 
             if self.is_all_done():
                 break
@@ -647,6 +634,31 @@ class Parallel:
         info("Parallel: breakdown per task type (task name before '.'):")
         for key, val in owntaskstats.items():
             info('  {}: {}, took {:.2f}/{:.2f}s'.format(key, val[0], val[1], val[2]))
+
+    def _process_out_tasks(self, procnum:int, tasks: list[tuple[str,tuple,any]], strwait:str|None) -> None:
+        for taskname, times, out in tasks:
+            assert taskname in self.running_task_nodes
+            (expectedprocnum, started, node) = self.running_task_nodes[taskname]
+            assert node.state == _TaskGraphNodeState.Running
+            (cput, taskt) = times
+            assert procnum == expectedprocnum
+            dt = time.perf_counter() - started
+            if strwait is not None:
+                info(
+                    '{:.2f}: Parallel: after waiting for {}, received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
+                        _log_time(), strwait, taskname, procnum + 1, dt, taskt, cput))
+            else:
+                info(
+                    '{:.2f}: Parallel: received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
+                        _log_time(), taskname, procnum + 1, dt, taskt, cput))
+
+            strwait = None
+            self._update_weight(taskname, taskt)
+            del self.running_task_nodes[taskname]
+            assert taskname not in self.done_task_nodes
+            node.mark_as_done_and_handle_children(self.pending_task_nodes, self.ready_task_nodes,
+                                                  self.ready_own_task_nodes)
+            self.done_task_nodes[taskname] = (node, out)
 
     def _schedule_best_tasks(self) -> bool:  # may schedule multiple tasks as one meta-task
         pidx = self._find_best_process()
@@ -686,6 +698,13 @@ class Parallel:
         tasksstr += ']'
         if len(taskpluses) == 0:
             return False
+
+        if self.dbg_serialize:
+            ex, out = _process_nonown_tasks(taskpluses,-1,None)
+            if ex is not None:
+                raise ex
+            self._process_out_tasks(pidx,out,None)
+            return True
 
         msg = (taskpluses, None)
         self.inqueues[pidx].put(msg)

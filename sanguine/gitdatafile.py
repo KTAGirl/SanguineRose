@@ -381,18 +381,18 @@ def write_git_file_footer(wfile: typing.TextIO) -> None:
 class GitDataListWriter:
     df: GitDataList
     wfile: typing.TextIO
-    common_fields_compressor: list[GitParamCompressor]
+    common_fields_compressors: list[GitParamCompressor]
     last_handler: GitDataHandler | None
-    last_handler_compressor: list[
+    last_handler_compressors: list[
         GitParamCompressor]  # we never go beyond last line, so only one (last) per-handler compressor is ever necessary
     line_num: int
 
     def __init__(self, df: GitDataList, wfile: typing.TextIO) -> None:
         self.df = df
         self.wfile = wfile
-        self.common_fields_compressor = [_compressor(manda) for manda in df.common_fields]
+        self.common_fields_compressors = [_compressor(cf) for cf in df.common_fields]
         self.last_handler = None
-        self.last_handler_compressor = []
+        self.last_handler_compressors = []
         self.line_num = 0
 
     def write_begin(self) -> None:
@@ -406,9 +406,9 @@ class GitDataListWriter:
             ln = '{'
         lnempty = True
         self.line_num += 1
-        assert len(self.common_fields_compressor) == len(self.df.common_fields)
+        assert len(self.common_fields_compressors) == len(self.df.common_fields)
         for i in range(len(self.df.common_fields)):
-            compressed = self.common_fields_compressor[i].compress(values[i])
+            compressed = self.common_fields_compressors[i].compress(values[i])
             if len(compressed):
                 if lnempty:
                     lnempty = False
@@ -418,17 +418,19 @@ class GitDataListWriter:
 
         shift = len(self.df.common_fields)
         if handler == self.last_handler:
-            for i in range(len(handler.specific_fields)):
-                compressed = self.last_handler_compressor[i].compress(values[shift + i])
-                if len(compressed):
-                    if lnempty:
-                        lnempty = False
-                    else:
-                        ln += ','
-                    ln += compressed
+            pass
         else:
             self.last_handler = handler
-            self.last_handler_compressor = [_compressor(opt) for opt in handler.specific_fields]
+            self.last_handler_compressors = [_compressor(opt) for opt in handler.specific_fields]
+
+        for i in range(len(handler.specific_fields)):
+            compressed = self.last_handler_compressors[i].compress(values[shift + i])
+            if len(compressed):
+                if lnempty:
+                    lnempty = False
+                else:
+                    ln += ','
+                ln += compressed
 
         ln += '}'
         self.wfile.write(ln)
@@ -483,6 +485,7 @@ class _GitDataListContentsReader:
 
             # warn(str(len(canskip)))
             assert len(canskip) <= ncommon + len(h.specific_fields)
+            handlerds = [_decompressor(p) for p in h.specific_fields]
             for mask in range(2 ** len(canskip)):  # scanning all pf them to get all 2**n possible bit mask patterns
                 rex = '{'
                 dmatched: list[tuple[int, GitParamDecompressor]] = []
@@ -517,7 +520,7 @@ class _GitDataListContentsReader:
                             skip = True
 
                     p = h.specific_fields[i]
-                    d = _decompressor(p)
+                    d = handlerds[i]
                     if skip:
                         dskipped.append((j, d))
                     else:
@@ -547,6 +550,8 @@ class _GitDataListContentsReader:
                 param: list[str | int | None] = [None] * (len(self.df.common_fields) + len(h.specific_fields))
 
                 if h != self.last_handler:  # duplicating a bit of code to move comparison out of the loop and speed things up a bit
+                    # info(repr(h))
+                    # info(repr(self.last_handler))
                     for i in range(len(dmatched)):
                         matched = dmatched[i]
                         # warn(repr(pattern.pattern))
@@ -567,6 +572,8 @@ class _GitDataListContentsReader:
                         param[matched[0]] = d.matched(m.group(i + 1))
                     for skipped in dskipped:
                         d: GitParamDecompressor = skipped[1]
+                        # info(str(skipped[0]))
+                        # info(repr(d))
                         param[skipped[0]] = d.skipped()
                     self.last_handler = h
 
@@ -610,6 +617,7 @@ def read_git_file_list(dlist: GitDataList, rfile: typing.TextIO, lineno: int) ->
         ln = rfile.readline()
         lineno += 1
         assert ln
+        # warn(ln)
         processed = rda.parse_line(ln)
         if not processed:
             warn(ln)
