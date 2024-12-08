@@ -60,6 +60,7 @@ BTW, with Sanguine Rose (and unlike with WJ), you can easily see this instructio
 - 💰 *Sanguine Rose* as such does not have problems with paid mods. Modders also deserve to get paid, you know. Keep in mind that as a modder, it is your responsibility to comply with all the other licenses (including Bethesda's one).  
 - 📆 GitHub features, such as change tracking, merges, and pull requests. And it will be you deciding whether to accept pull request or not.
 - 🚀 Better Performance: *Sanguine Rose* is highly paralellized, and uses some significant improvements over WJ logic. *Sanguine Rose* is apparently already faster than Wabbajack, in spite of using allegedly slow Python rather than C#. Python rulezzzz! 🥇
+- [PLANNED] ability to "mo2ify" existing non-MO ("overwrite-based, OMG") setup. We probably have enough information to start educated guesses. 
 - [FUTURE] an alternative way (using ReFS's CoW feature) to launch Skyrim without MO2 running and hooking into the game processes, may be a bit cleaner in runtime than MO2 at the cost of longer startup and shutdown times. Will still preserve MO2 compatibility, and will make MO-like development even cleaner than MO itself (I should be able to enforce that all writes go to overwrites, with both Skyrim and mod folders always kept pristine (well, after Sanguine Rose restores them back 😉).
 
 ### Downsides Compared to Wabbajack
