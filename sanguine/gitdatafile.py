@@ -13,6 +13,16 @@ from sanguine.common import *
 from sanguine.files import from_json_hash, to_json_hash
 
 
+### helper
+
+def open_git_data_file_for_writing(fpath: str) -> typing.TextIO:
+    return open(fpath, 'wt', encoding='utf-8', newline='\n')
+
+
+def open_git_data_file_for_reading(fpath: str) -> typing.TextIO:
+    return open(fpath, 'rt', encoding='utf-8')
+
+
 ### compressors
 
 class GitParamCompressor(ABC):

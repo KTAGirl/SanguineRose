@@ -138,7 +138,7 @@ def _processing_archive_time_estimate(fsize: int):
 def _read_git_archives(params: tuple[str]) -> list[Archive]:
     (archivesgitfile,) = params
     assert Folders.is_normalized_file_path(archivesgitfile)
-    with open(archivesgitfile, 'rt', encoding='utf-8') as rf:
+    with gitdatafile.open_git_data_file_for_reading(archivesgitfile) as rf:
         archives = GitArchivesJson().read_from_file(rf)
     return archives
 
@@ -154,7 +154,7 @@ def _read_cached_git_archives(mastergitdir: str, cachedir: str,
 def _write_git_archives(mastergitdir: str, archives: list[Archive]) -> None:
     assert Folders.is_normalized_dir_path(mastergitdir)
     fpath = mastergitdir + _KNOWN_ARCHIVES_FNAME
-    with open(fpath, 'wt', encoding='utf-8') as wf:
+    with gitdatafile.open_git_data_file_for_writing(fpath) as wf:
         GitArchivesJson().write(wf, archives)
 
 
@@ -192,7 +192,7 @@ def _hash_archive(archives: list[Archive], by: str, tmppath: str,  # recursive!
 def _read_git_file_origins(params: tuple[str]) -> dict[bytes, list[FileOrigin]]:
     (fogitfile,) = params
     assert Folders.is_normalized_file_path(fogitfile)
-    with open(fogitfile, 'rt', encoding='utf-8') as rf:
+    with gitdatafile.open_git_data_file_for_reading(fogitfile) as rf:
         forigins = GitFileOriginsJson().read_from_file(rf)
     return forigins
 
@@ -208,7 +208,7 @@ def _read_cached_file_origins(mastergitdir: str, cachedir: str,
 def _write_git_file_origins(mastergitdir: str, forigins: dict[bytes, list[FileOrigin]]) -> None:
     assert Folders.is_normalized_dir_path(mastergitdir)
     fpath = mastergitdir + _KNOWN_FILE_ORIGINS_FNAME
-    with open(fpath, 'wt', encoding='utf-8') as wf:
+    with gitdatafile.open_git_data_file_for_writing(fpath) as wf:
         GitFileOriginsJson().write(wf, forigins)
 
 
