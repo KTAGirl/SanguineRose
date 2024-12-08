@@ -120,7 +120,8 @@ class GitParamPathCompressor(GitParamCompressor):
 
         assert 0 <= nmatch < lspl
         processed = False
-        if self.level == 2 and lprev == lspl and nmatch == lspl - 1:
+        if self.level >= 2 and lprev == lspl and nmatch == lspl - 1:
+            # for 'a'-'f' codes explanation, see decompressor
             old = self.prevpath[-1]
             new = spl[-1]
             oldext = os.path.splitext(old)
@@ -137,19 +138,26 @@ class GitParamPathCompressor(GitParamCompressor):
                             old[-1]) + 1:
                         path = self.prefix + '"c'
                         processed = True
+                    elif nleft == 1 and 'a' <= new[-1] <= 'z' and 'a' <= old[-1] <= 'z' and ord(new[-1]) == ord(
+                            old[-1]) + 1:
+                        path = self.prefix + '"c'
+                        processed = True
                     else:
                         if nleft > 0:
                             path = self.prefix + '"b' + new[-nleft:]
                         else:
                             path = self.prefix + '"b'
                         processed = True
-                elif ncut < 9:
+                elif ncut <= 35:
                     if ncut == 0:
                         path = self.prefix + '"d'
                     else:
-                        path = self.prefix + '"a' + str(ncut)
+                        path = self.prefix + '"a' + (str(ncut) if (ncut <= 9) else chr(ncut - 10 + 65))
                     if nleft > 0:
                         path += new[-nleft:]
+                    processed = True
+                if not processed:
+                    path = self.prefix + '"f' + newext[0]
                     processed = True
             elif oldext[0] == newext[0]:
                 assert newext[1].startswith('.')
@@ -301,7 +309,7 @@ class GitParamPathDecompressor(GitParamDecompressor):
             nmatch = int(p0)
         elif 'A' <= p0 <= 'Z':
             nmatch = ord(p0) - 65 + 10
-        elif 'a' <= p0 <= 'e':
+        elif 'a' <= p0 <= 'f':
             nmatch = len(self.prev) - 1
         else:
             assert False
@@ -317,25 +325,32 @@ class GitParamPathDecompressor(GitParamDecompressor):
         if out != '':
             out += '/'
 
-        if p0 == 'a':
+        if p0 == 'a':  # aN, cut off N symbols from previous fname, add what follows aN, and previous extension
             fname, ext = os.path.splitext(self.prev[-1])
-            n = int(path[1])
+            p1 = path[1]
+            n = (ord(p1) - 65 + 10) if ('A' <= p1 <= 'Z') else int(p1)
             if n == 0:
                 out += fname + path[2:] + ext
             else:
                 out += fname[:-n] + path[2:] + ext
-        elif p0 == 'b':  # === a1
+        elif p0 == 'b':  # === 'a1'
             fname, ext = os.path.splitext(self.prev[-1])
             out += fname[:-1] + path[1:] + ext
-        elif p0 == 'c':  # increment last digit
+        elif p0 == 'c':  # increment last digit of fname, keep previous extension
             fname, ext = os.path.splitext(self.prev[-1])
-            out += fname[:-1] + str(int(fname[-1]) + 1) + ext
+            if '0' <= fname[-1] <= '9':
+                out += fname[:-1] + str(int(fname[-1]) + 1) + ext
+            else:
+                out += fname[:-1] + chr(ord(fname[-1]) + 1) + ext
         elif p0 == 'd':  # === a0
             fname, ext = os.path.splitext(self.prev[-1])
             out += fname + path[1:] + ext
-        elif p0 == 'e':
+        elif p0 == 'e':  # keep previous fname, change extension
             fname, ext = os.path.splitext(self.prev[-1])
             out += fname + '.' + path[1:]
+        elif p0 == 'f':  # keep previous extension, change fname
+            fname, ext = os.path.splitext(self.prev[-1])
+            out += path[1:] + ext
         else:
             out += path[1:]
 

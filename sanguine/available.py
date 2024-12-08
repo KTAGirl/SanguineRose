@@ -236,12 +236,12 @@ def _archive_hashing_task_func(param: tuple[str, str, bytes, int, str]) -> tuple
 def _debug_assert_eq_list(saved_loaded: list, sorted_data: list) -> None:
     assert len(saved_loaded) == len(sorted_data)
     for i in range(len(sorted_data)):
-        olda:str = JsonEncoder().encode(sorted_data[i])
-        newa:str = JsonEncoder().encode(saved_loaded[i])
+        olda: str = JsonEncoder().encode(sorted_data[i])
+        newa: str = JsonEncoder().encode(saved_loaded[i])
         if olda != newa:
             warn(olda)
             warn(newa)
-            warn(os.path.commonprefix([olda,newa]))
+            warn(os.path.commonprefix([olda, newa]))
             assert False
 
 
@@ -337,7 +337,7 @@ class MasterGitData:
         self.dirtyar = True
 
     def _done_hashing_own_task_func(self, parallel: tasks.Parallel) -> None:
-        if True: # TODO: bring back self.dirtyar:
+        if self.dirtyar:
             savetaskname = 'sanguine.available.mga.savear'
             savetask = tasks.Task(savetaskname, _save_archives_task_func,
                                   (self.master_git_dir, list(self.archives_by_hash.values())), [])
@@ -408,7 +408,7 @@ class MasterGitData:
         donehashingowntaskname = 'sanguine.available.mga.donehashing'
         donehashingowntask = tasks.OwnTask(donehashingowntaskname,
                                            lambda _, _1: self._done_hashing_own_task_func(parallel), None,
-                                           [MasterGitData._LOADAROWNTASKNAME,'sanguine.available.mga.hashown.*'])
+                                           [MasterGitData._LOADAROWNTASKNAME, 'sanguine.available.mga.hashown.*'])
         parallel.add_task(donehashingowntask)
 
         return donehashingowntaskname
