@@ -84,7 +84,7 @@ class GitParamPathCompressor(GitParamCompressor):
     prevn: int
     prevpath: list[str]
 
-    def __init__(self, name: str, level=2) -> None:
+    def __init__(self, name: str, level) -> None:
         self.prefix = name + ':'
         self.prevn = 0
         self.prevpath = []
@@ -99,7 +99,6 @@ class GitParamPathCompressor(GitParamCompressor):
             return ''
         assert isinstance(path, str)
         assert '/' not in path
-        # assert('>' not in path)
         path = path.replace('\\', '/')
         if self.level == 0:
             p0 = GitParamPathCompressor._to_json_fpath(path)
@@ -111,27 +110,62 @@ class GitParamPathCompressor(GitParamCompressor):
         # print(prevpath.val)
         # print(spl)
         nmatch = 0
-        for i in range(min(len(self.prevpath), len(spl))):
+        lspl = len(spl)
+        lprev = len(self.prevpath)
+        for i in range(min(lprev, lspl)):
             if spl[i] == self.prevpath[i]:
                 nmatch = i + 1
             else:
                 break
-        assert nmatch >= 0
-        if self.level == 2 or (self.level == 1 and self.prevn <= nmatch):
+
+        assert 0 <= nmatch < lspl
+        processed = False
+        if self.level == 2 and lprev == lspl and nmatch == lspl -1:
+            old = self.prevpath[-1]
+            new = spl[-1]
+            oldext = os.path.splitext(old)
+            newext = os.path.splitext(new)
+            if oldext[1] == newext[1]:
+                old = oldext[0]
+                new = newext[0]
+                common = os.path.commonprefix([old, new])
+                nleft = len(new) - len(common)
+                ncut = len(old) - len(common)
+                assert nleft >= 0 and ncut >= 0
+                if ncut == 1:
+                    if nleft == 1 and '0' <= new[-1] <= '9' and '0' <= old[-1] <= '9' and int(new[-1]) == int(old[-1]) + 1:
+                        path = self.prefix + '"c'
+                        processed = True
+                    else:
+                        if nleft > 0:
+                            path = self.prefix + '"b' + new[-nleft:]
+                        else:
+                            path = self.prefix + '"b'
+                        processed = True
+                elif ncut < 9:
+                    if ncut == 0:
+                        path = self.prefix + '"d'
+                    else:
+                        path = self.prefix + '"a'+str(ncut)
+                    if nleft > 0:
+                        path += new[-nleft:]
+                    processed = True
+
+        if not processed:
             if nmatch <= 9:
                 path = self.prefix + '"' + str(nmatch)
             else:
                 assert nmatch <= 35
                 path = self.prefix + '"' + chr(nmatch - 10 + 65)
+
             needslash = False
-            for i in range(nmatch, len(spl)):
+            for i in range(nmatch, lspl):
                 if needslash:
                     path += '/'
                 else:
                     needslash = True
                 path += GitParamPathCompressor._to_json_fpath(spl[i])
-        else:  # skipping compression because of level restrictions
-            path = '"0' + GitParamPathCompressor._to_json_fpath(path)
+
         self.prevpath = spl
         self.prevn = nmatch
         assert path.startswith(self.prefix + '"')
@@ -262,6 +296,8 @@ class GitParamPathDecompressor(GitParamDecompressor):
             nmatch = int(p0)
         elif 'A' <= p0 <= 'Z':
             nmatch = ord(p0) - 65 + 10
+        elif 'a' <= p0 <= 'd':
+            nmatch = len(self.prev)-1
         else:
             assert False
         out = ''
@@ -272,9 +308,29 @@ class GitParamPathDecompressor(GitParamDecompressor):
             if i > 0:
                 out += '/'
             out += self.prev[i]
+
         if out != '':
             out += '/'
-        out += path[1:]
+
+        if p0 == 'a':
+            fname,ext = os.path.splitext(self.prev[-1])
+            n = int(path[1])
+            if n == 0:
+                out += fname + path[2:] + ext
+            else:
+                out += fname[:-n] + path[2:] + ext
+        elif p0 == 'b':
+            fname,ext = os.path.splitext(self.prev[-1])
+            out += fname[:-1] + path[1:] + ext
+        elif p0 == 'c':
+            fname,ext = os.path.splitext(self.prev[-1])
+            out += fname[:-1] + str(int(fname[-1])+1) + ext
+        elif p0 == 'd': # === a0
+            fname,ext = os.path.splitext(self.prev[-1])
+            out += fname + path[1:] + ext
+        else:
+            out += path[1:]
+
         self.prev = out.split('/')
         return out.replace('/', '\\')
 

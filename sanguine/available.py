@@ -1,3 +1,4 @@
+import os.path
 import re
 
 import sanguine.gitdatafile as gitdatafile
@@ -235,11 +236,12 @@ def _archive_hashing_task_func(param: tuple[str, str, bytes, int, str]) -> tuple
 def _debug_assert_eq_list(saved_loaded: list, sorted_data: list) -> None:
     assert len(saved_loaded) == len(sorted_data)
     for i in range(len(sorted_data)):
-        olda = JsonEncoder().encode(sorted_data[i])
-        newa = JsonEncoder().encode(saved_loaded[i])
+        olda:str = JsonEncoder().encode(sorted_data[i])
+        newa:str = JsonEncoder().encode(saved_loaded[i])
         if olda != newa:
             warn(olda)
             warn(newa)
+            warn(os.path.commonprefix([olda,newa]))
             assert False
 
 
@@ -335,7 +337,7 @@ class MasterGitData:
         self.dirtyar = True
 
     def _done_hashing_own_task_func(self, parallel: tasks.Parallel) -> None:
-        if self.dirtyar:
+        if True: # TODO: bring back self.dirtyar:
             savetaskname = 'sanguine.available.mga.savear'
             savetask = tasks.Task(savetaskname, _save_archives_task_func,
                                   (self.master_git_dir, list(self.archives_by_hash.values())), [])
@@ -405,8 +407,8 @@ class MasterGitData:
                                 parallel: tasks.Parallel) -> str:
         donehashingowntaskname = 'sanguine.available.mga.donehashing'
         donehashingowntask = tasks.OwnTask(donehashingowntaskname,
-                                           lambda _: self._done_hashing_own_task_func(parallel), None,
-                                           ['sanguine.available.mga.hashown.*'])
+                                           lambda _, _1: self._done_hashing_own_task_func(parallel), None,
+                                           [MasterGitData._LOADAROWNTASKNAME,'sanguine.available.mga.hashown.*'])
         parallel.add_task(donehashingowntask)
 
         return donehashingowntaskname
@@ -534,6 +536,6 @@ if __name__ == '__main__':
                                         ttmpdir.tmp_dir(),
                                         Folders.normalize_dir_path('..\\..\\sanguine-skyrim-root\\'),
                                         [Folders.normalize_dir_path('..\\..\\..\\mo2\\downloads')])
-            with tasks.Parallel(None, dbg_serialize=False) as tparallel:
+            with tasks.Parallel(None, dbg_serialize=True) as tparallel:
                 tavailable.start_tasks(tparallel)
                 tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()
