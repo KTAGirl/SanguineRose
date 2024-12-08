@@ -44,8 +44,8 @@ class GitFileOriginsHandler(GitDataHandler):
         # duplicate h can occur if the same file is available from multiple origins
     ]
 
-    def __init__(self, file_origins: dict[bytes, list[FileOrigin]]) -> None:
-        super().__init__()
+    def __init__(self, specific_fields: list[GitDataParam], file_origins: dict[bytes, list[FileOrigin]]) -> None:
+        super().__init__(specific_fields)
         self.file_origins = file_origins
 
 
@@ -53,7 +53,7 @@ class MetaFileParser:
     meta_file_path: str
 
     def __init__(self, meta_file_path: str) -> None:
-        self.meta_file_name = meta_file_path
+        self.meta_file_path = meta_file_path
 
     @abstractmethod
     def take_ln(self, ln: str) -> None:
@@ -92,10 +92,10 @@ def _found_origin_plugin(plugin: FileOriginPluginBase):
     _file_origin_plugins.append(plugin)
 
 
-pluginhandler.load_plugins('plugins/archive/', FileOriginPluginBase, lambda plugin: _found_origin_plugin(plugin))
+pluginhandler.load_plugins('plugins/fileorigin/', FileOriginPluginBase, lambda plugin: _found_origin_plugin(plugin))
 
 
-def file_origins_for_file(fpath: str) -> list[FileOrigin]:
+def file_origins_for_file(fpath: str) -> list[FileOrigin] | None:
     global _file_origin_plugins
     assert Folders.is_normalized_file_path(fpath)
     assert os.path.isfile(fpath)
@@ -109,7 +109,7 @@ def file_origins_for_file(fpath: str) -> list[FileOrigin]:
 
             origins = [mfp.make_file_origin() for mfp in metafileparsers]
             origins = [o for o in origins if o is not None]
-            return origins
+            return origins if len(origins) > 0 else None
 
 
 ### GitFileOriginsJson
@@ -130,7 +130,7 @@ class GitFileOriginsJson:
         handlers = [plugin.write_handler() for plugin in _file_origin_plugins]
         for wh in handlers:
             wfile.write(
-                '                //         ' + wh.legend())
+                '                //         ' + wh.legend() + '\n')
 
         da = gitdatafile.GitDataList(GitFileOriginsHandler.COMMON_FIELDS, handlers)
         writer = gitdatafile.GitDataListWriter(da, wfile)

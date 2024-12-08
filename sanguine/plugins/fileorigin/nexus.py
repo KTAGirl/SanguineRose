@@ -41,6 +41,9 @@ class GitNexusFileOriginsHandler(fileorigin.GitFileOriginsHandler):
         GitDataParam('g', GitDataType.Int),
     ]
 
+    def __init__(self, file_origins: dict[bytes, list[fileorigin.FileOrigin]]) -> None:
+        super().__init__(GitNexusFileOriginsHandler.SPECIFIC_FIELDS, file_origins)
+
     def decompress(self, param: tuple[bytes, str, int, int, int]) -> None:
         (h, n, f, m, g) = param
 
@@ -63,7 +66,7 @@ class GitNexusFileOriginsWriteHandler(fileorigin.GitFileOriginsWriteHandler):
         writer.write_line(self, (fo.tentative_name, h, fo.gameid, fo.modid, fo.fileid))
 
     def legend(self) -> str:
-        return '[]'
+        return '[ f:fileid, m:modid, g:gameid if Nexus ]'
 
     ### MetaFileParser
 

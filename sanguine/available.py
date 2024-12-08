@@ -265,6 +265,7 @@ def _load_file_origins_task_func(param: tuple[str, str, dict[str, any]]) -> tupl
 
 def _save_file_origins_task_func(param: tuple[str, dict[bytes, list[FileOrigin]]]) -> None:
     (mastergitdir, forigins) = param
+    #warn(repr(forigins))
     _write_git_file_origins(mastergitdir, forigins)
     if __debug__:
         saved_loaded = list(_read_git_file_origins((mastergitdir + _KNOWN_FILE_ORIGINS_FNAME,)).items())
@@ -420,14 +421,15 @@ class MasterGitData:
 
 def _file_origins_task_func(param: tuple[list[bytes, str]]) -> tuple[list[tuple[bytes, list[FileOrigin]]]]:
     (filtered_files,) = param
-    origins: list[tuple[bytes, list[FileOrigin]]] = []
+    allorigins: list[tuple[bytes, list[FileOrigin]]] = []
     for fhash, fpath in filtered_files:
         # TODO: multi-picklecache for file origins
-        origin = file_origins_for_file(fpath)
-        if origin is None:
+        origins = file_origins_for_file(fpath)
+        if origins is None:
             warn('Available: file without known origin {}'.format(fpath))
-        origins.append((fhash, origin))
-    return (origins,)
+        else:
+            allorigins.append((fhash, origins))
+    return (allorigins,)
 
 
 class AvailableFiles:
@@ -471,10 +473,13 @@ class AvailableFiles:
                                         MasterGitData.ready_to_start_adding_file_origins_task_name()])
         parallel.add_task(originsowntask)
 
-    def _file_origins_own_task_func(self, parallel: tasks.Parallel, out: tuple[list[tuple[bytes, FileOrigin]]]) -> None:
+    def _file_origins_own_task_func(self, parallel: tasks.Parallel,
+                                    out: tuple[list[tuple[bytes, list[FileOrigin]]]]) -> None:
         (origins,) = out
         for fox in origins:
-            self.gitdata.add_file_origin(fox[0], fox[1])
+            for fo in fox[1]:
+                self.gitdata.add_file_origin(fox[0], fo)
+        self.gitdata.start_done_adding_file_origins_task(parallel)  # no need to wait for it
 
         gitarchivesdonehashingtaskname: str = self.gitdata.start_done_hashing_task(parallel)
         readyowntaskname = AvailableFiles._READYOWNTASKNAME

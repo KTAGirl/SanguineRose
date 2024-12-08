@@ -419,7 +419,13 @@ class GitDataListWriter:
         shift = len(self.df.common_fields)
         if handler == self.last_handler:
             for i in range(len(handler.specific_fields)):
-                ln += self.last_handler_compressor[i].compress(values[shift + i])
+                compressed = self.last_handler_compressor[i].compress(values[shift + i])
+                if len(compressed):
+                    if lnempty:
+                        lnempty = False
+                    else:
+                        ln += ','
+                    ln += compressed
         else:
             self.last_handler = handler
             self.last_handler_compressor = [_compressor(opt) for opt in handler.specific_fields]
@@ -591,17 +597,22 @@ def skip_git_file_header(rfile: typing.TextIO) -> tuple[str, int]:
 
 
 def read_git_file_list(dlist: GitDataList, rfile: typing.TextIO, lineno: int) -> int:
+    rda = _GitDataListContentsReader(dlist)
+
     ln = rfile.readline()
     # info(ln)
+
+    while rda.comment_only_line.match(ln):
+        ln = rfile.readline()
     assert re.search(r'^\s*\[\s*$', ln)
-    rda = _GitDataListContentsReader(dlist)
+
     while True:
         ln = rfile.readline()
         lineno += 1
         assert ln
         processed = rda.parse_line(ln)
         if not processed:
-            # warn(ln)
+            warn(ln)
             assert re.search(r'^\s*]\s*$', ln)
             return lineno
 

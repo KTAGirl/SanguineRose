@@ -102,6 +102,7 @@ class _SanguineFileFormatter(logging.Formatter):
         super().__init__(datefmt='%H:%M:%S')
 
     def format(self, record) -> str:
+        record.msg = record.msg.replace('\n', '<br>')
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)
