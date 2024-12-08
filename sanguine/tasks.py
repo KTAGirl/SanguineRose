@@ -25,7 +25,7 @@ class _ChildProcessLogHandler(logging.StreamHandler):
 
     def emit(self, record: logging.LogRecord) -> None:
         global _proc_num
-        self.logq.put((_proc_num,record))
+        self.logq.put((_proc_num, record))
 
 
 class SharedReturn:
@@ -212,7 +212,8 @@ class _Started:
     def __init__(self, proc_num: int) -> None:
         self.proc_num = proc_num
 
-def _process_nonown_tasks(tasks:list[list],proc_num:int,dwait:float|None) -> tuple[Exception | None, any]:
+
+def _process_nonown_tasks(tasks: list[list], proc_num: int, dwait: float | None) -> tuple[Exception | None, any]:
     assert isinstance(tasks, list)
     outtasks: list[tuple[str, tuple[float, float], any]] = []
     for tplus in tasks:
@@ -230,7 +231,7 @@ def _process_nonown_tasks(tasks:list[list],proc_num:int,dwait:float|None) -> tup
                 _log_time(), proc_num + 1, task.name))
         (ex, out) = _run_task(task, tplus[1:])
         if ex is not None:
-            return ex,None  # for tplus
+            return ex, None  # for tplus
         elapsed = time.perf_counter() - t0
         cpu = time.process_time() - tp0
         info('{:.2f}: Process #{}: done task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
@@ -269,7 +270,7 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue, 
                 _pool_of_shared_returns.done_with(processedshm)
                 continue  # while True
 
-            ex, outtasks = _process_nonown_tasks(tasks,proc_num,dwait)
+            ex, outtasks = _process_nonown_tasks(tasks, proc_num, dwait)
             if ex is not None:
                 break  # while True
             outq.put((proc_num, outtasks))
@@ -379,8 +380,8 @@ class Parallel:
     pending_patterns: list[tuple[str, _TaskGraphNode]]  # pattern, node
     dbg_serialize: bool
 
-    def __init__(self, jsonfname: str | None, nproc: int = 0, dbg_serialize:bool=False) -> None:
-            # dbg_serialize allows debugging non-own Tasks
+    def __init__(self, jsonfname: str | None, nproc: int = 0, dbg_serialize: bool = False) -> None:
+        # dbg_serialize allows debugging non-own Tasks
         assert nproc >= 0
         if nproc:
             self.nprocesses = nproc
@@ -621,7 +622,7 @@ class Parallel:
             assert self.processesload[procnum] > 0
             self.processesload[procnum] -= 1
 
-            self._process_out_tasks(procnum,tasks,strwait)
+            self._process_out_tasks(procnum, tasks, strwait)
 
             if self.is_all_done():
                 break
@@ -635,7 +636,7 @@ class Parallel:
         for key, val in owntaskstats.items():
             info('  {}: {}, took {:.2f}/{:.2f}s'.format(key, val[0], val[1], val[2]))
 
-    def _process_out_tasks(self, procnum:int, tasks: list[tuple[str,tuple,any]], strwait:str|None) -> None:
+    def _process_out_tasks(self, procnum: int, tasks: list[tuple[str, tuple, any]], strwait: str | None) -> None:
         for taskname, times, out in tasks:
             assert taskname in self.running_task_nodes
             (expectedprocnum, started, node) = self.running_task_nodes[taskname]
@@ -700,10 +701,10 @@ class Parallel:
             return False
 
         if self.dbg_serialize:
-            ex, out = _process_nonown_tasks(taskpluses,-1,None)
+            ex, out = _process_nonown_tasks(taskpluses, -1, None)
             if ex is not None:
                 raise ex
-            self._process_out_tasks(pidx,out,None)
+            self._process_out_tasks(pidx, out, None)
             return True
 
         msg = (taskpluses, None)
@@ -873,11 +874,11 @@ class Parallel:
         del self.publications[name]
 
     def _stats(self) -> None:
+        info('Parallel: {} tasks, including {} pending, {}/{} ready, {} running, {} done'.format(
+            len(self.all_task_nodes), len(self.pending_task_nodes), len(self.ready_task_nodes),
+            len(self.ready_own_task_nodes), len(self.running_task_nodes), len(self.done_task_nodes))
+        )
         if __debug__:
-            debug('Parallel: {} tasks, including {} pending, {}/{} ready, {} running, {} done'.format(
-                len(self.all_task_nodes), len(self.pending_task_nodes), len(self.ready_task_nodes),
-                len(self.ready_own_task_nodes), len(self.running_task_nodes), len(self.done_task_nodes))
-            )
             debug(
                 'Parallel: pending tasks (up to 10 first): {}'.format(repr([t for t in self.pending_task_nodes][:10])))
             debug('Parallel: ready tasks (up to 10 first): {}'.format(repr([t for t in self.ready_task_nodes][:10])))

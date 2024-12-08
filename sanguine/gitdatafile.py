@@ -79,16 +79,18 @@ class GitParamHashCompressor(GitParamCompressor):
 
 
 class GitParamPathCompressor(GitParamCompressor):
+    can_skip: bool
     prefix: str
     level: int
     prevn: int
     prevpath: list[str]
 
-    def __init__(self, name: str, level) -> None:
+    def __init__(self, name: str, can_skip: bool, level: int) -> None:
         self.prefix = name + ':'
         self.prevn = 0
         self.prevpath = []
         self.level = level
+        self.can_skip = can_skip
 
     @staticmethod
     def _to_json_fpath(fpath: str) -> str:
@@ -136,11 +138,11 @@ class GitParamPathCompressor(GitParamCompressor):
                 if ncut == 1:
                     if nleft == 1 and '0' <= new[-1] <= '9' and '0' <= old[-1] <= '9' and int(new[-1]) == int(
                             old[-1]) + 1:
-                        path = self.prefix + '"c'
+                        path = None  # instead of legacy 'c'
                         processed = True
                     elif nleft == 1 and 'a' <= new[-1] <= 'z' and 'a' <= old[-1] <= 'z' and ord(new[-1]) == ord(
                             old[-1]) + 1:
-                        path = self.prefix + '"c'
+                        path = None  # instead of legacy 'c'
                         processed = True
                     else:
                         if nleft > 0:
@@ -181,6 +183,11 @@ class GitParamPathCompressor(GitParamCompressor):
 
         self.prevpath = spl
         self.prevn = nmatch
+        if path is None:
+            if self.can_skip:
+                return ''
+            else:
+                return self.prefix + '""'
         assert path.startswith(self.prefix + '"')
         assert '"' not in path[len(self.prefix) + 1:]
         return path + '"'
@@ -279,18 +286,19 @@ class GitParamPathDecompressor(GitParamDecompressor):
     name: str
     prev: list[str] | None
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, level: int) -> None:
         self.name = name
         self.prev = None
+        self.level = level
 
     def regex_part(self) -> str:
         return self.name + r':"([^"]*)"'
 
     def matched(self, match: str) -> str:
-        return self._decompress_json_path(match)
+        return self._decompress_json_path(match, self.level)
 
-    def skipped(self) -> None:
-        assert False
+    def skipped(self) -> str:
+        return self._decompress_json_path('', self.level)
 
     def reset(self) -> None:
         self.prev = None
@@ -299,11 +307,13 @@ class GitParamPathDecompressor(GitParamDecompressor):
     def _from_json_fpath(fpath: str) -> str:
         return urlparse.unquote(fpath)
 
-    def _decompress_json_path(self, path: str, level: int = 2) -> str:
+    def _decompress_json_path(self, path: str, level: int) -> str:
         path = GitParamPathDecompressor._from_json_fpath(path)
         if level == 0:
             return path.replace('/', '\\')
 
+        if path == '':
+            path = 'c'  # pretty ugly, but historical 'c' was replaced by ''
         p0 = path[0]
         if '0' <= p0 <= '9':
             nmatch = int(p0)
@@ -384,7 +394,7 @@ class GitDataParam:
 def _compressor(p: GitDataParam) -> GitParamCompressor:
     match p.typ:
         case GitDataType.Path:
-            return GitParamPathCompressor(p.name, p.compress_level)
+            return GitParamPathCompressor(p.name, p.can_skip, p.compress_level)
         case GitDataType.Hash:
             return GitParamHashCompressor(p.name, p.can_skip)
         case GitDataType.Int:
@@ -398,7 +408,7 @@ def _compressor(p: GitDataParam) -> GitParamCompressor:
 def _decompressor(p: GitDataParam) -> GitParamDecompressor:
     match p.typ:
         case GitDataType.Path:
-            return GitParamPathDecompressor(p.name)
+            return GitParamPathDecompressor(p.name, p.compress_level)
         case GitDataType.Hash:
             return GitParamHashDecompressor(p.name)
         case GitDataType.Int:
@@ -598,7 +608,7 @@ class _GitDataListContentsReader:
                         if mask & (1 << idx):
                             skip = True
 
-                    p = h.specific_fields[i]
+                    # p = h.specific_fields[i]
                     d = handlerds[i]
                     if skip:
                         dskipped.append((j, d))

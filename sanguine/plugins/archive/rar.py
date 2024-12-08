@@ -22,6 +22,6 @@ class RarArchivePlugin(ArchivePluginBase):
         info('Extracting all from {}...'.format(archive))
 
         syscall = [_unrar_exe(), 'x', archive, targetpath]
-        warn(repr(syscall))
+        # warn(repr(syscall))
         subprocess.check_call(syscall)
         info('Extraction done')

@@ -47,10 +47,10 @@ class GitArchivesHandler(GitDataHandler):
         super().__init__()
         self.archives = archives
 
-    def decompress(self, param: tuple[str, bytes, int, bytes, int, str]) -> None:
+    def decompress(self, param: tuple[bytes, str, bytes, int, int, str]) -> None:
         # warn(repr(param))
         # time.sleep(1)
-        (i, a, x, h, s, b) = param
+        (h, i, a, x, s, b) = param
         found = None
         if len(self.archives) > 0:
             ar = self.archives[-1]
@@ -67,10 +67,10 @@ class GitArchivesHandler(GitDataHandler):
 
 class GitArchivesJson:
     _COMMON_FIELDS: list[GitDataParam] = [
-        GitDataParam('i', GitDataType.Path, False),  # intra_path
+        GitDataParam('h', GitDataType.Hash, False),  # file_hash (truncated)
+        GitDataParam('i', GitDataType.Path),  # intra_path
         GitDataParam('a', GitDataType.Hash),  # archive_hash
         GitDataParam('x', GitDataType.Int),  # archive_size
-        GitDataParam('h', GitDataType.Hash, False),  # file_hash (truncated)
         GitDataParam('s', GitDataType.Int),  # file_size
         GitDataParam('b', GitDataType.Str)
     ]
@@ -95,8 +95,8 @@ class GitArchivesJson:
             for fi in sorted(ar.files,
                              key=lambda f: f.intra_path):
                 alwriter.write_line(ahandler, (
-                    fi.intra_path, ar.archive_hash,
-                    ar.archive_size, fi.file_hash, fi.file_size, ar.by))
+                    fi.file_hash, fi.intra_path, ar.archive_hash,
+                    ar.archive_size, fi.file_size, ar.by))
         alwriter.write_end()
         gitdatafile.write_git_file_footer(wfile)
 
@@ -536,6 +536,6 @@ if __name__ == '__main__':
                                         ttmpdir.tmp_dir(),
                                         Folders.normalize_dir_path('..\\..\\sanguine-skyrim-root\\'),
                                         [Folders.normalize_dir_path('..\\..\\..\\mo2\\downloads')])
-            with tasks.Parallel(None, dbg_serialize=True) as tparallel:
+            with tasks.Parallel(None, dbg_serialize=False) as tparallel:
                 tavailable.start_tasks(tparallel)
                 tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()
