@@ -45,7 +45,7 @@ class GitNexusFileOriginsHandler(fileorigin.GitFileOriginsHandler):
         super().__init__(GitNexusFileOriginsHandler.SPECIFIC_FIELDS, file_origins)
 
     def decompress(self, param: tuple[bytes, str, int, int, int]) -> None:
-        (h, n, f, m, g) = param
+        (n, h, f, m, g) = param
 
         fo = NexusFileOrigin(n, g, m, f)
         if h not in self.file_origins:

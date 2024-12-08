@@ -620,7 +620,7 @@ def read_git_file_list(dlist: GitDataList, rfile: typing.TextIO, lineno: int) ->
         # warn(ln)
         processed = rda.parse_line(ln)
         if not processed:
-            warn(ln)
+            #warn(ln)
             assert re.search(r'^\s*]\s*$', ln)
             return lineno
 

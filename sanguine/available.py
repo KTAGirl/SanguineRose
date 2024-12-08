@@ -390,13 +390,16 @@ class MasterGitData:
         parallel.add_task(hashingowntask)
 
     def add_file_origin(self, h: bytes, fo: FileOrigin) -> None:
-        self.dirtyfo = True
         if h in self.file_origins_by_hash:
             for oldfo in self.file_origins_by_hash[h]:
-                assert not fo.eq(oldfo)
+                if fo.eq(oldfo):
+                    return
+
             self.file_origins_by_hash[h].append(fo)
+            self.dirtyfo = True
         else:
             self.file_origins_by_hash[h] = [fo]
+            self.dirtyfo = True
 
     def start_done_hashing_task(self,  # should be called only after all start_hashing_archive() calls are done
                                 parallel: tasks.Parallel) -> str:
