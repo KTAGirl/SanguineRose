@@ -1,5 +1,6 @@
 import importlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -12,8 +13,8 @@ def _install_pip_module(module: str) -> None:
     subprocess.check_call([sys.executable, '-m', 'pip', 'install', module])
 
 
-REQUIRED_PIP_MODULES = ['json5', 'bethesda-structs']
-PIP2PYTHON_MODULE_NAME_REMAPPING = {'bethesda-structs': 'bethesda_structs'}
+REQUIRED_PIP_MODULES = ['json5', 'bethesda-structs', 'pywin32']
+PIP2PYTHON_MODULE_NAME_REMAPPING = {'bethesda-structs': 'bethesda_structs', 'pywin32': ['win32api', 'win32file']}
 
 
 def _print_yellow(s: str) -> None:
@@ -30,7 +31,7 @@ def _print_green(s: str) -> None:
 
 ##### install
 
-def _run_installer(cmd: list[str], sitefrom: str, msg:str) -> None:
+def _run_installer(cmd: list[str], sitefrom: str, msg: str) -> None:
     _print_redbold("We're about to run the following installer: {}".format(cmd[0]))
     _print_yellow("It was downloaded from {}".format(sitefrom))
     _print_yellow("Feel free to run it through your favorite virus checker,")
@@ -68,6 +69,23 @@ def _download_file_nice_name(url: str) -> str:
 ### Specific installers
 
 def _install_vs_build_tools() -> None:
+    # trying to find one
+    programfiles = os.environ['ProgramFiles(x86)']
+    vswhere = os.path.join(programfiles, 'Microsoft Visual Studio\\Installer\\vswhere.exe')
+    if os.path.exists(vswhere):
+        out = subprocess.run([vswhere, '-products', 'Microsoft.VisualStudio.Product.BuildTools',
+                              'Microsoft.VisualStudio.Product.Community',
+                              'Microsoft.VisualStudio.Product.Professional',
+                              'Microsoft.VisualStudio.Product.Enterprise'], text=True, capture_output=True)
+
+        if out.returncode == 0:
+            outstr = out.stdout
+            # _print_yellow(outstr)
+            m = re.search(r'productId\s*:\s*(Microsoft.VisualStudio.Product.[a-zA-Z0-9]*)', outstr)
+            if m:
+                _print_green('{} found, no need to download/install Visual Studio'.format(m.group(1)))
+                return
+
     urls = simple_download.pattern_from_url('https://visualstudio.microsoft.com/visual-cpp-build-tools/',
                                             r'href="(https://aka.ms/vs/.*/release/vs_BuildTools.exe)"')
     assert len(urls) == 1
@@ -75,7 +93,7 @@ def _install_vs_build_tools() -> None:
     _print_green('Downloading {}...'.format(url))
     exe = _download_file_nice_name(url)
     _print_green('Download complete.')
-    _run_installer([exe], url,'Make sure to check "Desktop Development with C++" checkbox.')
+    _run_installer([exe], url, 'Make sure to check "Desktop Development with C++" checkbox.')
     _print_green('Visual C++ build tools successfully installed.')
 
 
@@ -89,7 +107,7 @@ def install_sanguine_prerequisites() -> None:
 
 ##### checks
 
-def _check_module_installed(module: str) -> bool:
+def _is_module_installed(module: str) -> bool:
     try:
         importlib.import_module(module)
         return True
@@ -103,14 +121,24 @@ def _not_installed(msg: str) -> None:
     os._exit(1)
 
 
+def _check_module(m: str) -> None:
+    if not _is_module_installed(m):
+        _not_installed('Module {} is not installed.'.format(m))
+
+
 def check_sanguine_prerequisites() -> None:
     # we don't really need to check for MSVC being installed, as without it pip modules won't be available
 
     for m in REQUIRED_PIP_MODULES:
         if m in PIP2PYTHON_MODULE_NAME_REMAPPING:
-            m = PIP2PYTHON_MODULE_NAME_REMAPPING[m]
-        if not _check_module_installed(m):
-            _not_installed('Module {} is not installed.'.format(m))
+            val = PIP2PYTHON_MODULE_NAME_REMAPPING[m]
+            if isinstance(val, list):
+                for v in val:
+                    _check_module(v)
+            else:
+                _check_module(val)
+        else:
+            _check_module(m)
 
     if subprocess.call(['git', '--version']) != 0:
         critical('git is not found in PATH.')
