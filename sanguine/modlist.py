@@ -14,18 +14,17 @@ class ModList:
         self.modlist = list(filter(lambda s: s.endswith('_separator') or not s.startswith('-'), self.modlist))
         self.modlist.reverse()  # 'natural' order
 
-
     def write(self, path: str) -> None:
         fname = path + 'modlist.txt'
         with open_3rdparty_txt_file_w(fname) as wfile:
-            wfile.write("# This file was automatically modified by mo2git.\n")
+            wfile.write("# This file was automatically modified by sanguine-rose.\n")
             for line in reversed(self.modlist):
                 wfile.write(line + '\n')
 
     def write_disabling_if(self, path: str, f: Callable[[str], bool]) -> None:
         fname = path + 'modlist.txt'
         with open_3rdparty_txt_file_w(fname) as wfile:
-            wfile.write("# This file was automatically modified by mo2git.\n")
+            wfile.write("# This file was automatically modified by sanguine-rose.\n")
             for mod0 in reversed(self.modlist):
                 if mod0[0] == '+':
                     mod = mod0[1:]

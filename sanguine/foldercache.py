@@ -262,7 +262,7 @@ def _own_reconcile_task_func(foldercache: "FolderCache", parallel: tasks.Paralle
             ndel += 1
     info('FolderCache reconcile: {} files were deleted'.format(ndel))
 
-    savetaskname = 'mo2git.foldercache.save.' + foldercache.name
+    savetaskname = 'sanguine.foldercache.save.' + foldercache.name
     savetask = tasks.Task(savetaskname, _save_files_task_func,
                           (foldercache.cache_dir, foldercache.name, foldercache.files_by_path,
                            foldercache.filtered_files, foldercache.all_scan_stats),
@@ -557,7 +557,7 @@ if __name__ == '__main__':
     import sys
 
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
-        tfoldercache = FolderCache(Folders.normalize_dir_path('..\\..\\mo2git.cache\\'),
+        tfoldercache = FolderCache(Folders.normalize_dir_path('..\\..\\sanguine.cache\\'),
                                    'downloads',
                                    [(Folders.normalize_dir_path('..\\..\\..\\mo2\\downloads'), [])])
         with tasks.Parallel(None) as tparallel:

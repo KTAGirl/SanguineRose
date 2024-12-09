@@ -18,7 +18,7 @@ PIP2PYTHON_MODULE_NAME_REMAPPING = {'bethesda-structs': 'bethesda_structs', 'pyw
 
 
 def _print_yellow(s: str) -> None:
-    print('\x1b[93;20m' + s + '\x1b[0m')
+    print('\x1b[93m' + s + '\x1b[0m')
 
 
 def _print_redbold(s: str) -> None:

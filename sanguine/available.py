@@ -525,14 +525,15 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
         from sanguine.sanguine_install_helpers import check_sanguine_prerequisites
 
-        ttmppath = Folders.normalize_dir_path('..\\..\\mo2git.tmp\\')
+        ttmppath = Folders.normalize_dir_path('..\\..\\sanguine.tmp\\')
         add_file_logging(ttmppath + 'sanguine.log.html')
 
         check_sanguine_prerequisites()
+        # dbgasalert(ttmppath)
 
         with TmpPath(ttmppath) as ttmpdir:
             tavailable = AvailableFiles('KTAGirl',
-                                        Folders.normalize_dir_path('..\\..\\mo2git.cache\\'),
+                                        Folders.normalize_dir_path('..\\..\\sanguine.cache\\'),
                                         ttmpdir.tmp_dir(),
                                         Folders.normalize_dir_path('..\\..\\sanguine-skyrim-root\\'),
                                         [Folders.normalize_dir_path('..\\..\\..\\mo2\\downloads')])

@@ -1,8 +1,7 @@
 from sanguine.common import *
 
 
-# mo2git is compatible with wj paths, which are os.abspath.lower()
-#   all our dirs always end with '\\'
+#  all our dir and file names are always in lowercase, and always end with '\\'
 
 def _normalize_dir_path(path: str) -> str:
     path = os.path.abspath(path)
@@ -27,7 +26,7 @@ def _is_normalized_file_path(path: str) -> bool:
 
 
 def _to_short_path(base: str, path: str) -> str:
-    assert (path.startswith(base))
+    assert path.startswith(base)
     return path[len(base):]
 
 
@@ -88,7 +87,7 @@ def folder_size(rootpath: str):
     for dirpath, dirnames, filenames in os.walk(rootpath):
         for f in filenames:
             fp = os.path.join(dirpath, f)
-            assert (not os.path.islink(fp))
+            assert not os.path.islink(fp)
             total += os.path.getsize(fp)
     return total
 
@@ -103,7 +102,7 @@ class Folders:
     github_dir: str
     own_mod_names: list[str]
 
-    # TODO: check that sanguine-rose itself doesn't overlap with any of the dirs
+    # TODO: check that sanguine-rose itself and cache_dir don't overlap with any of the dirs
     def __init__(self, jsonconfigfname: str, jsonconfig: dict[str, any]) -> None:
         self.config_dir = _normalize_dir_path(os.path.split(jsonconfigfname)[0])
         abort_if_not('mo2' in jsonconfig, lambda: "'mo2' must be present in config")
@@ -137,10 +136,10 @@ class Folders:
             else:
                 self.ignore_dirs.append(_normalize_mo2_dir_path(ignore, self.mo2_dir))
 
-        self.cache_dir = _config_dir_path(jsonconfig.get('cache', self.config_dir + '..\\mo2git.cache\\'),
+        self.cache_dir = _config_dir_path(jsonconfig.get('cache', self.config_dir + '..\\sanguine.cache\\'),
                                           self.config_dir,
                                           jsonconfig)
-        self.tmp_dir = _config_dir_path(jsonconfig.get('tmp', self.config_dir + '..\\mo2git.tmp\\'), self.config_dir,
+        self.tmp_dir = _config_dir_path(jsonconfig.get('tmp', self.config_dir + '..\\sanguine.tmp\\'), self.config_dir,
                                         jsonconfig)
         self.github_dir = _config_dir_path(jsonconfig.get('github', self.config_dir), self.config_dir, jsonconfig)
 
@@ -172,25 +171,25 @@ class Folders:
     # TODO?: all_enabled_mod_dirs()
 
     def file_path_to_short_path(self, fpath: str) -> str:
-        assert (_is_normalized_file_path(fpath))
+        assert _is_normalized_file_path(fpath)
         return _to_short_path(self.mo2_dir, fpath)
 
     def dir_path_to_short_path(self, dirpath: str) -> str:
-        assert (_is_normalized_dir_path(dirpath))
+        assert _is_normalized_dir_path(dirpath)
         return _to_short_path(self.mo2_dir, dirpath)
 
     def short_file_path_to_path(self, fpath: str) -> str:
-        assert (_is_short_file_path(fpath))
+        assert _is_short_file_path(fpath)
         return self.mo2_dir + fpath
 
     def short_dir_path_to_path(self, dirpath: str) -> str:
-        assert (_is_short_dir_path(dirpath))
+        assert _is_short_dir_path(dirpath)
         return self.mo2_dir + dirpath
 
     # TODO: move static methods to common global space
     @staticmethod
     def normalize_file_name(fname: str) -> str:
-        assert ('\\' not in fname and '/' not in fname)
+        assert '\\' not in fname and '/' not in fname
         return fname.lower()
 
     @staticmethod
@@ -211,5 +210,5 @@ class Folders:
 
     @staticmethod
     def normalize_archive_intra_path(fpath: str):
-        assert (_is_short_file_path(fpath.lower()))
+        assert _is_short_file_path(fpath.lower())
         return fpath.lower()

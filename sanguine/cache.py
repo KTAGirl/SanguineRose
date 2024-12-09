@@ -68,11 +68,11 @@ class Cache:
 
     def start_tasks(self, parallel: tasks.Parallel) -> None:
         all_folders_list = self.downloads.folder_list + self.mo2.folder_list + self.ownmods.folder_list
-        hctaskname = 'mo2git.cache.loadhc'
+        hctaskname = 'sanguine.cache.loadhc'
         hctask = tasks.Task(hctaskname, _load_hc_task_func,
                             (self.folders.cache_dir, all_folders_list, self.cache_data), [])
 
-        ownhctaskname = 'mo2git.cache.ownhc2self'
+        ownhctaskname = 'sanguine.cache.ownhc2self'
         owntaskhc2self = tasks.OwnTask(ownhctaskname,
                                        lambda _, out: _own_hc2self_task_func(self, out),
                                        None, [hctaskname])
@@ -82,7 +82,7 @@ class Cache:
         self.mo2.start_tasks(parallel, iter(self.underlying_files), ownhctaskname)
         self.ownmods.start_tasks(parallel, iter(self.underlying_files), ownhctaskname)
 
-        owndlsreadytaskname = 'mo2git.cache.owndlsready'
+        owndlsreadytaskname = 'sanguine.cache.owndlsready'
         owndlsready = tasks.OwnTask(owndlsreadytaskname,
                                     lambda _, _1: _own_downloads_ready_task_func(self),
                                     None, [self.downloads.ready_task_name()])

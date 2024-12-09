@@ -23,7 +23,7 @@ class LockMO2:
         except Exception as e:
             print(e)
             self.interface_log = None
-            raise LockMO2Error('Unable to lock mo_interface.log; make sure to close MO2 before running mo2git')
+            raise LockMO2Error('Unable to lock mo_interface.log; make sure to close MO2 before running sanguine-rose')
 
     def __exit__(self, exceptiontype: Type[BaseException], exceptionval: BaseException,
                  exceptiontraceback: TracebackType) -> None:

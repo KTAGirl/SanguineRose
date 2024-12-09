@@ -29,25 +29,7 @@ def game_universe() -> GameUniverse:
     return GameUniverse.Skyrim
 
 
-def dbgwait() -> None:
-    input("Press Enter to continue.")
-
-
-def dbgfirst(data: any) -> any:
-    if isinstance(data, list):
-        print(len(data))
-        return data[0]
-    elif isinstance(data, dict):
-        # print(len(data))
-        it = iter(data)
-        key = next(it)
-        # print(key)
-        return data[key]
-    else:
-        return data
-
-
-class Mo2gitError(Exception):
+class SanguinicError(Exception):
     pass
 
 
@@ -60,7 +42,7 @@ def abort_if_not(cond: bool,
             msg += ':' + f()
         where = traceback.extract_stack(limit=2)[0]
         critical(msg + ' @line ' + str(where.lineno) + ' of ' + os.path.split(where.filename)[1])
-        raise Mo2gitError(msg)
+        raise SanguinicError(msg)
 
 
 ### logging
@@ -68,10 +50,10 @@ def abort_if_not(cond: bool,
 class _SanguineFormatter(logging.Formatter):
     FORMAT: str = '[%(levelname)s]: %(message)s (%(filename)s:%(lineno)d)'
     FORMATS: dict[int, str] = {
-        logging.DEBUG: '\x1b[38;20m' + FORMAT + '\x1b[0m',
+        logging.DEBUG: '\x1b[90m' + FORMAT + '\x1b[0m',
         logging.INFO: '\x1b[32m' + FORMAT + '\x1b[0m',
-        logging.WARNING: '\x1b[93;20m' + FORMAT + '\x1b[0m',
-        logging.ERROR: FORMAT,  # not really using it (yet?)
+        logging.WARNING: '\x1b[33m' + FORMAT + '\x1b[0m',
+        logging.ERROR: '\x1b[93m' + FORMAT + '\x1b[0m',  # alert()
         logging.CRITICAL: '\x1b[91;1m' + FORMAT + '\x1b[0m'
     }
 
@@ -91,10 +73,10 @@ def _html_format(color: str, bold: bool = False) -> str:
 
 class _SanguineFileFormatter(logging.Formatter):
     FORMATS: dict[int, str] = {
-        logging.DEBUG: _html_format('#888888'),
+        logging.DEBUG: _html_format('#666666'),
         logging.INFO: _html_format('#008000'),
-        logging.WARNING: _html_format('#e5bf00'),
-        logging.ERROR: _html_format('red'),  # not really using it (yet?)
+        logging.WARNING: _html_format('#a47d1f'),
+        logging.ERROR: _html_format('#e5bf00'),  # alert()
         logging.CRITICAL: _html_format('#ff0000', True)
     }
 
@@ -108,6 +90,7 @@ class _SanguineFileFormatter(logging.Formatter):
         return formatter.format(record)
 
 
+logging.addLevelName(logging.ERROR, 'ALERT')
 _logger = logging.getLogger()
 _logger.setLevel(logging.DEBUG if __debug__ else logging.INFO)
 
@@ -141,9 +124,11 @@ def log_to_file_only(record: logging.LogRecord, prefix: str = None) -> None:
     _logger_file_handler.emit(record)
 
 
-def warn(msg: str) -> None:
+def debug(msg: str) -> None:
+    if not __debug__:
+        return
     global _logger
-    _logger.warning(msg, stacklevel=2)
+    _logger.debug(msg, stacklevel=2)
 
 
 def info(msg: str) -> None:
@@ -151,16 +136,19 @@ def info(msg: str) -> None:
     _logger.info(msg, stacklevel=2)
 
 
+def warn(msg: str) -> None:
+    global _logger
+    _logger.warning(msg, stacklevel=2)
+
+
+def alert(msg: str) -> None:
+    global _logger
+    _logger.error(msg, stacklevel=2)
+
+
 def critical(msg: str) -> None:
     global _logger
     _logger.critical(msg, stacklevel=2)
-
-
-def debug(msg: str) -> None:
-    if not __debug__:
-        return
-    global _logger
-    _logger.debug(msg, stacklevel=2)
 
 
 ###
@@ -174,7 +162,7 @@ class JsonEncoder(json.JSONEncoder):
             return base64.b64encode(o).decode('ascii')
         elif isinstance(o, dict):
             return self._adjust_dict(o)
-        elif o is None or isinstance(o, tuple) or isinstance(o, list):
+        elif o is None or isinstance(o, str) or isinstance(o, tuple) or isinstance(o, list):
             return o
         elif isinstance(o, object):
             return o.__dict__
@@ -188,6 +176,10 @@ class JsonEncoder(json.JSONEncoder):
                 k = base64.b64encode(k).decode('ascii')
             out[k] = self.default(v)
         return out
+
+
+def dbgasalert(data: any) -> None:
+    alert(JsonEncoder().encode(data))
 
 
 def open_3rdparty_txt_file(fname: str) -> typing.TextIO:

@@ -175,8 +175,8 @@ class Master:
         mo2len = len(mo2)
         self.files = []
         for fpath0 in files:
-            assert (fpath0.islower())
-            assert (fpath0.startswith(mo2))
+            assert fpath0.islower()
+            assert fpath0.startswith(mo2)
             fpath = fpath0[mo2len:]
 
             if is_esx(fpath):
@@ -200,7 +200,7 @@ class Master:
                     nwarn.val += 1
             else:
                 if archive is None:
-                    assert (ae.file_size == 0)
+                    assert ae.file_size == 0
                     self.files.append(MasterFileItem(fpath, None, file_size=0))
                 else:
                     fi = MasterFileItem(fpath, ae.file_hash, file_size=ae.file_size,
