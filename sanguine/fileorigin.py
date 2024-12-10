@@ -4,7 +4,6 @@ from abc import abstractmethod
 import sanguine.gitdatafile as gitdatafile
 import sanguine.pluginhandler as pluginhandler
 from sanguine.common import *
-from sanguine.folders import Folders
 from sanguine.gitdatafile import GitDataParam, GitDataType, GitDataHandler
 
 
@@ -97,7 +96,7 @@ pluginhandler.load_plugins('plugins/fileorigin/', FileOriginPluginBase, lambda p
 
 def file_origins_for_file(fpath: str) -> list[FileOrigin] | None:
     global _file_origin_plugins
-    assert Folders.is_normalized_file_path(fpath)
+    assert is_normalized_file_path(fpath)
     assert os.path.isfile(fpath)
     metafpath = fpath + '.meta'
     if os.path.isfile(metafpath):

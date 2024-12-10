@@ -64,21 +64,3 @@ class File:
         self.file_modified = file_modified
         self.file_path = file_path
         self.file_size = file_size
-
-    '''
-    def eq(self, other: "File") -> bool:
-        if self.file_hash != other.file_hash:
-            return False
-        if self.file_modified != other.file_modified:
-            return False
-        if self.file_path != other.file_path:
-            return False
-        return True
-
-    def to_json(self) -> str:
-        if self.file_hash is None:
-            return '{{"file_path":{},"file_hash":null}}'.format(escape_json(self.file_path))
-        else:
-            return '{{"file_hash":"{}","file_modified":{},"file_path":"{}"}}'.format(to_json_hash(self.file_hash),
-                                                                                     self.file_modified, self.file_path)
-    '''

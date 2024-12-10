@@ -1,12 +1,11 @@
 from sanguine.common import *
-from sanguine.folders import Folders
 
 
 class ModList:
     modlist: list[str] | None
 
     def __init__(self, dirpath: str) -> None:
-        assert Folders.is_normalized_dir_path(dirpath)
+        assert is_normalized_dir_path(dirpath)
         fname = dirpath + 'modlist.txt'
         self.modlist = None
         with open_3rdparty_txt_file(fname) as rf:

@@ -2,7 +2,6 @@
 import pickle
 
 from sanguine.common import *
-from sanguine.folders import Folders
 
 
 def pickled_cache(cachedir: str, cachedata: dict[str, any], prefix: str, origfiles: list[str],
@@ -26,8 +25,8 @@ def pickled_cache(cachedir: str, cachedata: dict[str, any], prefix: str, origfil
             rd = readpaths[i]
             of = (origfiles[i], os.path.getmtime(origfiles[i]))
             assert isinstance(rd, tuple)
-            assert Folders.is_normalized_file_path(rd[0])
-            assert Folders.is_normalized_file_path(of[0])
+            assert is_normalized_file_path(rd[0])
+            assert is_normalized_file_path(of[0])
 
             jrd = JsonEncoder().encode(rd)
             jof = JsonEncoder().encode(of)

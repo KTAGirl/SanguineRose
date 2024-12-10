@@ -1,55 +1,11 @@
 from sanguine.common import *
 
 
-#  all our dir and file names are always in lowercase, and always end with '\\'
-
-def _normalize_dir_path(path: str) -> str:
-    path = os.path.abspath(path)
-    assert '/' not in path
-    assert not path.endswith('\\')
-    return path.lower() + '\\'
-
-
-def _is_normalized_dir_path(path: str) -> bool:
-    return path == os.path.abspath(path).lower() + '\\'
-
-
-def _normalize_file_path(path: str) -> str:
-    assert not path.endswith('\\') and not path.endswith('/')
-    path = os.path.abspath(path)
-    assert '/' not in path
-    return path.lower()
-
-
-def _is_normalized_file_path(path: str) -> bool:
-    return path == os.path.abspath(path).lower()
-
-
-def _to_short_path(base: str, path: str) -> str:
-    assert path.startswith(base)
-    return path[len(base):]
-
-
-def _is_short_file_path(fpath: str) -> bool:
-    assert not fpath.endswith('\\') and not fpath.endswith('/')
-    if not fpath.islower(): return False
-    return not os.path.isabs(fpath)
-
-
-def _is_short_dir_path(fpath: str) -> bool:
-    return fpath.islower() and fpath.endswith('\\') and not os.path.isabs(fpath)
-
-
-def _is_normalized_file_name(fname: str) -> bool:
-    if '/' in fname or '\\' in fname: return False
-    return fname.islower()
-
-
 def _normalize_config_dir_path(path: str, configdir: str) -> str:  # relative to config dir
     if os.path.isabs(path):
-        return _normalize_dir_path(path)
+        return normalize_dir_path(path)
     else:
-        return _normalize_dir_path(configdir + path)
+        return normalize_dir_path(configdir + path)
 
 
 def _config_dir_path(path: str, configdir: str, config: dict[str, any]):
@@ -71,9 +27,9 @@ def _config_dir_path(path: str, configdir: str, config: dict[str, any]):
 
 def _normalize_mo2_dir_path(path: str, mo2dir: str) -> str:  # relative to mo2 dir
     if os.path.isabs(path):
-        out = _normalize_dir_path(path)
+        out = normalize_dir_path(path)
     else:
-        out = _normalize_dir_path(mo2dir + path)
+        out = normalize_dir_path(mo2dir + path)
     abort_if_not(out.startswith(mo2dir), lambda: 'expected path within mo2, got ' + repr(path))
     return out
 
@@ -102,9 +58,9 @@ class Folders:
     github_dir: str
     own_mod_names: list[str]
 
-    # TODO: check that sanguine-rose itself and cache_dir don't overlap with any of the dirs
+    # TODO: check that sanguine-rose itself, cache_dir, and tmp_dir don't overlap with any of the dirs
     def __init__(self, jsonconfigfname: str, jsonconfig: dict[str, any]) -> None:
-        self.config_dir = _normalize_dir_path(os.path.split(jsonconfigfname)[0])
+        self.config_dir = normalize_dir_path(os.path.split(jsonconfigfname)[0])
         abort_if_not('mo2' in jsonconfig, lambda: "'mo2' must be present in config")
         mo2 = jsonconfig['mo2']
         abort_if_not(isinstance(mo2, str), lambda: "config.'mo2' must be a string, got " + repr(mo2))
@@ -125,7 +81,7 @@ class Folders:
         self.ignore_dirs = []
         for ignore in ignores:
             if ignore == '{DEFAULT-IGNORES}':
-                self.ignore_dirs += [_normalize_dir_path(self.mo2_dir + defignore) for defignore in [
+                self.ignore_dirs += [normalize_dir_path(self.mo2_dir + defignore) for defignore in [
                     'plugins\\data\\RootBuilder',
                     'crashDumps',
                     'logs',
@@ -143,7 +99,7 @@ class Folders:
                                         jsonconfig)
         self.github_dir = _config_dir_path(jsonconfig.get('github', self.config_dir), self.config_dir, jsonconfig)
 
-        self.own_mod_names = [Folders.normalize_file_name(om) for om in jsonconfig.get('ownmods', [])]
+        self.own_mod_names = [normalize_file_name(om) for om in jsonconfig.get('ownmods', [])]
 
     def normalize_config_dir_path(self, path: str) -> str:
         return _normalize_config_dir_path(path, self.config_dir)
@@ -159,56 +115,29 @@ class Folders:
     def all_mo2_own_mod_dirs(self) -> Generator[str]:
         for ownmod in self.own_mod_names:
             out = self.mo2_dir + ownmod
-            assert Folders.is_normalized_dir_path(out)
+            assert is_normalized_dir_path(out)
             yield out
 
     def all_git_own_mod_dirs(self) -> Generator[str]:
         for ownmod in self.own_mod_names:
             out = self.github_dir + '\\mo2\\mods' + ownmod
-            assert Folders.is_normalized_dir_path(out)
+            assert is_normalized_dir_path(out)
             yield out
 
     # TODO?: all_enabled_mod_dirs()
 
     def file_path_to_short_path(self, fpath: str) -> str:
-        assert _is_normalized_file_path(fpath)
-        return _to_short_path(self.mo2_dir, fpath)
+        assert is_normalized_file_path(fpath)
+        return to_short_path(self.mo2_dir, fpath)
 
     def dir_path_to_short_path(self, dirpath: str) -> str:
-        assert _is_normalized_dir_path(dirpath)
-        return _to_short_path(self.mo2_dir, dirpath)
+        assert is_normalized_dir_path(dirpath)
+        return to_short_path(self.mo2_dir, dirpath)
 
     def short_file_path_to_path(self, fpath: str) -> str:
-        assert _is_short_file_path(fpath)
+        assert is_short_file_path(fpath)
         return self.mo2_dir + fpath
 
     def short_dir_path_to_path(self, dirpath: str) -> str:
-        assert _is_short_dir_path(dirpath)
+        assert is_short_dir_path(dirpath)
         return self.mo2_dir + dirpath
-
-    # TODO: move static methods to common global space
-    @staticmethod
-    def normalize_file_name(fname: str) -> str:
-        assert '\\' not in fname and '/' not in fname
-        return fname.lower()
-
-    @staticmethod
-    def is_normalized_file_path(fpath: str) -> bool:
-        return _is_normalized_file_path(fpath)
-
-    @staticmethod
-    def normalize_file_path(fpath: str) -> str:
-        return _normalize_file_path(fpath)
-
-    @staticmethod
-    def normalize_dir_path(fpath: str) -> str:
-        return _normalize_dir_path(fpath)
-
-    @staticmethod
-    def is_normalized_dir_path(fpath: str) -> bool:
-        return _is_normalized_dir_path(fpath)
-
-    @staticmethod
-    def normalize_archive_intra_path(fpath: str):
-        assert _is_short_file_path(fpath.lower())
-        return fpath.lower()
