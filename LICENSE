@@ -1,3 +1,11 @@
+Most of the code in this repo is licensed under BSD 3-Clause License, 
+provided below.
+
+Some 3rd-party tools in tools/ folder are provided under their respective 
+licenses, see tools/LICENSE
+
+----------------------------------------------------------------------------
+
 BSD 3-Clause License
 
 Copyright (c) 2024, KTAGirl
