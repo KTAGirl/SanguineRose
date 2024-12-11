@@ -1,10 +1,11 @@
 import hashlib
 import stat
+import tempfile
 from abc import abstractmethod
 
 from sanguine.common import *
 
-ZEROHASH = hashlib.sha256(b"")
+_ZEROHASH = hashlib.sha256(b"")
 
 
 def calculate_file_hash(
@@ -77,6 +78,45 @@ class FileRetriever:  # new dog breed ;-)
     def fetch_for_reading(self,
                           tmpdirpath: str) -> str:  # returns file path to work with; can be an existing file, or temporary within tmpdirpath
         pass
+
+
+class ZeroFileRetriever(FileRetriever):
+    def __init__(self) -> None:
+        pass
+
+    @abstractmethod
+    def fetch(self, targetfpath: str):
+        open(targetfpath, 'wb').close()
+
+    @abstractmethod
+    def fetch_for_reading(self,
+                          tmpdirpath: str) -> str:  # returns file path to work with; can be an existing file, or temporary within tmpdirpath
+        wf, tfname = tempfile.mkstemp(dir=tmpdirpath)
+        os.close(wf)  # yep, it is exactly enough to create temp zero file
+        return tfname
+
+
+def make_zero_retriever_if(self, fi: FileOnDisk) -> ZeroFileRetriever | None:
+    if fi.file_hash == _ZEROHASH or fi.file_size == 0:
+        assert fi.file_hash == _ZEROHASH and fi.file_size == 0
+        return ZeroFileRetriever()
+    else:
+        return None
+
+
+class PlainFileRetriever(FileRetriever):
+    fpath: str
+
+    def __init__(self, fpath: str) -> None:
+        self.fpath = fpath
+
+    def fetch(self, targetfpath: str):
+        shutil.copyfile(self.fpath, targetfpath)
+
+    @abstractmethod
+    def fetch_for_reading(self,
+                          tmpdirpath: str) -> str:  # returns file path to work with; can be an existing file, or temporary within tmpdirpath
+        return self.fpath
 
 
 class FileDownloader:  # Provides a base class for downloading files
