@@ -6,7 +6,7 @@ import json
 sys.path.append(os.path.split(os.path.abspath(__file__))[0])
 
 from sanguine.common import *
-from sanguine.folders import Folders
+from sanguine.projectconfig import ProjectConfig
 from sanguine.cmdcommon import _openCache,_csAndMasterModList,enabledModSizes,_loadUserConfig
 import sanguine.cmdmo2git as cmdmo2git
 import sanguine.cmdgit2mo as cmdgit2mo
@@ -44,7 +44,7 @@ if __name__ == '__main__':
                 if argc == 3:
                     compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)
                     ignore=compiler_settings['Ignore']
-                    dumpwjdb = Folders.normalize_dir_path(argv[2])
+                    dumpwjdb = ProjectConfig.normalize_dir_path(argv[2])
                     filecache = _openCache(configfilepath,config,mastermodlist,ignore,dumpwjdb)
                     ok = True
             case 'debug.modsizes':

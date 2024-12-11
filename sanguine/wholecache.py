@@ -1,8 +1,9 @@
 import sanguine.tasks as tasks
-from sanguine.available import AvailableFiles, FileRetriever, FileRetrieverFromArchive
+from sanguine.available import AvailableFiles
 from sanguine.common import *
-from sanguine.files import File
-from sanguine.foldercache import FolderCache
+from sanguine.files import FileOnDisk, FileRetriever
+from sanguine.foldercache import FolderCache, FolderToCache
+from sanguine.projectconfig import ProjectConfig
 
 
 class WholeCache:
@@ -12,9 +13,14 @@ class WholeCache:
     available: AvailableFiles
     _SYNCOWNTASKNAME: str = 'sanguine.wholecache.sync'
 
-    def __init__(self, by: str, cachedir: str, tmpdir: str, mastergitdir: str, mo2dir, downloads: list[str]) -> None:
-        self.available = AvailableFiles(by, cachedir, tmpdir, mastergitdir, downloads)
-        self.mo2cache = FolderCache(cachedir, 'mo2', mo2dir)
+    def __init__(self, by: str, cfgfolders: ProjectConfig) -> None:
+        self.available = AvailableFiles(by, cfgfolders.cache_dir, cfgfolders.tmp_dir, cfgfolders.github_dir,
+                                        cfgfolders.download_dirs)
+        
+        folderstocache: list[FolderToCache] = [FolderToCache(cfgfolders.mo2_dir, [cfgfolders.mo2_mods_dir()])]
+        for d in cfgfolders.all_enabled_mo2_mod_dirs():
+            folderstocache.append(FolderToCache(d))
+        self.mo2cache = FolderCache(cfgfolders.cache_dir, 'mo2', folderstocache)
 
     def start_tasks(self, parallel: tasks.Parallel) -> None:
         self.mo2cache.start_tasks(parallel)
@@ -33,27 +39,11 @@ class WholeCache:
     def ready_task_name() -> str:
         return WholeCache._SYNCOWNTASKNAME
 
-    def all_mo2_files(self) -> Iterable[File]:
+    def all_mo2_files(self) -> Iterable[FileOnDisk]:
         return self.mo2cache.all_files()
 
-    def find_available_file_by_hash(self, h: bytes) -> list[FileRetriever]:  # resolved as fully as feasible
-        found = self.available.find_archived_file_by_hash(h)
-        for r in found:
-            self._resolve_archive_retrievers(r)
-        return found
+    def file_retrievers_by_hash(self, h: bytes) -> list[FileRetriever]:  # resolved as fully as feasible
+        return self.available.file_retrievers_by_hash(h)
 
-    def find_available_file_by_name(self, fname: str) -> list[FileRetriever]:  # resolved as fully as feasible
-        # used for looking for patch candidates
-        found = self.available.find_archived_file_by_name(fname)
-        for r in found:
-            self._resolve_archive_retrievers(r)
-        return found
-
-    # private functions
-
-    def _resolve_archive_retrievers(self, r: FileRetriever) -> None:
-        if isinstance(r, FileRetrieverFromArchive):
-            assert len(r.archive_retrievers) == 0
-            r.archive_retrievers = self.available.find_file_origin(r.archive_hash)
-            for rr in r.archive_retrievers:
-                self._resolve_archive_retrievers(rr)
+    def file_retrievers_by_name(self, fname: str) -> list[FileRetriever]:  # resolved as fully as feasible
+        return self.available.file_retrievers_by_name(fname)

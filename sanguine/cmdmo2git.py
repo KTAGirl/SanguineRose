@@ -8,7 +8,7 @@ from sanguine.modlist import ModList
 from sanguine.common import *
 from sanguine.cmdcommon import _openCache,_csAndMasterModList
 import sanguine.cache as cache
-from sanguine.folders import Folders
+from sanguine.projectconfig import ProjectConfig
 import sanguine.master as master
 import sanguine.mo2compat as mo2compat
 
@@ -71,7 +71,7 @@ def _copyRestOfProfile(mo2,fulltargetdir,profilename):
 def _mo2git(jsonconfigfname,config):
     compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)
     ignore=compiler_settings['Ignore']
-    folders = Folders(jsonconfigfname,config,ignore)
+    folders = ProjectConfig(jsonconfigfname, config, ignore)
     with mo2compat.LockMO2(folders.mo2_dir):
         filecache = _openCache(jsonconfigfname,config,mastermodlist,folders)
 

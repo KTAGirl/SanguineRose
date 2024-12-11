@@ -5,7 +5,7 @@ import stat
 
 import sanguine.tasks as tasks
 from sanguine.common import *
-from sanguine.files import File, calculate_file_hash
+from sanguine.files import FileOnDisk, calculate_file_hash
 
 
 def _get_file_timestamp(fname: str) -> float:
@@ -16,23 +16,24 @@ def _get_file_timestamp_from_st(st: os.stat_result) -> float:
     return st.st_mtime
 
 
-def _read_dict_of_files(dirpath: str, name: str) -> dict[str, File]:
+def _read_dict_of_files(dirpath: str, name: str) -> dict[str, FileOnDisk]:
     assert is_normalized_dir_path(dirpath)
     fpath = dirpath + 'foldercache.' + name + '.pickle'
     return read_dict_from_pickled_file(fpath)
 
 
-def _write_dict_of_files(dirpath: str, name: str, files: dict[str, File], filteredfiles: dict[str, File]) -> None:
+def _write_dict_of_files(dirpath: str, name: str, files: dict[str, FileOnDisk],
+                         filteredfiles: dict[str, FileOnDisk]) -> None:
     assert is_normalized_dir_path(dirpath)
     fpath = dirpath + 'foldercache.' + name + '.pickle'
-    outfiles: dict[str, File] = files | filteredfiles
+    outfiles: dict[str, FileOnDisk] = files | filteredfiles
     with open(fpath, 'wb') as wf:
         # noinspection PyTypeChecker
         pickle.dump(outfiles, wf)
 
     fpath2 = dirpath + 'foldercache.' + name + '.njson'
     with open_3rdparty_txt_file_w(fpath2) as wf2:
-        srt: list[tuple[str, File]] = sorted(outfiles.items())
+        srt: list[tuple[str, FileOnDisk]] = sorted(outfiles.items())
         for item in srt:
             wf2.write(JsonEncoder().encode(item[1]) + '\n')
 
@@ -74,7 +75,7 @@ class _FolderScanStats:
 
 class _FolderScanDirOut:
     root: str
-    scanned_files: dict[str, File]
+    scanned_files: dict[str, FileOnDisk]
     requested_dirs: list[str]
     requested_files: list[tuple[str, float, int]]
     scan_stats: dict[str, int]  # fpath -> nfiles
@@ -87,7 +88,16 @@ class _FolderScanDirOut:
         self.scan_stats = {}
 
 
-type FolderList = list[tuple[str, list[str]]]
+class FolderToCache:
+    folder: str
+    exdirs: list[str]
+
+    def __init__(self, folder: str, exdirs: list[str] = None) -> None:
+        self.folder = folder
+        self.exdirs = [] if exdirs is None else exdirs
+
+
+type FolderListToCache = list[FolderToCache]
 
 
 def filter_ex_dirs(exdirs: list[str], fpath) -> list[str]:
@@ -115,7 +125,7 @@ def _hashing_file_time_estimate(fsize: int) -> float:
 
 ### Tasks
 
-def _load_files_task_func(param: tuple[str, str]) -> tuple[dict[str, File]]:
+def _load_files_task_func(param: tuple[str, str]) -> tuple[dict[str, FileOnDisk]]:
     (cachedir, name) = param
     # filesbypath = {}
     filesbypath = _read_dict_of_files(cachedir, name)
@@ -141,14 +151,15 @@ def _scan_folder_task_func(
     return exdirs, stats, sdout
 
 
-def _calc_hash_task_func(param: tuple[str, float, int]) -> tuple[File]:
+def _calc_hash_task_func(param: tuple[str, float, int]) -> tuple[FileOnDisk]:
     (fpath, tstamp, fsize) = param
     s, h = calculate_file_hash(fpath)
     assert s == fsize
-    return (File(h, tstamp, fpath, fsize),)
+    return (FileOnDisk(h, tstamp, fpath, fsize),)
 
 
-def _save_files_task_func(param: tuple[str, str, dict[str, File], dict[str, File], dict[str, dict[str, int]]]) -> None:
+def _save_files_task_func(
+        param: tuple[str, str, dict[str, FileOnDisk], dict[str, FileOnDisk], dict[str, dict[str, int]]]) -> None:
     (cachedir, name, filesbypath, filteredfiles, scan_stats) = param
     _write_dict_of_files(cachedir, name, filesbypath, filteredfiles)
     _write_all_scan_stats(cachedir, name, scan_stats)
@@ -252,12 +263,12 @@ class _ScanStatsNode:
 class FolderCache:  # folder cache; can handle multiple folders, each folder with its own set of exclusions
     cache_dir: str
     name: str
-    folder_list: FolderList
-    files_by_path: dict[str, File]
-    filtered_files: list[File]
+    folder_list: FolderListToCache
+    files_by_path: dict[str, FileOnDisk]
+    filtered_files: list[FileOnDisk]
     all_scan_stats: dict[str, dict[str, int]]  # rootfolder -> {fpath -> nfiles}
 
-    def __init__(self, cachedir: str, name: str, folder_list: FolderList) -> None:
+    def __init__(self, cachedir: str, name: str, folder_list: FolderListToCache) -> None:
         assert not FolderCache._folder_list_self_overlaps(folder_list)
         self.cache_dir = cachedir
         self.name = name
@@ -272,7 +283,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
     def ready_task_name(self) -> str:
         return self._reconcile_own_task_name()
 
-    def all_files(self) -> Iterable[File]:
+    def all_files(self) -> Iterable[FileOnDisk]:
         return self.files_by_path.values()
 
     # private functions
@@ -297,20 +308,20 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         return ok
 
     @staticmethod
-    def _folder_list_self_overlaps(l: FolderList) -> bool:
+    def _folder_list_self_overlaps(l: FolderListToCache) -> bool:
         for aidx in range(len(l)):
             for bidx in range(len(l)):
                 if aidx == bidx:
                     continue
-                if FolderCache._two_folders_overlap(l[aidx][0], l[aidx][1], l[bidx][0], l[bidx][1]):
+                if FolderCache._two_folders_overlap(l[aidx].folder, l[aidx].exdirs, l[bidx].folder, l[bidx].exdirs):
                     return True
         return False
 
     @staticmethod
-    def folder_lists_overlap(al: FolderList, bl: FolderList) -> bool:
+    def folder_lists_overlap(al: FolderListToCache, bl: FolderListToCache) -> bool:
         for a in al:
             for b in bl:
-                if FolderCache._two_folders_overlap(a[0], a[1], b[0], b[1]):
+                if FolderCache._two_folders_overlap(a.folder, a.exdirs, b.folder, b.exdirs):
                     return True
         return False
 
@@ -353,8 +364,8 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
             parallel.add_tasks([task, owntask])
 
-        scanningdeps = [self._scanned_own_task_name(folderplus[0]) + '*' for folderplus in self.folder_list]
-        hashingdeps = [self._hashing_own_wildcard_task_name(folderplus[0]) for folderplus in self.folder_list]
+        scanningdeps = [self._scanned_own_task_name(folderplus.folder) + '*' for folderplus in self.folder_list]
+        hashingdeps = [self._hashing_own_wildcard_task_name(folderplus.folder) for folderplus in self.folder_list]
         reconciletask = tasks.OwnTask(self._reconcile_own_task_name(),
                                       lambda _: self._own_reconcile_task_func(parallel, scannedfiles),
                                       None, scanningdeps + hashingdeps)
@@ -370,15 +381,15 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         return True
 
     @staticmethod
-    def _file_path_is_ok(fpath: str, folder_list: FolderList) -> bool:
+    def _file_path_is_ok(fpath: str, folder_list: FolderListToCache) -> bool:
         for folderplus in folder_list:
-            if FolderCache._file_path_is_ok_simple(fpath, folderplus[0], folderplus[1]):
+            if FolderCache._file_path_is_ok_simple(fpath, folderplus.folder, folderplus.exdirs):
                 return True
         return False
 
     @staticmethod
     def scan_dir(started: float, sdout: _FolderScanDirOut, stats: _FolderScanStats, root: str, dirpath: str,
-                 const_filesbypath: dict[str, File], pubfilesbypath: tasks.SharedPubParam,
+                 const_filesbypath: dict[str, FileOnDisk], pubfilesbypath: tasks.SharedPubParam,
                  const_exdirs: list[str], name: str) -> None:  # recursive over dir
         assert is_normalized_dir_path(dirpath)
         # recursive implementation: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
@@ -460,7 +471,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
     ### Own Task Funcs
 
-    def _load_files_own_task_func(self, out: tuple[dict[str, File]], parallel: tasks.Parallel) -> \
+    def _load_files_own_task_func(self, out: tuple[dict[str, FileOnDisk]], parallel: tasks.Parallel) -> \
             tuple[tasks.SharedPubParam]:
         (filesbypath,) = out
         self.files_by_path = {}
@@ -476,13 +487,13 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         pubparam = tasks.make_shared_publication_param(self.pub_files_by_path)
         return (pubparam,)
 
-    def _own_calc_hash_task_func(self, out: tuple[File], scannedfiles: dict[str, File]) -> None:
+    def _own_calc_hash_task_func(self, out: tuple[FileOnDisk], scannedfiles: dict[str, FileOnDisk]) -> None:
         (f,) = out
         scannedfiles[f.file_path] = f
         self.files_by_path[f.file_path] = f
 
     def _own_reconcile_task_func(self, parallel: tasks.Parallel,
-                                 scannedfiles: dict[str, File]) -> None:
+                                 scannedfiles: dict[str, FileOnDisk]) -> None:
         info('FolderCache({}):{} files scanned'.format(self.name, len(scannedfiles)))
         ndel = 0
         for file in self.files_by_path.values():
@@ -494,7 +505,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                     continue
                 info('FolderCache: {} was deleted'.format(fpath))
                 # dbgWait()
-                self.files_by_path[fpath] = File(None, None, fpath, None)
+                self.files_by_path[fpath] = FileOnDisk(None, None, fpath, None)
                 ndel += 1
         info('FolderCache reconcile: {} files were deleted'.format(ndel))
 
@@ -507,7 +518,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             savetask)  # we won't explicitly wait for savetask, it will be waited for in Parallel.__exit__
 
     def _scan_folder_own_task_func(self, out: tuple[list[str], _FolderScanStats, _FolderScanDirOut],
-                                   parallel: tasks.Parallel, scannedfiles: dict[str, File],
+                                   parallel: tasks.Parallel, scannedfiles: dict[str, FileOnDisk],
                                    stats: _FolderScanStats) -> None:
         (exdirs, gotstats, sdout) = out
         stats.add(gotstats)
@@ -553,7 +564,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
         tfoldercache = FolderCache(normalize_dir_path('..\\..\\sanguine.cache\\'),
                                    'downloads',
-                                   [(normalize_dir_path('..\\..\\..\\mo2\\downloads'), [])])
+                                   [FolderToCache(normalize_dir_path('..\\..\\..\\mo2\\downloads'), [])])
         with tasks.Parallel(None) as tparallel:
             tfoldercache.start_tasks(tparallel)
             tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()

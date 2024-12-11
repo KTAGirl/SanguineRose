@@ -1,4 +1,5 @@
 from sanguine.common import *
+from sanguine.modlist import ModList
 
 
 def _normalize_config_dir_path(path: str, configdir: str) -> str:  # relative to config dir
@@ -48,7 +49,7 @@ def folder_size(rootpath: str):
     return total
 
 
-class Folders:
+class ProjectConfig:
     config_dir: str
     mo2_dir: str
     download_dirs: list[str]
@@ -101,30 +102,26 @@ class Folders:
 
         self.own_mod_names = [normalize_file_name(om) for om in jsonconfig.get('ownmods', [])]
 
+        self.master_profile = jsonconfig.get('masterprofile')
+        abort_if_not(self.master_profile is not None and isinstance(self.master_profile, str),
+                     lambda: "'masterprofile' in config must be a string, got " + repr(self.master_profile))
+        abort_if_not(os.path.isdir(self.mo2_dir + 'profiles\\' + self.master_profile))
+
+        self.gen_profiles = jsonconfig.get('genprofiles')
+        abort_if_not(self.gen_profiles is not None and isinstance(self.gen_profiles, list),
+                     lambda: "'genprofiles' in config must be a list, got " + repr(self.gen_profiles))
+        for gp in self.gen_profiles:
+            abort_if_not(os.path.isdir(self.mo2_dir + 'profiles\\' + gp))
+
+        self.master_modlist = ModList(self.mo2_dir + 'profiles\\' + self.master_profile + '\\')
+
+    '''
     def normalize_config_dir_path(self, path: str) -> str:
         return _normalize_config_dir_path(path, self.config_dir)
 
     def normalize_config_file_path(self, path: str) -> str:
         spl = os.path.split(path)
         return _normalize_config_dir_path(spl[0], self.config_dir) + spl[1]
-
-    def all_own_mods(self) -> Generator[str]:
-        for ownmod in self.own_mod_names:
-            yield ownmod
-
-    def all_mo2_own_mod_dirs(self) -> Generator[str]:
-        for ownmod in self.own_mod_names:
-            out = self.mo2_dir + ownmod
-            assert is_normalized_dir_path(out)
-            yield out
-
-    def all_git_own_mod_dirs(self) -> Generator[str]:
-        for ownmod in self.own_mod_names:
-            out = self.github_dir + '\\mo2\\mods' + ownmod
-            assert is_normalized_dir_path(out)
-            yield out
-
-    # TODO?: all_enabled_mod_dirs()
 
     def file_path_to_short_path(self, fpath: str) -> str:
         assert is_normalized_file_path(fpath)
@@ -141,3 +138,11 @@ class Folders:
     def short_dir_path_to_path(self, dirpath: str) -> str:
         assert is_short_dir_path(dirpath)
         return self.mo2_dir + dirpath
+    '''
+
+    def mo2_mods_dir(self) -> str:
+        return self.mo2_dir + 'mods\\'
+
+    def all_enabled_mo2_mod_dirs(self) -> Generator[str]:
+        for mod in self.master_modlist.all_enabled():
+            yield self.mo2_mods_dir() + mod + '\\'

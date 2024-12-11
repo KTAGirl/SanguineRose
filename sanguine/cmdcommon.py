@@ -4,7 +4,7 @@ import json5 #only for user configs! Very slow for any other purpose
 
 from sanguine.common import *
 from sanguine.installfile import installfile_modid_manual_url_and_prompt
-from sanguine.folders import Folders
+from sanguine.projectconfig import ProjectConfig
 from sanguine.modlist import ModList
 import sanguine.cache as cache
 import sanguine.mo2compat as mo2compat
@@ -39,7 +39,7 @@ def _openCache(jsonconfigname,config,mastermodlist,folders,dbgdumpwjdb=None):
         if installfile is not None:
             installfile = installfile.strip('/').strip('\\') #an odd / in the beginning of meta-provided path
             #print(installfile)
-            allarchivenames.append(Folders.normalize_file_name(installfile))
+            allarchivenames.append(ProjectConfig.normalize_file_name(installfile))
     folders.add_archive_names(allarchivenames)
 
     mo2exclude = [folders.mo2_dir + 'downloads\\',  # even if downloadsdirs are different

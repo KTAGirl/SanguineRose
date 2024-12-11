@@ -6,8 +6,8 @@ import sanguine.pluginhandler as pluginhandler
 import sanguine.tasks as tasks
 from sanguine.common import *
 from sanguine.fileorigin import file_origins_for_file, FileOrigin, GitFileOriginsJson
-from sanguine.files import calculate_file_hash, truncate_file_hash
-from sanguine.foldercache import FolderCache
+from sanguine.files import calculate_file_hash, truncate_file_hash, FileRetriever
+from sanguine.foldercache import FolderCache, FolderToCache
 from sanguine.gitdatafile import GitDataParam, GitDataType, GitDataHandler
 from sanguine.pickledcache import pickled_cache
 
@@ -281,26 +281,44 @@ def _save_file_origins_task_func(param: tuple[str, dict[bytes, list[FileOrigin]]
 
 ### FileRetriever
 
-class FileRetriever:  # new dog breed ;-)
-    pass
 
-
-class FileRetrieverFromArchive(FileRetriever):
+class FileRetrieverFromSingleArchive(FileRetriever):
     archive_hash: bytes
-    archive_retrievers: list[FileRetriever]
     file_in_archive: FileInArchive
 
     def __init__(self, archive_hash: bytes, file_in_archive: FileInArchive) -> None:
         self.archive_hash = archive_hash
-        self.archive_retrievers = []
         self.file_in_archive = file_in_archive
 
+    def fetch(self, targetfpath: str) -> None:
+        pass
+        # TODO!
 
-class FileRetrieverFromOrigin(FileRetriever):
-    origin: FileOrigin
+    def fetch_for_reading(self, tmpdirpath: str) -> str:
+        pass
+        # TODO!
 
-    def __init__(self, fo: FileOrigin) -> None:
-        self.origin = fo
+
+class FileRetrieverFromNestedArchives(FileRetriever):
+    single_archive_retrievers: list[FileRetrieverFromSingleArchive]
+
+    def __init__(self, parent: FileRetrieverFromSingleArchive | FileRetrieverFromSingleArchive,
+                 child: FileRetrieverFromSingleArchive) -> None:
+        if isinstance(parent, FileRetrieverFromSingleArchive):
+            assert parent.file_in_archive.file_hash == child.archive_hash
+            self.single_archive_retrievers = [parent, child]
+        else:
+            assert isinstance(parent, FileRetrieverFromNestedArchives)
+            assert parent.single_archive_retrievers[-1].file_in_archive.file_hash == child.archive_hash
+            self.single_archive_retrievers = parent.single_archive_retrievers + [child]
+
+    def fetch(self, targetfpath: str) -> None:
+        pass
+        # TODO!
+
+    def fetch_for_reading(self, tmpdirpath: str) -> str:
+        pass
+        # TODO!
 
 
 ### MasterGitData itself
@@ -452,25 +470,44 @@ class MasterGitData:
                                    (self.master_git_dir, self.file_origins_by_hash), [])
             parallel.add_task(save2task)
 
-    def find_archived_file_by_hash(self, h: bytes) -> list[FileRetriever]:  # not resolving archive_retrievers
-        found = self.archived_files_by_hash.get(truncate_file_hash(h))
-        if not found:
+    def _single_archive_retrievers(self, h: bytes) -> list[FileRetrieverFromSingleArchive]:
+        found = self.archived_files_by_hash.get(h)
+        if found is None:
             return []
         assert len(found) > 0
-        return [FileRetrieverFromArchive(f[0].archive_hash, f[1]) for f in found]
+        return [FileRetrieverFromSingleArchive(ar.archive_hash, fi) for ar, fi in found]
 
-    def find_archived_file_by_name(self, fname: str) -> list[FileRetriever]:  # not resolving archive_retrievers
+    def _add_nested_to_retrievers(self, out: list[FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives],
+                                  singles: list[FileRetrieverFromSingleArchive]) -> None:
+        # resolving nested archives
+        for r in singles:
+            out.append(r)
+            found2 = self.archived_file_retrievers_by_hash(r.archive_hash)
+            for r2 in found2:
+                out.append(FileRetrieverFromNestedArchives(r2, r))
+
+    def archived_file_retrievers_by_hash(self, h: bytes) -> list[
+        FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives]:  # recursive
+        singles = self._single_archive_retrievers(h)
+        if len(singles) == 0:
+            return []
+        assert len(singles) > 0
+
+        out = []
+        self._add_nested_to_retrievers(out, singles)
+        assert len(out) > 0
+        return out
+
+    def archived_file_retrievers_by_name(self, fname: str) -> list[FileRetriever]:  # not resolving archive_retrievers
         found = self.archived_files_by_name.get(fname)
         if not found:
             return []
         assert len(found) > 0
-        return [FileRetrieverFromArchive(f[0].archive_hash, f[1]) for f in found]
-
-    def find_file_origin(self, h: bytes) -> list[FileRetriever]:
-        found = self.file_origins_by_hash.get(h)
-        if not found:
-            return []
-        return [FileRetrieverFromOrigin(o) for o in found]
+        singles = [FileRetrieverFromSingleArchive(ar.archive_hash, fi) for ar, fi in found]
+        out = []
+        self._add_nested_to_retrievers(out, singles)
+        assert len(out) > 0
+        return out
 
 
 ##### AvailableFiles
@@ -494,7 +531,7 @@ class AvailableFiles:
     _READYOWNTASKNAME = 'sanguine.available.readyown'
 
     def __init__(self, by: str, cachedir: str, tmpdir: str, mastergitdir: str, downloads: list[str]) -> None:
-        self.foldercache = FolderCache(cachedir, 'downloads', [(d, []) for d in downloads])
+        self.foldercache = FolderCache(cachedir, 'downloads', [FolderToCache(d, []) for d in downloads])
         self.gitdata = MasterGitData(by, mastergitdir, cachedir, tmpdir, {})
 
     # public interface
@@ -520,14 +557,13 @@ class AvailableFiles:
     def ready_task_name() -> str:
         return AvailableFiles._READYOWNTASKNAME
 
-    def find_archived_file_by_hash(self, h: bytes) -> list[FileRetriever]:
-        return self.gitdata.find_archived_file_by_hash(h)
+    def file_retrievers_by_hash(self, h: bytes) -> list[FileRetriever]:
+        # TODO: add retrievers from ownmods
+        return self.gitdata.archived_file_retrievers_by_hash(h)
 
-    def find_archived_file_by_name(self, fname: str) -> list[FileRetriever]:
-        return self.gitdata.find_archived_file_by_name(fname)
-
-    def find_file_origin(self, h: bytes) -> list[FileRetriever]:  # not resolving archive_retrievers
-        return self.gitdata.find_file_origin(h)
+    def file_retrievers_by_name(self, fname: str) -> list[FileRetriever]:
+        # TODO: add retrievers from ownmods
+        return self.gitdata.archived_file_retrievers_by_name(fname)
 
     # private functions
 

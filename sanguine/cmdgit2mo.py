@@ -4,13 +4,13 @@ from sanguine.common import *
 import sanguine.cache as cache
 from sanguine.cmdcommon import _openCache,_csAndMasterModList
 from sanguine.master import Master
-from sanguine.folders import Folders
+from sanguine.projectconfig import ProjectConfig
 import sanguine.mo2compat as mo2compat
 
 def _git2mo(jsonconfigfname,config):
     compiler_settings_fname,compiler_settings,masterprofilename,mastermodlist = _csAndMasterModList(config)
     ignore=compiler_settings['Ignore']
-    folders = Folders(jsonconfigfname,config,ignore)
+    folders = ProjectConfig(jsonconfigfname, config, ignore)
     with mo2compat.LockMO2(folders.mo2_dir):
         filecache = _openCache(jsonconfigfname,config,mastermodlist,folders)
         print('Cache loaded')

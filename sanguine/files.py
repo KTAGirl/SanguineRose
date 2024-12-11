@@ -1,5 +1,6 @@
 import hashlib
 import stat
+from abc import abstractmethod
 
 from sanguine.common import *
 
@@ -7,7 +8,7 @@ ZEROHASH = hashlib.sha256(b"")
 
 
 def calculate_file_hash(
-        fpath: str) -> tuple[int, bytes]:  # using SHA-256, the fastest crypto-function because of hardware instruction
+        fpath: str) -> tuple[int, bytes]:  # using SHA-256, the fastest crypto-hash because of hardware instruction
     st = os.lstat(fpath)
     assert stat.S_ISREG(st.st_mode) and not stat.S_ISLNK(st.st_mode)
     h = hashlib.sha256()
@@ -51,7 +52,7 @@ def from_json_hash(s: str) -> bytes:
     return b
 
 
-class File:
+class FileOnDisk:
     file_hash: bytes | None
     file_path: str
     file_modified: float
@@ -64,3 +65,19 @@ class File:
         self.file_modified = file_modified
         self.file_path = file_path
         self.file_size = file_size
+
+
+class FileRetriever:  # new dog breed ;-)
+    # Provides a base class for retrieving files from already-available data
+    @abstractmethod
+    def fetch(self, targetfpath: str):
+        pass
+
+    @abstractmethod
+    def fetch_for_reading(self,
+                          tmpdirpath: str) -> str:  # returns file path to work with; can be an existing file, or temporary within tmpdirpath
+        pass
+
+
+class FileDownloader:  # Provides a base class for downloading files
+    pass
