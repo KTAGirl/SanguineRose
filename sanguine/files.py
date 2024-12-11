@@ -96,7 +96,7 @@ class ZeroFileRetriever(FileRetriever):
         return tfname
 
 
-def make_zero_retriever_if(self, fi: FileOnDisk) -> ZeroFileRetriever | None:
+def make_zero_retriever_if(fi: FileOnDisk) -> ZeroFileRetriever | None:
     if fi.file_hash == _ZEROHASH or fi.file_size == 0:
         assert fi.file_hash == _ZEROHASH and fi.file_size == 0
         return ZeroFileRetriever()
