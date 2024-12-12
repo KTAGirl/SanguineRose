@@ -35,7 +35,7 @@ class GitFileOriginsWriteHandler(GitDataHandler):
         pass
 
 
-class GitFileOriginsHandler(GitDataHandler):
+class GitFileOriginsReadHandler(GitDataHandler):
     file_origins: dict[bytes, list[FileOrigin]]
     COMMON_FIELDS: list[GitDataParam] = [
         GitDataParam('n', GitDataType.Str, False),
@@ -78,7 +78,7 @@ class FileOriginPluginBase:
         pass
 
     @abstractmethod
-    def read_handler(self, file_origins: dict[bytes, list[FileOrigin]]) -> GitFileOriginsHandler:
+    def read_handler(self, file_origins: dict[bytes, list[FileOrigin]]) -> GitFileOriginsReadHandler:
         pass
 
 
@@ -131,7 +131,7 @@ class GitFileOriginsJson:
             wfile.write(
                 '                //         ' + wh.legend() + '\n')
 
-        da = gitdatafile.GitDataList(GitFileOriginsHandler.COMMON_FIELDS, handlers)
+        da = gitdatafile.GitDataList(GitFileOriginsReadHandler.COMMON_FIELDS, handlers)
         writer = gitdatafile.GitDataListWriter(da, wfile)
         writer.write_begin()
         for fox in folist:
@@ -160,7 +160,7 @@ class GitFileOriginsJson:
         assert re.search(r'^\s*file_origins\s*:\s*//', ln)
 
         handlers = [plugin.read_handler(file_origins) for plugin in _file_origin_plugins]
-        da = gitdatafile.GitDataList(GitFileOriginsHandler.COMMON_FIELDS, handlers)
+        da = gitdatafile.GitDataList(GitFileOriginsReadHandler.COMMON_FIELDS, handlers)
         lineno = gitdatafile.read_git_file_list(da, rfile, lineno)
 
         # skipping footer

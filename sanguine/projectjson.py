@@ -21,7 +21,7 @@ class GitRetrievedFileWriteHandler(GitDataHandler):
         pass
 
 
-class GitRetrievedFileHandler(GitDataHandler):
+class GitRetrievedFileReadHandler(GitDataHandler):
     retrieved_files: list[FileRetriever]
     COMMON_FIELDS: list[GitDataParam] = [
         GitDataParam('h', GitDataType.Hash, False),
@@ -36,11 +36,11 @@ class GitRetrievedFileHandler(GitDataHandler):
 
 ### specifications for Handlers (all Retrievers are known here, no need to deal with plugins)
 
-class GitRetrievedZeroFileHandler(GitRetrievedFileHandler):
+class GitRetrievedZeroFileReadHandler(GitRetrievedFileReadHandler):
     SPECIFIC_FIELDS: list[GitDataParam] = []
 
     def __init__(self, files: list[FileRetriever]) -> None:
-        super().__init__(GitRetrievedZeroFileHandler.SPECIFIC_FIELDS, files)
+        super().__init__(GitRetrievedZeroFileReadHandler.SPECIFIC_FIELDS, files)
 
     def decompress(self, param: tuple[str | int, ...]) -> None:
         (h, p, s) = param
@@ -81,7 +81,7 @@ class GitProjectJson:
                 wfile.write(
                     '         //         ' + legend + '\n')
 
-        da = gitdatafile.GitDataList(GitRetrievedFileHandler.COMMON_FIELDS, _write_handlers)
+        da = gitdatafile.GitDataList(GitRetrievedFileReadHandler.COMMON_FIELDS, _write_handlers)
         writer = gitdatafile.GitDataListWriter(da, wfile)
         writer.write_begin()
         for r in rsorted:
@@ -107,8 +107,8 @@ class GitProjectJson:
         # reading file_origins:  ...
         assert re.search(r'^\s*files\s*:\s*//', ln)
 
-        handlers: list[GitRetrievedFileHandler] = [GitRetrievedZeroFileHandler(retrievers)]
-        da = gitdatafile.GitDataList(GitRetrievedFileHandler.COMMON_FIELDS, handlers)
+        handlers: list[GitRetrievedFileReadHandler] = [GitRetrievedZeroFileReadHandler(retrievers)]
+        da = gitdatafile.GitDataList(GitRetrievedFileReadHandler.COMMON_FIELDS, handlers)
         lineno = gitdatafile.read_git_file_list(da, rfile, lineno)
 
         # skipping footer

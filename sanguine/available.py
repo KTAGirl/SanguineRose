@@ -15,7 +15,7 @@ from sanguine.pickledcache import pickled_cache
 
 ### GitArchivesJson
 
-class GitArchivesHandler(GitDataHandler):
+class GitArchivesReadHandler(GitDataHandler):
     archives: list[Archive]
 
     def __init__(self, archives: list[Archive]) -> None:
@@ -85,7 +85,7 @@ class GitArchivesJson:
         # info(ln)
         assert re.search(r'^\s*archives\s*:\s*//', ln)
 
-        da = gitdatafile.GitDataList(self._COMMON_FIELDS, [GitArchivesHandler(archives)])
+        da = gitdatafile.GitDataList(self._COMMON_FIELDS, [GitArchivesReadHandler(archives)])
         lineno = gitdatafile.read_git_file_list(da, rfile, lineno)
 
         # skipping footer

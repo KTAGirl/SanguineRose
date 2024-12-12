@@ -3,7 +3,7 @@ import re
 import sanguine.fileorigin as fileorigin
 import sanguine.gitdatafile as gitdatafile
 from sanguine.common import *
-from sanguine.fileorigin import MetaFileParser, GitFileOriginsHandler
+from sanguine.fileorigin import MetaFileParser, GitFileOriginsReadHandler
 from sanguine.gitdatafile import GitDataParam, GitDataType
 
 
@@ -34,7 +34,7 @@ class NexusFileOrigin(fileorigin.FileOrigin):
 
 ### Handler
 
-class GitNexusFileOriginsHandler(fileorigin.GitFileOriginsHandler):
+class GitNexusFileOriginsReadHandler(fileorigin.GitFileOriginsReadHandler):
     SPECIFIC_FIELDS: list[GitDataParam] = [
         GitDataParam('f', GitDataType.Int, False),
         GitDataParam('m', GitDataType.Int),
@@ -42,7 +42,7 @@ class GitNexusFileOriginsHandler(fileorigin.GitFileOriginsHandler):
     ]
 
     def __init__(self, file_origins: dict[bytes, list[fileorigin.FileOrigin]]) -> None:
-        super().__init__(GitNexusFileOriginsHandler.SPECIFIC_FIELDS, file_origins)
+        super().__init__(GitNexusFileOriginsReadHandler.SPECIFIC_FIELDS, file_origins)
 
     def decompress(self, param: tuple[str, bytes, int, int, int]) -> None:
         (n, h, f, m, g) = param
@@ -56,7 +56,7 @@ class GitNexusFileOriginsHandler(fileorigin.GitFileOriginsHandler):
 
 class GitNexusFileOriginsWriteHandler(fileorigin.GitFileOriginsWriteHandler):
     def __init__(self) -> None:
-        super().__init__(GitNexusFileOriginsHandler.SPECIFIC_FIELDS)
+        super().__init__(GitNexusFileOriginsReadHandler.SPECIFIC_FIELDS)
 
     def is_my_fo(self, fo: fileorigin.FileOrigin) -> bool:
         return isinstance(fo, NexusFileOrigin)
@@ -159,5 +159,5 @@ class NexusFileOriginPlugin(fileorigin.FileOriginPluginBase):
     def meta_file_parser(self, metafilepath: str) -> MetaFileParser:
         return NexusMetaFileParser(metafilepath)
 
-    def read_handler(self, file_origins: dict[bytes, list[fileorigin.FileOrigin]]) -> GitFileOriginsHandler:
-        return GitNexusFileOriginsHandler(file_origins)
+    def read_handler(self, file_origins: dict[bytes, list[fileorigin.FileOrigin]]) -> GitFileOriginsReadHandler:
+        return GitNexusFileOriginsReadHandler(file_origins)
