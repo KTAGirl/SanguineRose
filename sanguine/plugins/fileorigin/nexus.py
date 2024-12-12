@@ -44,7 +44,7 @@ class GitNexusFileOriginsHandler(fileorigin.GitFileOriginsHandler):
     def __init__(self, file_origins: dict[bytes, list[fileorigin.FileOrigin]]) -> None:
         super().__init__(GitNexusFileOriginsHandler.SPECIFIC_FIELDS, file_origins)
 
-    def decompress(self, param: tuple[bytes, str, int, int, int]) -> None:
+    def decompress(self, param: tuple[str, bytes, int, int, int]) -> None:
         (n, h, f, m, g) = param
 
         fo = NexusFileOrigin(n, g, m, f)
