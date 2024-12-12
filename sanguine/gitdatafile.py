@@ -440,6 +440,8 @@ class GitDataHandler(ABC):
         assert False
 
 
+# TODO: write_with_parent( common_params, special_params) - OPTIONAL (projectjson.ZeroHandler will still use old write(...) to skip h)
+
 class GitDataList:
     common_fields: list[GitDataParam]  # fields which are common for all handlers
     handlers: list[GitDataHandler]
@@ -454,7 +456,8 @@ class GitDataList:
                     assert not h.specific_fields[0].can_skip  # otherwise regex parsing may become ambiguous
 
                 # handlers must distinguish by their first param (to avoid regex ambiguity)
-                first_param_names = [h.specific_fields[0].name for h in handlers]
+                first_param_names = [(h.specific_fields[0].name if len(h.specific_fields) > 0 else '') for h in
+                                     handlers]
                 assert len(first_param_names) == len(set(first_param_names))
 
             # there must be no duplicate names for any handler, including common_fields fields (to be JSON5-compliant)

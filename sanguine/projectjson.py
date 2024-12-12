@@ -3,7 +3,7 @@ from abc import abstractmethod
 
 import sanguine.gitdatafile as gitdatafile
 from sanguine.common import *
-from sanguine.files import FileRetriever, ZeroFileRetriever, _ZEROHASH
+from sanguine.files import FileRetriever, ZeroFileRetriever
 from sanguine.gitdatafile import GitDataParam, GitDataType, GitDataHandler
 
 
@@ -24,9 +24,9 @@ class GitRetrievedFileWriteHandler(GitDataHandler):
 class GitRetrievedFileReadHandler(GitDataHandler):
     retrieved_files: list[FileRetriever]
     COMMON_FIELDS: list[GitDataParam] = [
-        GitDataParam('h', GitDataType.Hash, False),
-        GitDataParam('p', GitDataType.Path),
-        GitDataParam('s', GitDataType.Int)
+        GitDataParam('p', GitDataType.Path, False, compress_level=0),  # no path compression for readability
+        GitDataParam('s', GitDataType.Int),
+        GitDataParam('h', GitDataType.Hash)
     ]
 
     def __init__(self, specific_fields: list[GitDataParam], files: list[FileRetriever]) -> None:
@@ -43,8 +43,8 @@ class GitRetrievedZeroFileReadHandler(GitRetrievedFileReadHandler):
         super().__init__(GitRetrievedZeroFileReadHandler.SPECIFIC_FIELDS, files)
 
     def decompress(self, param: tuple[str | int, ...]) -> None:
-        (h, p, s) = param
-        assert h == _ZEROHASH and s == 0
+        (p, s, h) = param
+        assert h is None and s == 0
         self.retrieved_files.append(ZeroFileRetriever(p))
 
 
@@ -56,7 +56,7 @@ class GitRetrievedZeroFileWriteHandler(GitRetrievedFileWriteHandler):
         return isinstance(fr, ZeroFileRetriever)
 
     def write_line(self, writer: gitdatafile.GitDataListWriter, fr: FileRetriever) -> None:
-        writer.write_line(self, (_ZEROHASH, fr.rel_path, 0))
+        writer.write_line(self, (fr.rel_path, 0, None))
 
 
 _write_handlers: list[GitRetrievedFileWriteHandler] = [GitRetrievedZeroFileWriteHandler()]
@@ -72,7 +72,7 @@ class GitProjectJson:
         rsorted: list[FileRetriever] = sorted(retrievers, key=lambda rs: rs.relative_path())
         gitdatafile.write_git_file_header(wfile)
         wfile.write(
-            '  files: // Legend: h=hash, p=path (relative to MO2), s=size\n')
+            '  files: // Legend: p=path (relative to MO2), s=size, h=hash\n')
 
         global _write_handlers
         for wh in _write_handlers:
