@@ -42,6 +42,11 @@ class GitRetrievedZeroFileHandler(GitRetrievedFileHandler):
     def __init__(self, files: list[FileRetriever]) -> None:
         super().__init__(GitRetrievedZeroFileHandler.SPECIFIC_FIELDS, files)
 
+    def decompress(self, param: tuple[str | int, ...]) -> None:
+        (h, p, s) = param
+        assert h == _ZEROHASH and s == 0
+        self.retrieved_files.append(ZeroFileRetriever(p))
+
 
 class GitRetrievedZeroFileWriteHandler(GitRetrievedFileWriteHandler):
     def legend(self) -> str:
@@ -51,7 +56,7 @@ class GitRetrievedZeroFileWriteHandler(GitRetrievedFileWriteHandler):
         return isinstance(fr, ZeroFileRetriever)
 
     def write_line(self, writer: gitdatafile.GitDataListWriter, fr: FileRetriever) -> None:
-        writer.write_line(self, (_ZEROHASH, fr.relative_path(), 0))
+        writer.write_line(self, (_ZEROHASH, fr.rel_path, 0))
 
 
 _write_handlers: list[GitRetrievedFileWriteHandler] = [GitRetrievedZeroFileWriteHandler()]

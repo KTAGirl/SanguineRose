@@ -435,7 +435,7 @@ class GitDataHandler(ABC):
     def __init__(self, specific_fields: list[GitDataParam] = None) -> None:
         self.specific_fields = specific_fields if specific_fields is not None else []
 
-    def decompress(self, param: tuple[str | int, ...]) -> None:  # we want to instantiate GitDataHandler,
+    def decompress(self, param: tuple[str | int | bytes, ...]) -> None:  # we want to instantiate GitDataHandler,
         # but for such instantiations we don't need decompress()
         assert False
 

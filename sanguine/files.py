@@ -70,18 +70,11 @@ class FileOnDisk:
 
 class FileRetriever:  # new dog breed ;-)
     # Provides a base class for retrieving files from already-available data
-    target_path: str  # must start with prefix
     rel_path: str
 
-    def __init__(self, targetpath: str, prefix: str) -> None:
-        assert is_normalized_dir_path(targetpath)
-        assert is_normalized_file_path(prefix)
-        assert targetpath.startswith(prefix)
-        self.target_path = targetpath
-        self.rel_path = targetpath[len(prefix):]
-
-    def relative_path(self) -> str:
-        return self.rel_path
+    def __init__(self, rel_path: str) -> None:
+        assert is_short_file_path(rel_path)
+        self.rel_path = rel_path
 
     @abstractmethod
     def fetch(self, targetfpath: str):
@@ -94,9 +87,6 @@ class FileRetriever:  # new dog breed ;-)
 
 
 class ZeroFileRetriever(FileRetriever):
-    def __init__(self) -> None:
-        pass
-
     @abstractmethod
     def fetch(self, targetfpath: str):
         open(targetfpath, 'wb').close()
@@ -109,10 +99,11 @@ class ZeroFileRetriever(FileRetriever):
         return tfname
 
 
-def make_zero_retriever_if(fi: FileOnDisk) -> ZeroFileRetriever | None:
+def make_zero_retriever_if(mo2dir:str, fi: FileOnDisk) -> ZeroFileRetriever | None:
+    assert is_normalized_dir_path(mo2dir)
     if fi.file_hash == _ZEROHASH or fi.file_size == 0:
         assert fi.file_hash == _ZEROHASH and fi.file_size == 0
-        return ZeroFileRetriever()
+        return ZeroFileRetriever(to_short_path(mo2dir,fi.file_path))
     else:
         return None
 
@@ -121,6 +112,7 @@ class PlainFileRetriever(FileRetriever):  # only partially specialized, needs fu
     fpath: str
 
     def __init__(self, fpath: str) -> None:
+        super().__init__(fpath)
         self.fpath = fpath
 
     def fetch(self, targetfpath: str):
