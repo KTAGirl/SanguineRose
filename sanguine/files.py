@@ -70,6 +70,19 @@ class FileOnDisk:
 
 class FileRetriever:  # new dog breed ;-)
     # Provides a base class for retrieving files from already-available data
+    target_path: str  # must start with prefix
+    rel_path: str
+
+    def __init__(self, targetpath: str, prefix: str) -> None:
+        assert is_normalized_dir_path(targetpath)
+        assert is_normalized_file_path(prefix)
+        assert targetpath.startswith(prefix)
+        self.target_path = targetpath
+        self.rel_path = targetpath[len(prefix):]
+
+    def relative_path(self) -> str:
+        return self.rel_path
+
     @abstractmethod
     def fetch(self, targetfpath: str):
         pass
@@ -104,7 +117,7 @@ def make_zero_retriever_if(fi: FileOnDisk) -> ZeroFileRetriever | None:
         return None
 
 
-class PlainFileRetriever(FileRetriever):
+class PlainFileRetriever(FileRetriever):  # only partially specialized, needs further specialization to be usable
     fpath: str
 
     def __init__(self, fpath: str) -> None:
