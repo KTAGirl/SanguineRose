@@ -1,4 +1,7 @@
-from files import FileRetriever
+from abc import abstractmethod
+
+import sanguine.pluginhandler as pluginhandler
+from sanguine.common import *
 
 
 class FileInArchive:
@@ -26,43 +29,45 @@ class Archive:
         self.by = by
 
 
-### FileRetriever
-
-
-class FileRetrieverFromSingleArchive(FileRetriever):
-    archive_hash: bytes
-    file_in_archive: FileInArchive
-
-    def __init__(self, archive_hash: bytes, file_in_archive: FileInArchive) -> None:
-        self.archive_hash = archive_hash
-        self.file_in_archive = file_in_archive
-
-    def fetch(self, targetfpath: str) -> None:
+class ArchivePluginBase:
+    def __init__(self) -> None:
         pass
-        # TODO!
 
-    def fetch_for_reading(self, tmpdirpath: str) -> str:
+    @abstractmethod
+    def extensions(self) -> list[str]:
         pass
-        # TODO!
 
-
-class FileRetrieverFromNestedArchives(FileRetriever):
-    single_archive_retrievers: list[FileRetrieverFromSingleArchive]
-
-    def __init__(self, parent: FileRetrieverFromSingleArchive | FileRetrieverFromSingleArchive,
-                 child: FileRetrieverFromSingleArchive) -> None:
-        if isinstance(parent, FileRetrieverFromSingleArchive):
-            assert parent.file_in_archive.file_hash == child.archive_hash
-            self.single_archive_retrievers = [parent, child]
-        else:
-            assert isinstance(parent, FileRetrieverFromNestedArchives)
-            assert parent.single_archive_retrievers[-1].file_in_archive.file_hash == child.archive_hash
-            self.single_archive_retrievers = parent.single_archive_retrievers + [child]
-
-    def fetch(self, targetfpath: str) -> None:
+    @abstractmethod
+    def extract(self, archive: str, list_of_files: list[str], targetpath: str) -> None:
         pass
-        # TODO!
 
-    def fetch_for_reading(self, tmpdirpath: str) -> str:
+    @abstractmethod
+    def extract_all(self, archive: str, targetpath: str) -> None:
         pass
-        # TODO!
+
+
+_archive_plugins: dict[str, ArchivePluginBase] = {}  # file_extension -> ArchivePluginBase
+_archive_exts: list[str] = []
+
+
+def _found_archive_plugin(plugin: ArchivePluginBase):
+    global _archive_plugins
+    global _archive_exts
+    for ext in plugin.extensions():
+        _archive_plugins[ext] = plugin
+        assert ext not in _archive_exts
+        _archive_exts.append(ext)
+
+
+pluginhandler.load_plugins('plugins/archive/', ArchivePluginBase, lambda plugin: _found_archive_plugin(plugin))
+
+
+def archive_plugin_for(path: str) -> ArchivePluginBase:
+    global _archive_plugins
+    ext = os.path.splitext(path)[1].lower()
+    return _archive_plugins.get(ext)
+
+
+def all_archive_plugins_extensions() -> list[str]:
+    global _archive_exts
+    return _archive_exts

@@ -1,44 +1,152 @@
+import hashlib
 import os.path
 import re
+import tempfile
 from abc import abstractmethod
 
+import sanguine.archives
 import sanguine.gitdatafile as gitdatafile
-import sanguine.pluginhandler as pluginhandler
 import sanguine.tasks as tasks
-from sanguine.archives import Archive, FileInArchive, FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives
+from sanguine.archives import Archive, FileInArchive
 from sanguine.common import *
 from sanguine.fileorigin import file_origins_for_file, FileOrigin, GitFileOriginsJson
-from sanguine.foldercache import FolderCache, FolderToCache, calculate_file_hash, truncate_file_hash
+from sanguine.foldercache import FileOnDisk, FolderCache, FolderToCache, calculate_file_hash, truncate_file_hash
 from sanguine.gitdatafile import GitDataParam, GitDataType, GitDataHandler
 from sanguine.pickledcache import pickled_cache
 
 
-### only base FileRetriever here, all the derived classes belong to projectjson.py
+##### FileRetrievers
+
 
 class FileRetriever:  # new dog breed ;-)
     # Provides a base class for retrieving files from already-available data
-    rel_path: str
+    available: "AvailableFiles"
     file_hash: bytes
     file_size: int
+    type _BaseInit = Callable[[FileRetriever], None] | tuple[bytes, int]
 
-    def __init__(self, rel_path: str, filehash: bytes, filesize: int) -> None:
-        assert is_short_file_path(rel_path)
-        self.rel_path = rel_path
+    def __init__(self, available: "AvailableFiles", filehash: bytes, filesize: int) -> None:
+        self.available = available
         self.file_hash = filehash
         self.file_size = filesize
 
-    def _target_fpath(self, mo2dir: str) -> str:
-        assert is_normalized_dir_path(mo2dir)
-        return mo2dir + self.rel_path
+    @staticmethod
+    def _init_from_child(parent, available: "AvailableFiles", baseinit: _BaseInit) -> None:
+        assert type(parent) is FileRetriever
+        if isinstance(baseinit, tuple):
+            (h, s) = baseinit
+            parent.__init__(available, h, s)
+        else:
+            baseinit(parent)  # calls super().__init__(...) within
 
     @abstractmethod
-    def fetch(self, mo2dir: str):
+    def fetch(self, targetfpath: str):
         pass
 
     @abstractmethod
     def fetch_for_reading(self,
                           tmpdirpath: str) -> str:  # returns file path to work with; can be an existing file, or temporary within tmpdirpath
         pass
+
+
+class ZeroFileRetriever(FileRetriever):
+    ZEROHASH = hashlib.sha256(b"").digest()
+
+    # noinspection PyMissingConstructor
+    #              _init_from_child() calls super().__init__()
+    def __init__(self, available: "AvailableFiles", baseinit: FileRetriever._BaseInit) -> None:
+        if isinstance(baseinit, tuple):  # we can't use _init_from_child() here
+            (h, s) = baseinit
+            assert h == self.ZEROHASH
+            assert s == 0
+        FileRetriever._init_from_child(self, available, baseinit)
+
+    def fetch(self, targetfpath: str):
+        assert is_normalized_file_path(targetfpath)
+        open(targetfpath, 'wb').close()
+
+    def fetch_for_reading(self, tmpdirpath: str) -> str:
+        wf, tfname = tempfile.mkstemp(dir=tmpdirpath)
+        os.close(wf)  # yep, it is exactly enough to create temp zero file
+        return tfname
+
+    @staticmethod
+    def make_retriever_if(available: "AvailableFiles", fi: FileOnDisk) -> "ZeroFileRetriever|None":
+        if fi.file_hash == ZeroFileRetriever.ZEROHASH or fi.file_size == 0:
+            assert fi.file_hash == ZeroFileRetriever.ZEROHASH and fi.file_size == 0
+            return ZeroFileRetriever(available, (ZeroFileRetriever.ZEROHASH, 0))
+        else:
+            return None
+
+
+class GithubFileRetriever(FileRetriever):  # only partially specialized, needs further specialization to be usable
+    from_project: str  # '' means 'this project'
+    from_path: str
+
+    # noinspection PyMissingConstructor
+    #              _init_from_child() calls super().__init__()
+    def __init__(self, available: "AvailableFiles", baseinit: FileRetriever._BaseInit,
+                 fromproject: str, frompath: str) -> None:
+        FileRetriever._init_from_child(super(), available, baseinit)
+        self.from_project = fromproject
+        self.from_path = frompath
+
+    def _full_path(self) -> str:
+        pass  # TODO!
+
+    def fetch(self, targetfpath: str):
+        assert is_normalized_file_path(targetfpath)
+        shutil.copyfile(self._full_path(), targetfpath)
+
+    def fetch_for_reading(self, tmpdirpath: str) -> str:
+        return self._full_path()
+
+
+class FileRetrieverFromSingleArchive(FileRetriever):
+    archive_hash: bytes
+    file_in_archive: FileInArchive
+
+    # noinspection PyMissingConstructor
+    #              _init_from_child() calls super().__init__()
+    def __init__(self, available: "AvailableFiles", baseinit: FileRetriever._BaseInit,
+                 archive_hash: bytes, file_in_archive: FileInArchive) -> None:
+        FileRetriever._init_from_child(super(), available, baseinit)
+        self.archive_hash = archive_hash
+        self.file_in_archive = file_in_archive
+
+    def fetch(self, targetfpath: str) -> None:
+        pass
+        # TODO!
+
+    def fetch_for_reading(self, tmpdirpath: str) -> str:
+        pass
+        # TODO!
+
+
+class FileRetrieverFromNestedArchives(FileRetriever):
+    single_archive_retrievers: list[FileRetrieverFromSingleArchive]
+
+    # noinspection PyMissingConstructor
+    #              _init_from_child() calls super().__init__()
+    def __init__(self, available: "AvailableFiles", baseinit: FileRetriever._BaseInit,
+                 parent: FileRetrieverFromSingleArchive | FileRetrieverFromSingleArchive,
+                 child: FileRetrieverFromSingleArchive) -> None:
+        FileRetriever._init_from_child(super(), available, baseinit)
+        if isinstance(parent, FileRetrieverFromSingleArchive):
+            assert parent.file_in_archive.file_hash == child.archive_hash
+            self.single_archive_retrievers = [parent, child]
+        else:
+            assert isinstance(parent, FileRetrieverFromNestedArchives)
+            assert parent.single_archive_retrievers[-1].file_in_archive.file_hash == child.archive_hash
+            self.single_archive_retrievers = parent.single_archive_retrievers + [child]
+
+    def fetch(self, targetfpath: str) -> None:
+        pass
+        # TODO!
+
+    def fetch_for_reading(self, tmpdirpath: str) -> str:
+        pass
+        # TODO!
 
 
 ### GitArchivesJson
@@ -163,11 +271,11 @@ def _write_git_archives(mastergitdir: str, archives: list[Archive]) -> None:
 
 
 def _hash_archive(archives: list[Archive], by: str, tmppath: str,  # recursive!
-                  plugin: pluginhandler.ArchivePluginBase,
+                  plugin: sanguine.archives.ArchivePluginBase,
                   archivepath: str, arhash: bytes, arsize: int) -> None:
     assert os.path.isdir(tmppath)
     plugin.extract_all(archivepath, tmppath)
-    pluginexts = pluginhandler.all_archive_plugins_extensions()  # for nested archives
+    pluginexts = sanguine.archives.all_archive_plugins_extensions()  # for nested archives
     ar = Archive(arhash, arsize, by)
     archives.append(ar)
     for root, dirs, files in os.walk(tmppath):
@@ -182,7 +290,7 @@ def _hash_archive(archives: list[Archive], by: str, tmppath: str,  # recursive!
 
             ext = os.path.split(fpath)[1].lower()
             if ext in pluginexts:
-                nested_plugin = pluginhandler.archive_plugin_for(fpath)
+                nested_plugin = sanguine.archives.archive_plugin_for(fpath)
                 assert nested_plugin is not None
                 newtmppath = TmpPath.tmp_in_tmp(tmppath,
                                                 'T3lIzNDx.',  # tmp is not from root,
@@ -228,7 +336,7 @@ def _archive_hashing_task_func(param: tuple[str, str, bytes, int, str]) -> tuple
     (by, arpath, arhash, arsize, tmppath) = param
     assert not os.path.isdir(tmppath)
     os.makedirs(tmppath)
-    plugin = pluginhandler.archive_plugin_for(arpath)
+    plugin = sanguine.archives.archive_plugin_for(arpath)
     assert plugin is not None
     archives = []
     _hash_archive(archives, by, tmppath, plugin, arpath, arhash, arsize)
@@ -433,45 +541,6 @@ class MasterGitData:
                                    (self.master_git_dir, self.file_origins_by_hash), [])
             parallel.add_task(save2task)
 
-    def _single_archive_retrievers(self, h: bytes) -> list[FileRetrieverFromSingleArchive]:
-        found = self.archived_files_by_hash.get(h)
-        if found is None:
-            return []
-        assert len(found) > 0
-        return [FileRetrieverFromSingleArchive(ar.archive_hash, fi) for ar, fi in found]
-
-    def _add_nested_to_retrievers(self, out: list[FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives],
-                                  singles: list[FileRetrieverFromSingleArchive]) -> None:
-        # resolving nested archives
-        for r in singles:
-            out.append(r)
-            found2 = self.archived_file_retrievers_by_hash(r.archive_hash)
-            for r2 in found2:
-                out.append(FileRetrieverFromNestedArchives(r2, r))
-
-    def archived_file_retrievers_by_hash(self, h: bytes) -> list[
-        FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives]:  # recursive
-        singles = self._single_archive_retrievers(h)
-        if len(singles) == 0:
-            return []
-        assert len(singles) > 0
-
-        out = []
-        self._add_nested_to_retrievers(out, singles)
-        assert len(out) > 0
-        return out
-
-    def archived_file_retrievers_by_name(self, fname: str) -> list[FileRetriever]:  # not resolving archive_retrievers
-        found = self.archived_files_by_name.get(fname)
-        if not found:
-            return []
-        assert len(found) > 0
-        singles = [FileRetrieverFromSingleArchive(ar.archive_hash, fi) for ar, fi in found]
-        out = []
-        self._add_nested_to_retrievers(out, singles)
-        assert len(out) > 0
-        return out
-
 
 ##### AvailableFiles
 
@@ -520,13 +589,54 @@ class AvailableFiles:
     def ready_task_name() -> str:
         return AvailableFiles._READYOWNTASKNAME
 
-    def file_retrievers_by_hash(self, h: bytes) -> list[FileRetriever]:
-        # TODO: add retrievers from ownmods
-        return self.gitdata.archived_file_retrievers_by_hash(h)
+    def _single_archive_retrievers(self, h: bytes) -> list[FileRetrieverFromSingleArchive]:
+        found = self.gitdata.archived_files_by_hash.get(h)
+        if found is None:
+            return []
+        assert len(found) > 0
+        return [FileRetrieverFromSingleArchive(self, (h, fi.file_size), ar.archive_hash, fi) for ar, fi in found]
 
-    def file_retrievers_by_name(self, fname: str) -> list[FileRetriever]:
+    def _add_nested_to_retrievers(self, out: list[FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives],
+                                  singles: list[FileRetrieverFromSingleArchive]) -> None:
+        # resolving nested archives
+        for r in singles:
+            out.append(r)
+            found2 = self._archived_file_retrievers_by_hash(r.archive_hash)
+            for r2 in found2:
+                out.append(FileRetrieverFromNestedArchives(self, (r2.file_hash, r2.file_size), r2, r))
+
+    def _archived_file_retrievers_by_hash(self, h: bytes) -> list[
+        FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives]:  # recursive
+        singles = self._single_archive_retrievers(h)
+        if len(singles) == 0:
+            return []
+        assert len(singles) > 0
+
+        out = []
+        self._add_nested_to_retrievers(out, singles)
+        assert len(out) > 0
+        return out
+
+    def _archived_file_retrievers_by_name(self, fname: str) -> list[
+        "FileRetriever"]:  # not resolving archive_retrievers
+        found = self.gitdata.archived_files_by_name.get(fname)
+        if not found:
+            return []
+        assert len(found) > 0
+        singles = [FileRetrieverFromSingleArchive(self, (fi.file_hash, fi.file_size), ar.archive_hash, fi) for ar, fi in
+                   found]
+        out = []
+        self._add_nested_to_retrievers(out, singles)
+        assert len(out) > 0
+        return out
+
+    def file_retrievers_by_hash(self, h: bytes) -> list["FileRetriever"]:
         # TODO: add retrievers from ownmods
-        return self.gitdata.archived_file_retrievers_by_name(fname)
+        return self._archived_file_retrievers_by_hash(h)
+
+    def file_retrievers_by_name(self, fname: str) -> list["FileRetriever"]:
+        # TODO: add retrievers from ownmods
+        return self._archived_file_retrievers_by_name(fname)
 
     # private functions
 
@@ -537,7 +647,7 @@ class AvailableFiles:
                 continue
 
             if not ar.file_hash in self.gitdata.archives_by_hash:
-                if ext in pluginhandler.all_archive_plugins_extensions():
+                if ext in sanguine.archives.all_archive_plugins_extensions():
                     self.gitdata.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
                 else:
                     warn('Available: file with unknown extension {}, ignored'.format(ar.file_path))
