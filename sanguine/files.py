@@ -5,7 +5,7 @@ from abc import abstractmethod
 
 from sanguine.common import *
 
-_ZEROHASH = hashlib.sha256(b"")
+_ZEROHASH = hashlib.sha256(b"").digest()
 
 
 def calculate_file_hash(
@@ -71,13 +71,21 @@ class FileOnDisk:
 class FileRetriever:  # new dog breed ;-)
     # Provides a base class for retrieving files from already-available data
     rel_path: str
+    file_hash: bytes
+    file_size: int
 
-    def __init__(self, rel_path: str) -> None:
+    def __init__(self, rel_path: str, filehash: bytes, filesize: int) -> None:
         assert is_short_file_path(rel_path)
         self.rel_path = rel_path
+        self.file_hash = filehash
+        self.file_size = filesize
+
+    def _target_fpath(self, mo2dir: str) -> str:
+        assert is_normalized_dir_path(mo2dir)
+        return mo2dir + self.rel_path
 
     @abstractmethod
-    def fetch(self, targetfpath: str):
+    def fetch(self, mo2dir: str):
         pass
 
     @abstractmethod
@@ -87,41 +95,56 @@ class FileRetriever:  # new dog breed ;-)
 
 
 class ZeroFileRetriever(FileRetriever):
-    @abstractmethod
-    def fetch(self, targetfpath: str):
-        open(targetfpath, 'wb').close()
+    def __init__(self, baseinit: Callable[[FileRetriever], None] | str) -> None:
+        if isinstance(baseinit, str):
+            super().__init__(baseinit, _ZEROHASH, 0)
+        else:
+            baseinit(super())  # calls super().__init__(...) within
 
     @abstractmethod
-    def fetch_for_reading(self,
-                          tmpdirpath: str) -> str:  # returns file path to work with; can be an existing file, or temporary within tmpdirpath
+    def fetch(self, mo2dir: str):
+        assert is_normalized_dir_path(mo2dir)
+        open(self._target_fpath(mo2dir), 'wb').close()
+
+    @abstractmethod
+    def fetch_for_reading(self, tmpdirpath: str) -> str:
         wf, tfname = tempfile.mkstemp(dir=tmpdirpath)
         os.close(wf)  # yep, it is exactly enough to create temp zero file
         return tfname
 
 
-def make_zero_retriever_if(mo2dir:str, fi: FileOnDisk) -> ZeroFileRetriever | None:
+def make_zero_retriever_if(mo2dir: str, fi: FileOnDisk) -> ZeroFileRetriever | None:
     assert is_normalized_dir_path(mo2dir)
     if fi.file_hash == _ZEROHASH or fi.file_size == 0:
         assert fi.file_hash == _ZEROHASH and fi.file_size == 0
-        return ZeroFileRetriever(to_short_path(mo2dir,fi.file_path))
+        return ZeroFileRetriever(to_short_path(mo2dir, fi.file_path))
     else:
         return None
 
 
-class PlainFileRetriever(FileRetriever):  # only partially specialized, needs further specialization to be usable
-    fpath: str
+class GithubFileRetriever(FileRetriever):  # only partially specialized, needs further specialization to be usable
+    from_project: str  # '' means 'this project'
+    from_path: str
 
-    def __init__(self, fpath: str) -> None:
-        super().__init__(fpath)
-        self.fpath = fpath
+    def __init__(self, baseinit: Callable[[FileRetriever], None] | tuple[str, bytes, int], fromproject: str,
+                 frompath: str) -> None:
+        if isinstance(baseinit, tuple):
+            (p, h, s) = baseinit
+            super().__init__(p, h, s)
+        else:
+            baseinit(super())  # calls super().__init__(...) within
+        self.from_project = fromproject
+        self.from_path = frompath
 
-    def fetch(self, targetfpath: str):
-        shutil.copyfile(self.fpath, targetfpath)
+    def _full_path(self) -> str:
+        pass  # TODO!
+
+    def fetch(self, mo2dir: str):
+        shutil.copyfile(self._full_path(), self._target_fpath(mo2dir))
 
     @abstractmethod
-    def fetch_for_reading(self,
-                          tmpdirpath: str) -> str:  # returns file path to work with; can be an existing file, or temporary within tmpdirpath
-        return self.fpath
+    def fetch_for_reading(self, tmpdirpath: str) -> str:
+        return self._full_path()
 
 
 class FileDownloader:  # Provides a base class for downloading files

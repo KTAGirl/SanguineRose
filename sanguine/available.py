@@ -22,10 +22,11 @@ class GitArchivesReadHandler(GitDataHandler):
         super().__init__()
         self.archives = archives
 
-    def decompress(self, param: tuple[bytes, str, bytes, int, int, str]) -> None:
+    def decompress(self, common_param: tuple[bytes, str, bytes, int, int, str], specific_param: tuple) -> None:
+        assert len(specific_param) == 0
         # warn(repr(param))
         # time.sleep(1)
-        (h, i, a, x, s, b) = param
+        (h, i, a, x, s, b) = common_param
         found = None
         if len(self.archives) > 0:
             ar = self.archives[-1]

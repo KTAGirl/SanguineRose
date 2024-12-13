@@ -435,12 +435,11 @@ class GitDataHandler(ABC):
     def __init__(self, specific_fields: list[GitDataParam] = None) -> None:
         self.specific_fields = specific_fields if specific_fields is not None else []
 
-    def decompress(self, param: tuple[str | int | bytes, ...]) -> None:  # we want to instantiate GitDataHandler,
+    def decompress(self, common_param: tuple[str | int | bytes, ...],
+                   specific_param: tuple[str | int | bytes, ...]) -> None:  # we want to instantiate GitDataHandler,
         # but for such instantiations we don't need decompress()
         assert False
 
-
-# TODO: write_with_parent( common_params, special_params) - OPTIONAL (projectjson.ZeroHandler will still use old write(...) to skip h)
 
 class GitDataList:
     common_fields: list[GitDataParam]  # fields which are common for all handlers
@@ -500,8 +499,9 @@ class GitDataListWriter:
     def write_begin(self) -> None:
         self.wfile.write('[\n')
 
-    def write_line(self, handler: GitDataHandler, values: tuple) -> None:
-        assert len(values) == len(self.df.common_fields) + len(handler.specific_fields)
+    def write_line(self, handler: GitDataHandler, common_values: tuple, specific_values: tuple = ()) -> None:
+        assert len(common_values) == len(self.df.common_fields)
+        assert len(specific_values) == len(handler.specific_fields)
         if self.line_num > 0:
             ln = ',\n{'
         else:
@@ -510,7 +510,7 @@ class GitDataListWriter:
         self.line_num += 1
         assert len(self.common_fields_compressors) == len(self.df.common_fields)
         for i in range(len(self.df.common_fields)):
-            compressed = self.common_fields_compressors[i].compress(values[i])
+            compressed = self.common_fields_compressors[i].compress(common_values[i])
             if len(compressed):
                 if lnempty:
                     lnempty = False
@@ -518,7 +518,6 @@ class GitDataListWriter:
                     ln += ','
                 ln += compressed
 
-        shift = len(self.df.common_fields)
         if handler == self.last_handler:
             pass
         else:
@@ -526,7 +525,7 @@ class GitDataListWriter:
             self.last_handler_compressors = [_compressor(opt) for opt in handler.specific_fields]
 
         for i in range(len(handler.specific_fields)):
-            compressed = self.last_handler_compressors[i].compress(values[shift + i])
+            compressed = self.last_handler_compressors[i].compress(specific_values[i])
             if len(compressed):
                 if lnempty:
                     lnempty = False
@@ -631,7 +630,7 @@ class _GitDataListContentsReader:
                             rex += ','
                         rex += d.regex_part()
 
-                rex += '}'
+                rex += '}'  # instrumental for supporting empty h.specific_fields
                 # warn(rex)
                 rexc: re.Pattern = re.compile(rex)
                 assert len(dmatched) + len(dskipped) == ncommon + len(h.specific_fields)
@@ -679,7 +678,8 @@ class _GitDataListContentsReader:
                         param[skipped[0]] = d.skipped()
                     self.last_handler = h
 
-                h.decompress(tuple(param))
+                ncommon = len(self.df.common_fields)
+                h.decompress(tuple(param[:ncommon + 1]), tuple(param[ncommon + 1:]))
                 return True
 
         return False

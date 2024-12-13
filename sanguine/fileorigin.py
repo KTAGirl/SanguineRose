@@ -34,6 +34,10 @@ class GitFileOriginsWriteHandler(GitDataHandler):
     def write_line(self, writer: gitdatafile.GitDataListWriter, h: bytes, fo: FileOrigin) -> None:
         pass
 
+    @staticmethod
+    def common_values(h: bytes, fo: FileOrigin) -> tuple[str, bytes]:
+        return fo.tentative_name, h
+
 
 class GitFileOriginsReadHandler(GitDataHandler):
     file_origins: dict[bytes, list[FileOrigin]]
@@ -46,6 +50,17 @@ class GitFileOriginsReadHandler(GitDataHandler):
     def __init__(self, specific_fields: list[GitDataParam], file_origins: dict[bytes, list[FileOrigin]]) -> None:
         super().__init__(specific_fields)
         self.file_origins = file_origins
+
+    @staticmethod
+    def init_base_file_origin(fo: FileOrigin, common_param: tuple[str, bytes]) -> None:
+        assert type(fo) == FileOrigin  # should be exactly FileOrigin, not a subclass
+        (n, _) = common_param
+        fo.__init__(n)
+
+    @staticmethod
+    def hash_from_common_param(common_param: tuple[str, bytes]) -> bytes:
+        (_, h) = common_param
+        return h
 
 
 class MetaFileParser:

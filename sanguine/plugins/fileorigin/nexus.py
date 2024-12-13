@@ -16,8 +16,11 @@ class NexusFileOrigin(fileorigin.FileOrigin):
 
     # md5: bytes
 
-    def __init__(self, name: str, gameid: int, modid: int, fileid: int):
-        super().__init__(name)
+    def __init__(self, baseinit: Callable[[fileorigin.FileOrigin], None] | str, gameid: int, modid: int, fileid: int):
+        if isinstance(baseinit, str):
+            super().__init__(baseinit)
+        else:
+            baseinit(super())  # calls super().__init__(...) within
         self.gameid = gameid
         self.modid = modid
         self.fileid = fileid
@@ -44,10 +47,12 @@ class GitNexusFileOriginsReadHandler(fileorigin.GitFileOriginsReadHandler):
     def __init__(self, file_origins: dict[bytes, list[fileorigin.FileOrigin]]) -> None:
         super().__init__(GitNexusFileOriginsReadHandler.SPECIFIC_FIELDS, file_origins)
 
-    def decompress(self, param: tuple[str, bytes, int, int, int]) -> None:
-        (n, h, f, m, g) = param
+    def decompress(self, common_param: tuple[str, bytes], specific_param: tuple[int, int, int]) -> None:
+        (f, m, g) = specific_param
 
-        fo = NexusFileOrigin(n, g, m, f)
+        fo = NexusFileOrigin(lambda fo2: fileorigin.GitFileOriginsReadHandler.init_base_file_origin(fo2, common_param),
+                             g, m, f)
+        h = fileorigin.GitFileOriginsReadHandler.hash_from_common_param(common_param)
         if h not in self.file_origins:
             self.file_origins[h] = [fo]
         else:
@@ -63,7 +68,8 @@ class GitNexusFileOriginsWriteHandler(fileorigin.GitFileOriginsWriteHandler):
 
     def write_line(self, writer: gitdatafile.GitDataListWriter, h: bytes, fo: fileorigin.FileOrigin) -> None:
         assert isinstance(fo, NexusFileOrigin)
-        writer.write_line(self, (fo.tentative_name, h, fo.fileid, fo.modid, fo.gameid))
+        writer.write_line(self, fileorigin.GitFileOriginsWriteHandler.common_values(h, fo),
+                          (fo.fileid, fo.modid, fo.gameid))
 
     def legend(self) -> str:
         return '[ f:fileid, m:modid, g:gameid if Nexus ]'

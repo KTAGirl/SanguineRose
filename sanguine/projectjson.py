@@ -3,7 +3,7 @@ from abc import abstractmethod
 
 import sanguine.gitdatafile as gitdatafile
 from sanguine.common import *
-from sanguine.files import FileRetriever, ZeroFileRetriever
+from sanguine.files import FileRetriever, ZeroFileRetriever, GithubFileRetriever
 from sanguine.gitdatafile import GitDataParam, GitDataType, GitDataHandler
 
 
@@ -20,6 +20,10 @@ class GitRetrievedFileWriteHandler(GitDataHandler):
     def write_line(self, writer: gitdatafile.GitDataListWriter, fr: FileRetriever) -> None:
         pass
 
+    @staticmethod
+    def common_values(fr: FileRetriever) -> tuple[str, int, bytes]:
+        return fr.rel_path, fr.file_size, fr.file_hash
+
 
 class GitRetrievedFileReadHandler(GitDataHandler):
     retrieved_files: list[FileRetriever]
@@ -33,6 +37,12 @@ class GitRetrievedFileReadHandler(GitDataHandler):
         super().__init__(specific_fields)
         self.retrieved_files = files
 
+    @staticmethod
+    def init_base_file_retriever(fr: FileRetriever, common_param: tuple[str, int, bytes]) -> None:
+        assert type(fr) == FileRetriever  # should be exactly FileRetriever, not a subclass
+        (p, s, h) = common_param
+        fr.__init__(p, filehash=h, filesize=s)
+
 
 ### specifications for Handlers (all Retrievers are known here, no need to deal with plugins)
 
@@ -42,8 +52,8 @@ class GitRetrievedZeroFileReadHandler(GitRetrievedFileReadHandler):
     def __init__(self, files: list[FileRetriever]) -> None:
         super().__init__(GitRetrievedZeroFileReadHandler.SPECIFIC_FIELDS, files)
 
-    def decompress(self, param: tuple[str | int, ...]) -> None:
-        (p, s, h) = param
+    def decompress(self, common_param: tuple[str | int, ...], specific_param: tuple[str | int, ...]) -> None:
+        (p, s, h) = common_param  # not using init_base_file_retriever as we've overrridden h with None
         assert h is None and s == 0
         self.retrieved_files.append(ZeroFileRetriever(p))
 
@@ -56,10 +66,42 @@ class GitRetrievedZeroFileWriteHandler(GitRetrievedFileWriteHandler):
         return isinstance(fr, ZeroFileRetriever)
 
     def write_line(self, writer: gitdatafile.GitDataListWriter, fr: FileRetriever) -> None:
-        writer.write_line(self, (fr.rel_path, 0, None))
+        writer.write_line(self,
+                          (fr.rel_path, 0,
+                           None))  # not using GitRetrievedFileWriteHandler.common_values() to override h with None
 
 
-_write_handlers: list[GitRetrievedFileWriteHandler] = [GitRetrievedZeroFileWriteHandler()]
+class GitRetrievedGithubFileReadHandler(GitRetrievedFileReadHandler):
+    SPECIFIC_FIELDS: list[GitDataParam] = [
+        GitDataParam('g', GitDataType.Str, False),
+        GitDataParam('f', GitDataType.Path),
+    ]
+
+    def __init__(self, files: list[FileRetriever]) -> None:
+        super().__init__(GitRetrievedGithubFileReadHandler.SPECIFIC_FIELDS, files)
+
+    def decompress(self, common_param: tuple[str, int, bytes], specific_param: tuple[str | int, ...]) -> None:
+        (g, f) = specific_param
+        fr = GithubFileRetriever(lambda fr2: GitRetrievedFileReadHandler.init_base_file_retriever(fr2, common_param),
+                                 g, f)
+        self.retrieved_files.append(fr)
+
+
+class GitRetrievedGithubFileWriteHandler(GitRetrievedFileWriteHandler):
+    def legend(self) -> str:
+        return '[ g:github project, f:file if GitHub ]'
+
+    def is_my_retriever(self, fr: FileRetriever) -> bool:
+        return isinstance(fr, GithubFileRetriever)
+
+    def write_line(self, writer: gitdatafile.GitDataListWriter, fr: FileRetriever) -> None:
+        writer.write_line(self,
+                          GitRetrievedFileWriteHandler.common_values(fr))
+
+
+_write_handlers: list[GitRetrievedFileWriteHandler] = [
+    GitRetrievedZeroFileWriteHandler(),
+    GitRetrievedGithubFileWriteHandler()]
 
 
 ### GitProjectJson
