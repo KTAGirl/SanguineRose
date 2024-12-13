@@ -1,8 +1,7 @@
 import sanguine.tasks as tasks
-from sanguine.available import AvailableFiles
+from sanguine.available import FileRetriever, AvailableFiles
 from sanguine.common import *
-from sanguine.files import FileOnDisk, FileRetriever
-from sanguine.foldercache import FolderCache, FolderToCache
+from sanguine.foldercache import FileOnDisk, FolderCache, FolderToCache
 from sanguine.projectconfig import ProjectConfig
 
 
@@ -16,7 +15,7 @@ class WholeCache:
     def __init__(self, by: str, cfgfolders: ProjectConfig) -> None:
         self.available = AvailableFiles(by, cfgfolders.cache_dir, cfgfolders.tmp_dir, cfgfolders.github_dir,
                                         cfgfolders.download_dirs)
-        
+
         folderstocache: list[FolderToCache] = [FolderToCache(cfgfolders.mo2_dir, [cfgfolders.mo2_mods_dir()])]
         for d in cfgfolders.all_enabled_mo2_mod_dirs():
             folderstocache.append(FolderToCache(d))

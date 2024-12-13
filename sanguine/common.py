@@ -33,6 +33,21 @@ class SanguinicError(Exception):
     pass
 
 
+def to_json_hash(h: bytes) -> str:
+    b64 = base64.b64encode(h).decode('ascii')
+    # print(b64)
+    s = b64.rstrip('=')
+    # assert from_json_hash(s) == h
+    return s
+
+
+def from_json_hash(s: str) -> bytes:
+    ntopad = (3 - (len(s) % 3)) % 3
+    s += '=='[:ntopad]
+    b = base64.b64decode(s)
+    return b
+
+
 def abort_if_not(cond: bool,
                  f: Callable[
                      [], str] = None):  # 'always assert', even if __debug__ is False. f is a lambda printing error message before throwing

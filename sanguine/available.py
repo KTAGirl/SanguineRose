@@ -1,5 +1,6 @@
 import os.path
 import re
+from abc import abstractmethod
 
 import sanguine.gitdatafile as gitdatafile
 import sanguine.pluginhandler as pluginhandler
@@ -7,10 +8,37 @@ import sanguine.tasks as tasks
 from sanguine.archives import Archive, FileInArchive, FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives
 from sanguine.common import *
 from sanguine.fileorigin import file_origins_for_file, FileOrigin, GitFileOriginsJson
-from sanguine.files import calculate_file_hash, truncate_file_hash, FileRetriever
-from sanguine.foldercache import FolderCache, FolderToCache
+from sanguine.foldercache import FolderCache, FolderToCache, calculate_file_hash, truncate_file_hash
 from sanguine.gitdatafile import GitDataParam, GitDataType, GitDataHandler
 from sanguine.pickledcache import pickled_cache
+
+
+### only base FileRetriever here, all the derived classes belong to projectjson.py
+
+class FileRetriever:  # new dog breed ;-)
+    # Provides a base class for retrieving files from already-available data
+    rel_path: str
+    file_hash: bytes
+    file_size: int
+
+    def __init__(self, rel_path: str, filehash: bytes, filesize: int) -> None:
+        assert is_short_file_path(rel_path)
+        self.rel_path = rel_path
+        self.file_hash = filehash
+        self.file_size = filesize
+
+    def _target_fpath(self, mo2dir: str) -> str:
+        assert is_normalized_dir_path(mo2dir)
+        return mo2dir + self.rel_path
+
+    @abstractmethod
+    def fetch(self, mo2dir: str):
+        pass
+
+    @abstractmethod
+    def fetch_for_reading(self,
+                          tmpdirpath: str) -> str:  # returns file path to work with; can be an existing file, or temporary within tmpdirpath
+        pass
 
 
 ### GitArchivesJson

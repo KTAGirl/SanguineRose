@@ -1,10 +1,68 @@
+import hashlib
 import re
+import tempfile
 from abc import abstractmethod
 
 import sanguine.gitdatafile as gitdatafile
+from sanguine.available import FileRetriever
 from sanguine.common import *
-from sanguine.files import FileRetriever, ZeroFileRetriever, GithubFileRetriever
+from sanguine.foldercache import FileOnDisk
 from sanguine.gitdatafile import GitDataParam, GitDataType, GitDataHandler
+
+_ZEROHASH = hashlib.sha256(b"").digest()
+
+
+class ZeroFileRetriever(FileRetriever):
+    def __init__(self, baseinit: Callable[[FileRetriever], None] | str) -> None:
+        if isinstance(baseinit, str):
+            super().__init__(baseinit, _ZEROHASH, 0)
+        else:
+            baseinit(super())  # calls super().__init__(...) within
+
+    @abstractmethod
+    def fetch(self, mo2dir: str):
+        assert is_normalized_dir_path(mo2dir)
+        open(self._target_fpath(mo2dir), 'wb').close()
+
+    @abstractmethod
+    def fetch_for_reading(self, tmpdirpath: str) -> str:
+        wf, tfname = tempfile.mkstemp(dir=tmpdirpath)
+        os.close(wf)  # yep, it is exactly enough to create temp zero file
+        return tfname
+
+
+def make_zero_retriever_if(mo2dir: str, fi: FileOnDisk) -> ZeroFileRetriever | None:
+    assert is_normalized_dir_path(mo2dir)
+    if fi.file_hash == _ZEROHASH or fi.file_size == 0:
+        assert fi.file_hash == _ZEROHASH and fi.file_size == 0
+        return ZeroFileRetriever(to_short_path(mo2dir, fi.file_path))
+    else:
+        return None
+
+
+class GithubFileRetriever(FileRetriever):  # only partially specialized, needs further specialization to be usable
+    from_project: str  # '' means 'this project'
+    from_path: str
+
+    def __init__(self, baseinit: Callable[[FileRetriever], None] | tuple[str, bytes, int], fromproject: str,
+                 frompath: str) -> None:
+        if isinstance(baseinit, tuple):
+            (p, h, s) = baseinit
+            super().__init__(p, h, s)
+        else:
+            baseinit(super())  # calls super().__init__(...) within
+        self.from_project = fromproject
+        self.from_path = frompath
+
+    def _full_path(self) -> str:
+        pass  # TODO!
+
+    def fetch(self, mo2dir: str):
+        shutil.copyfile(self._full_path(), self._target_fpath(mo2dir))
+
+    @abstractmethod
+    def fetch_for_reading(self, tmpdirpath: str) -> str:
+        return self._full_path()
 
 
 class GitRetrievedFileWriteHandler(GitDataHandler):
