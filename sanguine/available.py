@@ -459,7 +459,8 @@ class AvailableFiles:
         if found is None:
             return []
         assert len(found) > 0
-        return [FileRetrieverFromSingleArchive(self, (h, fi.file_size), ar.archive_hash, fi) for ar, fi in found]
+        return [FileRetrieverFromSingleArchive(self, (h, fi.file_size), ar.archive_hash, ar.archive_size, fi)
+                for ar, fi in found]
 
     def _add_nested_to_retrievers(self, out: list[FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives],
                                   singles: list[FileRetrieverFromSingleArchive]) -> None:
@@ -488,8 +489,9 @@ class AvailableFiles:
         if not found:
             return []
         assert len(found) > 0
-        singles = [FileRetrieverFromSingleArchive(self, (fi.file_hash, fi.file_size), ar.archive_hash, fi) for ar, fi in
-                   found]
+        singles = [
+            FileRetrieverFromSingleArchive(self, (fi.file_hash, fi.file_size), ar.archive_hash, ar.archive_size, fi)
+            for ar, fi in found]
         out = []
         self._add_nested_to_retrievers(out, singles)
         assert len(out) > 0
