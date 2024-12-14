@@ -4,10 +4,9 @@ import tempfile
 
 from sanguine.archives import FileInArchive
 from sanguine.common import *
-from sanguine.folder_cache import FileOnDisk
 
 if typing.TYPE_CHECKING:
-    from sanguine.available import AvailableFiles
+    from sanguine.available_files import AvailableFiles
 
 
 ### generic FileRetriever
@@ -65,9 +64,8 @@ class ZeroFileRetriever(FileRetriever):
         return tfname
 
     @staticmethod
-    def make_retriever_if(available: AvailableFiles, fi: FileOnDisk) -> "ZeroFileRetriever|None":
-        if fi.file_hash == ZeroFileRetriever.ZEROHASH or fi.file_size == 0:
-            assert fi.file_hash == ZeroFileRetriever.ZEROHASH and fi.file_size == 0
+    def make_retriever_if(available: AvailableFiles, h: bytes) -> "ZeroFileRetriever|None":
+        if h == ZeroFileRetriever.ZEROHASH:
             return ZeroFileRetriever(available, (ZeroFileRetriever.ZEROHASH, 0))
         else:
             return None

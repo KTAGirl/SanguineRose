@@ -309,21 +309,23 @@ class _ScanStatsNode:
 
 
 class FolderCache:  # folder cache; can handle multiple folders, each folder with its own set of exclusions
-    cache_dir: str
+    _cache_dir: str
     name: str
-    folder_list: FolderListToCache
-    files_by_path: dict[str, FileOnDisk]
-    filtered_files: list[FileOnDisk]
-    all_scan_stats: dict[str, dict[str, int]]  # rootfolder -> {fpath -> nfiles}
+    _folder_list: FolderListToCache
+    _files_by_path: dict[str, FileOnDisk] | None
+    _filtered_files: list[FileOnDisk]
+    _all_scan_stats: dict[str, dict[str, int]]  # rootfolder -> {fpath -> nfiles}
+    _is_ready: bool
 
     def __init__(self, cachedir: str, name: str, folder_list: FolderListToCache) -> None:
         assert not FolderCache._folder_list_self_overlaps(folder_list)
-        self.cache_dir = cachedir
+        self._cache_dir = cachedir
         self.name = name
-        self.folder_list = folder_list
-        self.files_by_path = {}
-        self.filtered_files = []
-        self.all_scan_stats = _read_all_scan_stats(cachedir, name)
+        self._folder_list = folder_list
+        self._files_by_path = None
+        self._filtered_files = []
+        self._all_scan_stats = _read_all_scan_stats(cachedir, name)
+        self._is_ready = False
 
     def start_tasks(self, parallel: tasks.Parallel) -> None:
         return self._start_tasks(parallel)
@@ -332,7 +334,8 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         return self._reconcile_own_task_name()
 
     def all_files(self) -> Iterable[FileOnDisk]:
-        return self.files_by_path.values()
+        assert self._is_ready
+        return self._files_by_path.values()
 
     # private functions
 
@@ -378,9 +381,9 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         # building tree of known scans
         allscantasks: list[tuple[str, str, int, list[str]]] = []  # [(root,path,nf,exdirs)]
 
-        for folderplus in self.folder_list:
+        for folderplus in self._folder_list:
             (rootpath, extexdirs) = folderplus
-            scan_stats = self.all_scan_stats.get(rootpath)
+            scan_stats = self._all_scan_stats.get(rootpath)
             rootstatnode = _ScanStatsNode.make_tree(scan_stats, rootpath, extexdirs)
             rootstatnode.fill_tasks(allscantasks, rootpath, extexdirs)
 
@@ -389,7 +392,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         stats = _FolderScanStats()
 
         loadtaskname = 'sanguine.foldercache.load.' + self.name
-        loadtask = tasks.Task(loadtaskname, _load_files_task_func, (self.cache_dir, self.name), [])
+        loadtask = tasks.Task(loadtaskname, _load_files_task_func, (self._cache_dir, self.name), [])
         parallel.add_task(loadtask)
 
         loadowntaskname = 'sanguine.foldercache.loadown.' + self.name
@@ -412,8 +415,8 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
             parallel.add_tasks([task, owntask])
 
-        scanningdeps = [self._scanned_own_task_name(folderplus.folder) + '*' for folderplus in self.folder_list]
-        hashingdeps = [self._hashing_own_wildcard_task_name(folderplus.folder) for folderplus in self.folder_list]
+        scanningdeps = [self._scanned_own_task_name(folderplus.folder) + '*' for folderplus in self._folder_list]
+        hashingdeps = [self._hashing_own_wildcard_task_name(folderplus.folder) for folderplus in self._folder_list]
         reconciletask = tasks.OwnTask(self._reconcile_own_task_name(),
                                       lambda _: self._own_reconcile_task_func(parallel, scannedfiles),
                                       None, scanningdeps + hashingdeps)
@@ -522,48 +525,50 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
     def _load_files_own_task_func(self, out: tuple[dict[str, FileOnDisk]], parallel: tasks.Parallel) -> \
             tuple[tasks.SharedPubParam]:
         (filesbypath,) = out
-        self.files_by_path = {}
-        self.filtered_files = []
-        for key, val in filesbypath.items():
-            assert key == val.file_path
-            if FolderCache._file_path_is_ok(key, self.folder_list):
-                self.files_by_path[key] = val
+        self._files_by_path = {}
+        self._filtered_files = []
+        for p, f in filesbypath.items():
+            assert p == f.file_path
+            if FolderCache._file_path_is_ok(p, self._folder_list):
+                self._files_by_path[p] = f
             else:
-                self.filtered_files.append(val)
+                self._filtered_files.append(f)
 
-        self.pub_files_by_path = tasks.SharedPublication(parallel, self.files_by_path)
+        self.pub_files_by_path = tasks.SharedPublication(parallel, self._files_by_path)
         pubparam = tasks.make_shared_publication_param(self.pub_files_by_path)
         return (pubparam,)
 
     def _own_calc_hash_task_func(self, out: tuple[FileOnDisk], scannedfiles: dict[str, FileOnDisk]) -> None:
         (f,) = out
         scannedfiles[f.file_path] = f
-        self.files_by_path[f.file_path] = f
+        self._files_by_path[f.file_path] = f
 
     def _own_reconcile_task_func(self, parallel: tasks.Parallel,
                                  scannedfiles: dict[str, FileOnDisk]) -> None:
         info('FolderCache({}):{} files scanned'.format(self.name, len(scannedfiles)))
         ndel = 0
-        for file in self.files_by_path.values():
+        for file in self._files_by_path.values():
             fpath = file.file_path
             assert is_normalized_file_path(fpath)
             if scannedfiles.get(fpath) is None:
-                inhere = self.files_by_path.get(fpath)
+                inhere = self._files_by_path.get(fpath)
                 if inhere is not None and inhere.file_hash is None:  # special record is already present
                     continue
                 info('FolderCache: {} was deleted'.format(fpath))
                 # dbgWait()
-                self.files_by_path[fpath] = FileOnDisk(None, None, fpath, None)
+                self._files_by_path[fpath] = FileOnDisk(None, None, fpath, None)
                 ndel += 1
         info('FolderCache reconcile: {} files were deleted'.format(ndel))
 
         savetaskname = 'sanguine.foldercache.save.' + self.name
         savetask = tasks.Task(savetaskname, _save_files_task_func,
-                              (self.cache_dir, self.name, self.files_by_path,
-                               self.filtered_files, self.all_scan_stats),
+                              (self._cache_dir, self.name, self._files_by_path,
+                               self._filtered_files, self._all_scan_stats),
                               [])
         parallel.add_task(
             savetask)  # we won't explicitly wait for savetask, it will be waited for in Parallel.__exit__
+
+        self._is_ready = True
 
     def _scan_folder_own_task_func(self, out: tuple[list[str], _FolderScanStats, _FolderScanDirOut],
                                    parallel: tasks.Parallel, scannedfiles: dict[str, FileOnDisk],
@@ -577,7 +582,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         #    foldercache.all_scan_stats[sdout.root] |= sdout.scan_stats
         # else:
         #    foldercache.all_scan_stats[sdout.root] = sdout.scan_stats
-        self.all_scan_stats[sdout.root] = sdout.scan_stats  # always overwriting scan_stats
+        self._all_scan_stats[sdout.root] = sdout.scan_stats  # always overwriting scan_stats
 
         for f in sdout.requested_files:
             (fpath, tstamp, fsize) = f

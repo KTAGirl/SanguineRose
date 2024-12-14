@@ -1,4 +1,3 @@
-import os.path
 import re
 
 import sanguine.archives
@@ -6,9 +5,8 @@ import sanguine.git_data_file as gitdatafile
 import sanguine.tasks as tasks
 from sanguine.archives import Archive, FileInArchive
 from sanguine.common import *
-from sanguine.file_origin import file_origins_for_file, FileOrigin, GitFileOriginsJson
-from sanguine.file_retriever import FileRetriever, FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives
-from sanguine.folder_cache import FolderCache, FolderToCache, calculate_file_hash, truncate_file_hash
+from sanguine.file_origin import FileOrigin, GitFileOriginsJson
+from sanguine.folder_cache import calculate_file_hash, truncate_file_hash
 from sanguine.git_data_file import GitDataParam, GitDataType, GitDataHandler
 from sanguine.pickled_cache import pickled_cache
 from sanguine.tmp_path import TmpPath
@@ -205,7 +203,7 @@ def _archive_hashing_task_func(param: tuple[str, str, bytes, int, str]) -> tuple
     assert plugin is not None
     archives = []
     _hash_archive(archives, by, tmppath, plugin, arpath, arhash, arsize)
-    debug('MGA: about to remove temporary tree {}'.format(tmppath))
+    debug('MasterGitData: about to remove temporary tree {}'.format(tmppath))
     TmpPath.rm_tmp_tree(tmppath)
     return (archives,)
 
@@ -260,84 +258,90 @@ def _save_file_origins_task_func(param: tuple[str, dict[bytes, list[FileOrigin]]
 ### MasterGitData itself
 
 class MasterGitData:
-    master_git_dir: str
-    cache_dir: str
-    tmp_dir: str
-    cache_data: dict[str, any]
-    archives_by_hash: dict[bytes, Archive] | None
-    archived_files_by_hash: dict[bytes, list[tuple[Archive, FileInArchive]]] | None
-    archived_files_by_name: dict[str, list[tuple[Archive, FileInArchive]]] | None
-    file_origins_by_hash: dict[bytes, list[FileOrigin]] | None
-    nhashes: int  # number of hashes already requested; used to make name of tmp dir
-    by: str
-    dirtyar: bool
-    dirtyfo: bool
+    _master_git_dir: str
+    _cache_dir: str
+    _tmp_dir: str
+    _cache_data: dict[str, any]
+    _archives_by_hash: dict[bytes, Archive] | None
+    _archived_files_by_hash: dict[bytes, list[tuple[Archive, FileInArchive]]] | None
+    _archived_files_by_name: dict[str, list[tuple[Archive, FileInArchive]]] | None
+    _file_origins_by_hash: dict[bytes, list[FileOrigin]] | None
+    _nhashes_requested: int  # number of hashes already requested; used to make name of tmp dir
+    _new_hashes_by: str
+    _dirty_ar: bool
+    _dirty_fo: bool
+    _ar_is_ready: bool
+    _fo_is_ready: bool
 
-    _LOADAROWNTASKNAME = 'sanguine.available.mga.loadarown'
-    _LOADFOOWNTASKNAME = 'sanguine.available.mga.loadfoown'
+    _LOADAROWNTASKNAME = 'sanguine.mastergit.loadarown'
+    _LOADFOOWNTASKNAME = 'sanguine.mastergit.loadfoown'
 
-    def __init__(self, by: str, mastergitdir: str, cachedir: str, tmpdir: str, cache_data: dict[str, any]) -> None:
-        self.by = by
-        self.master_git_dir = mastergitdir
-        self.cache_dir = cachedir
-        self.tmp_dir = tmpdir
-        self.cache_data = cache_data
-        self.archives_by_hash = None
-        self.archived_files_by_hash = None
-        self.archived_files_by_name = None
-        self.file_origins_by_hash = None
-        self.nhashes = 0
-        self.dirtyar = False
-        self.dirtyfo = False
+    def __init__(self, new_hashes_by: str, mastergitdir: str, cachedir: str, tmpdir: str,
+                 cache_data: dict[str, any]) -> None:
+        self._new_hashes_by = new_hashes_by
+        self._master_git_dir = mastergitdir
+        self._cache_dir = cachedir
+        self._tmp_dir = tmpdir
+        self._cache_data = cache_data
+        self._archives_by_hash = None
+        self._archived_files_by_hash = None
+        self._archived_files_by_name = None
+        self._file_origins_by_hash = None
+        self._nhashes_requested = 0
+        self._dirty_ar = False
+        self._dirty_fo = False
+        self._ar_is_ready = False
+        self._fo_is_ready = False
 
     def _append_archive(self, ar: Archive) -> None:
         # warn(str(len(ar.files)))
-        assert ar.archive_hash not in self.archives_by_hash
-        self.archives_by_hash[ar.archive_hash] = ar
+        assert ar.archive_hash not in self._archives_by_hash
+        self._archives_by_hash[ar.archive_hash] = ar
         for fi in ar.files:
-            if fi.file_hash not in self.archived_files_by_hash:
-                self.archived_files_by_hash[fi.file_hash] = []
-            self.archived_files_by_hash[fi.file_hash].append((ar, fi))
+            if fi.file_hash not in self._archived_files_by_hash:
+                self._archived_files_by_hash[fi.file_hash] = []
+            self._archived_files_by_hash[fi.file_hash].append((ar, fi))
 
             fname = os.path.split(fi.intra_path)[1]
-            if fname not in self.archived_files_by_name:
-                self.archived_files_by_name[fname] = []
-            self.archived_files_by_name[fname].append((ar, fi))
+            if fname not in self._archived_files_by_name:
+                self._archived_files_by_name[fname] = []
+            self._archived_files_by_name[fname].append((ar, fi))
 
     def _load_archives_own_task_func(self, out: tuple[list[Archive], dict[str, any]]) -> None:
         (archives, cacheoverrides) = out
-        assert self.archives_by_hash is None
-        assert self.archived_files_by_hash is None
-        self.archives_by_hash = {}
-        self.archived_files_by_hash = {}
-        self.archived_files_by_name = {}
+        assert self._archives_by_hash is None
+        assert self._archived_files_by_hash is None
+        self._archives_by_hash = {}
+        self._archived_files_by_hash = {}
+        self._archived_files_by_name = {}
         for ar in archives:
             self._append_archive(ar)
-        self.cache_data |= cacheoverrides
+        self._cache_data |= cacheoverrides
 
     def _archive_hashing_own_task_func(self, out: tuple[list[Archive]]):
         (archives,) = out
         for ar in archives:
             self._append_archive(ar)
-        self.dirtyar = True
+        self._dirty_ar = True
 
     def _done_hashing_own_task_func(self, parallel: tasks.Parallel) -> None:
-        if self.dirtyar:
-            savetaskname = 'sanguine.available.mga.savear'
+        if self._dirty_ar:
+            savetaskname = 'sanguine.mastergit.savear'
             savetask = tasks.Task(savetaskname, _save_archives_task_func,
-                                  (self.master_git_dir, list(self.archives_by_hash.values())), [])
+                                  (self._master_git_dir, list(self._archives_by_hash.values())), [])
             parallel.add_task(savetask)
+        self._ar_is_ready = True
 
     def _load_file_origins_own_task_func(self, out: tuple[dict[bytes, list[FileOrigin]], dict[str, any]]) -> None:
         (forigins, cacheoverrides) = out
-        assert self.file_origins_by_hash is None
-        self.file_origins_by_hash = forigins
-        self.cache_data |= cacheoverrides
+        assert self._file_origins_by_hash is None
+        self._file_origins_by_hash = forigins
+        self._cache_data |= cacheoverrides
 
     def start_tasks(self, parallel: tasks.Parallel) -> None:
-        loadtaskname = 'sanguine.available.mga.loadar'
+        loadtaskname = 'sanguine.mastergit.loadar'
         loadtask = tasks.Task(loadtaskname, _load_archives_task_func,
-                              (self.master_git_dir, self.cache_dir, self.cache_data), [])
+                              (self._master_git_dir, self._cache_dir, self._cache_data), [])
         parallel.add_task(loadtask)
         loadowntaskname = MasterGitData._LOADAROWNTASKNAME
         loadowntask = tasks.OwnTask(loadowntaskname,
@@ -345,9 +349,9 @@ class MasterGitData:
                                     [loadtaskname])
         parallel.add_task(loadowntask)
 
-        load2taskname = 'sanguine.available.mga.loadfo'
+        load2taskname = 'sanguine.mastergit.loadfo'
         load2task = tasks.Task(load2taskname, _load_file_origins_task_func,
-                               (self.master_git_dir, self.cache_dir, self.cache_data), [])
+                               (self._master_git_dir, self._cache_dir, self._cache_data), [])
         parallel.add_task(load2task)
         load2owntaskname = MasterGitData._LOADFOOWNTASKNAME
         load2owntask = tasks.OwnTask(load2owntaskname,
@@ -364,218 +368,50 @@ class MasterGitData:
         return MasterGitData._LOADFOOWNTASKNAME
 
     def start_hashing_archive(self, parallel: tasks.Parallel, arpath: str, arhash: bytes, arsize: int) -> None:
-        hashingtaskname = 'sanguine.available.mga.hash.' + arpath
-        self.nhashes += 1
-        tmp_dir = TmpPath.tmp_in_tmp(self.tmp_dir, 'ah.', self.nhashes)
+        hashingtaskname = 'sanguine.mastergit.hash.' + arpath
+        self._nhashes_requested += 1
+        tmp_dir = TmpPath.tmp_in_tmp(self._tmp_dir, 'ah.', self._nhashes_requested)
         hashingtask = tasks.Task(hashingtaskname, _archive_hashing_task_func,
-                                 (self.by, arpath, arhash, arsize, tmp_dir), [])
+                                 (self._new_hashes_by, arpath, arhash, arsize, tmp_dir), [])
         parallel.add_task(hashingtask)
-        hashingowntaskname = 'sanguine.available.mga.hashown.' + arpath
+        hashingowntaskname = 'sanguine.mastergit.hashown.' + arpath
         hashingowntask = tasks.OwnTask(hashingowntaskname,
                                        lambda _, out: self._archive_hashing_own_task_func(out), None,
                                        [hashingtaskname])
         parallel.add_task(hashingowntask)
 
     def add_file_origin(self, h: bytes, fo: FileOrigin) -> None:
-        if h in self.file_origins_by_hash:
-            for oldfo in self.file_origins_by_hash[h]:
+        if h in self._file_origins_by_hash:
+            for oldfo in self._file_origins_by_hash[h]:
                 if fo.eq(oldfo):
                     return
 
-            self.file_origins_by_hash[h].append(fo)
-            self.dirtyfo = True
+            self._file_origins_by_hash[h].append(fo)
+            self._dirty_fo = True
         else:
-            self.file_origins_by_hash[h] = [fo]
-            self.dirtyfo = True
+            self._file_origins_by_hash[h] = [fo]
+            self._dirty_fo = True
 
     def start_done_hashing_task(self,  # should be called only after all start_hashing_archive() calls are done
                                 parallel: tasks.Parallel) -> str:
-        donehashingowntaskname = 'sanguine.available.mga.donehashing'
+        donehashingowntaskname = 'sanguine.mastergit.donehashing'
         donehashingowntask = tasks.OwnTask(donehashingowntaskname,
                                            lambda _, _1: self._done_hashing_own_task_func(parallel), None,
-                                           [MasterGitData._LOADAROWNTASKNAME, 'sanguine.available.mga.hashown.*'])
+                                           [MasterGitData._LOADAROWNTASKNAME, 'sanguine.mastergit.hashown.*'])
         parallel.add_task(donehashingowntask)
 
         return donehashingowntaskname
 
     def start_done_adding_file_origins_task(self,  # should be called only after all add_file_origin() calls are done
                                             parallel: tasks.Parallel) -> None:
-        if self.dirtyfo:
-            save2taskname = 'sanguine.available.mga.savefo'
+        if self._dirty_fo:
+            save2taskname = 'sanguine.mastergit.savefo'
             save2task = tasks.Task(save2taskname, _save_file_origins_task_func,
-                                   (self.master_git_dir, self.file_origins_by_hash), [])
+                                   (self._master_git_dir, self._file_origins_by_hash), [])
             parallel.add_task(save2task)
 
+        self._fo_is_ready = True
 
-##### AvailableFiles
-
-def _file_origins_task_func(param: tuple[list[bytes, str]]) -> tuple[list[tuple[bytes, list[FileOrigin]]]]:
-    (filtered_downloads,) = param
-    allorigins: list[tuple[bytes, list[FileOrigin]]] = []
-    for fhash, fpath in filtered_downloads:
-        # TODO: multi-picklecache for file origins
-        origins = file_origins_for_file(fpath)
-        if origins is None:
-            warn('Available: file without known origin {}'.format(fpath))
-        else:
-            allorigins.append((fhash, origins))
-    return (allorigins,)
-
-
-class AvailableFiles:
-    _downloads_cache: FolderCache
-    _git_data: MasterGitData
-    _READYOWNTASKNAME = 'sanguine.available.readyown'
-
-    def __init__(self, by: str, cachedir: str, tmpdir: str, mastergitdir: str, downloads: list[str]) -> None:
-        self._downloads_cache = FolderCache(cachedir, 'downloads', [FolderToCache(d, []) for d in downloads])
-        self._git_data = MasterGitData(by, mastergitdir, cachedir, tmpdir, {})
-
-    # public interface
-
-    def start_tasks(self, parallel: tasks.Parallel):
-        self._downloads_cache.start_tasks(parallel)
-        self._git_data.start_tasks(parallel)
-
-        starthashingowntaskname = 'sanguine.available.starthashing'
-        starthashingowntask = tasks.OwnTask(starthashingowntaskname,
-                                            lambda _, _1, _2: self._start_hashing_own_task_func(parallel), None,
-                                            [self._downloads_cache.ready_task_name(),
-                                             MasterGitData.ready_to_start_hashing_task_name()])
-        parallel.add_task(starthashingowntask)
-
-        startoriginsowntaskname = 'sanguine.available.startfileorigins'
-        startoriginsowntask = tasks.OwnTask(startoriginsowntaskname,
-                                            lambda _, _1: self._start_origins_own_task_func(parallel), None,
-                                            [self._downloads_cache.ready_task_name()])
-        parallel.add_task(startoriginsowntask)
-
-    @staticmethod
-    def ready_task_name() -> str:
-        return AvailableFiles._READYOWNTASKNAME
-
-    def _single_archive_retrievers(self, h: bytes) -> list[FileRetrieverFromSingleArchive]:
-        found = self._git_data.archived_files_by_hash.get(h)
-        if found is None:
-            return []
-        assert len(found) > 0
-        return [FileRetrieverFromSingleArchive(self, (h, fi.file_size), ar.archive_hash, ar.archive_size, fi)
-                for ar, fi in found]
-
-    def _add_nested_to_retrievers(self, out: list[FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives],
-                                  singles: list[FileRetrieverFromSingleArchive]) -> None:
-        # resolving nested archives
-        for r in singles:
-            out.append(r)
-            found2 = self._archived_file_retrievers_by_hash(r.archive_hash)
-            for r2 in found2:
-                out.append(FileRetrieverFromNestedArchives(self, (r2.file_hash, r2.file_size), r2, r))
-
-    def _archived_file_retrievers_by_hash(self, h: bytes) -> list[
-        FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives]:  # recursive
-        singles = self._single_archive_retrievers(h)
-        if len(singles) == 0:
-            return []
-        assert len(singles) > 0
-
-        out = []
-        self._add_nested_to_retrievers(out, singles)
-        assert len(out) > 0
-        return out
-
-    def _archived_file_retrievers_by_name(self, fname: str) -> list[
-        FileRetriever]:  # not resolving archive_retrievers
-        found = self._git_data.archived_files_by_name.get(fname)
-        if not found:
-            return []
-        assert len(found) > 0
-        singles = [
-            FileRetrieverFromSingleArchive(self, (fi.file_hash, fi.file_size), ar.archive_hash, ar.archive_size, fi)
-            for ar, fi in found]
-        out = []
-        self._add_nested_to_retrievers(out, singles)
-        assert len(out) > 0
-        return out
-
-    def file_retrievers_by_hash(self, h: bytes) -> list[FileRetriever]:
-        # TODO: add retrievers from ownmods
-        return self._archived_file_retrievers_by_hash(h)
-
-    def file_retrievers_by_name(self, fname: str) -> list[FileRetriever]:
-        # TODO: add retrievers from ownmods
-        return self._archived_file_retrievers_by_name(fname)
-
-    # private functions
-
-    def _start_hashing_own_task_func(self, parallel: tasks.Parallel) -> None:
-        for ar in self._downloads_cache.all_files():
-            ext = os.path.splitext(ar.file_path)[1]
-            if ext == '.meta':
-                continue
-
-            if not ar.file_hash in self._git_data.archives_by_hash:
-                if ext in sanguine.archives.all_archive_plugins_extensions():
-                    self._git_data.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
-                else:
-                    warn('Available: file with unknown extension {}, ignored'.format(ar.file_path))
-
-    def _start_origins_own_task_func(self, parallel: tasks.Parallel) -> None:
-        filtered_downloads: list[tuple[bytes, str]] = []
-        for ar in self._downloads_cache.all_files():
-            ext = os.path.splitext(ar.file_path)[1]
-            if ext == '.meta':
-                continue
-
-            filtered_downloads.append((ar.file_hash, ar.file_path))
-
-        originstaskname = 'sanguine.available.fileorigins'
-        originstask = tasks.Task(originstaskname, _file_origins_task_func,
-                                 (filtered_downloads,), [])
-        parallel.add_task(originstask)
-        startoriginsowntaskname = 'sanguine.available.ownfileorigins'
-        originsowntask = tasks.OwnTask(startoriginsowntaskname,
-                                       lambda _, out, _1: self._file_origins_own_task_func(parallel, out), None,
-                                       [originstaskname,
-                                        MasterGitData.ready_to_start_adding_file_origins_task_name()])
-        parallel.add_task(originsowntask)
-
-    def _file_origins_own_task_func(self, parallel: tasks.Parallel,
-                                    out: tuple[list[tuple[bytes, list[FileOrigin]]]]) -> None:
-        (origins,) = out
-        for fox in origins:
-            for fo in fox[1]:
-                self._git_data.add_file_origin(fox[0], fo)
-        self._git_data.start_done_adding_file_origins_task(parallel)  # no need to wait for it
-
-        gitarchivesdonehashingtaskname: str = self._git_data.start_done_hashing_task(parallel)
-        readyowntaskname = AvailableFiles._READYOWNTASKNAME
-        readyowntask = tasks.OwnTask(readyowntaskname,
-                                     lambda _, _1: AvailableFiles._sync_only_own_task_func(), None,
-                                     [gitarchivesdonehashingtaskname])
-        parallel.add_task(readyowntask)
-
-    @staticmethod
-    def _sync_only_own_task_func() -> None:
-        pass  # do nothing, this task is necessary only as means to synchronize
-
-
-if __name__ == '__main__':
-    import sys
-
-    if len(sys.argv) > 1 and sys.argv[1] == 'test':
-        from sanguine.install_checks import check_sanguine_prerequisites
-
-        ttmppath = normalize_dir_path('..\\..\\sanguine.tmp\\')
-        add_file_logging(ttmppath + 'sanguine.log.html')
-
-        check_sanguine_prerequisites()
-
-        with TmpPath(ttmppath) as ttmpdir:
-            tavailable = AvailableFiles('KTAGirl',
-                                        normalize_dir_path('..\\..\\sanguine.cache\\'),
-                                        ttmpdir.tmp_dir(),
-                                        normalize_dir_path('..\\..\\sanguine-skyrim-root\\'),
-                                        [normalize_dir_path('..\\..\\..\\mo2\\downloads')])
-            with tasks.Parallel(None, dbg_serialize=False) as tparallel:
-                tavailable.start_tasks(tparallel)
-                tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()
+    def archived_file_by_hash(self, h: bytes) -> list[tuple[Archive, FileInArchive]] | None:
+        assert self._ar_is_ready
+        return self._file_origins_by_hash.get(h)

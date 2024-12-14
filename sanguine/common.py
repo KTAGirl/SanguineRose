@@ -39,6 +39,13 @@ class Val:
         return str(self.val)
 
 
+def add_to_dict_of_lists(dicttolook: dict[any, list[any]], key: any, val: any) -> None:
+    if key not in dicttolook:
+        dicttolook[key] = [val]
+    else:
+        dicttolook[key].append(val)
+
+
 ### error-handling related
 
 class SanguinicError(Exception):
@@ -195,12 +202,6 @@ def is_esx(path: str) -> bool:
 ### unused, candidates for removal
 def escape_json(s: any) -> str:
     return json.dumps(s)
-
-def add_to_dict_of_lists(dicttolook: dict[list[any]], key: any, val: any) -> None:
-    if key not in dicttolook:
-        dicttolook[key] = [val]
-    else:
-        dicttolook[key].append(val)
 
 def all_esxs(mod: str, mo2: str) -> list[str]:
     esxs = glob.glob(mo2 + 'mods/' + mod + '/*.esl')

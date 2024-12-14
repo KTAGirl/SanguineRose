@@ -2,7 +2,7 @@ import re
 
 import sanguine.git_data_file as gitdatafile
 from sanguine.archives import FileInArchive
-from sanguine.available import AvailableFiles
+from sanguine.available_files import AvailableFiles
 from sanguine.common import *
 from sanguine.file_retriever import FileRetriever, ZeroFileRetriever, GithubFileRetriever
 from sanguine.file_retriever import FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives

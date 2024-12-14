@@ -1,5 +1,5 @@
 import sanguine.tasks as tasks
-from sanguine.available import FileRetriever, AvailableFiles
+from sanguine.available_files import FileRetriever, AvailableFiles, GithubFolder
 from sanguine.common import *
 from sanguine.folder_cache import FileOnDisk, FolderCache, FolderToCache
 from sanguine.project_config import ProjectConfig
@@ -12,9 +12,9 @@ class WholeCache:
     available: AvailableFiles
     _SYNCOWNTASKNAME: str = 'sanguine.wholecache.sync'
 
-    def __init__(self, by: str, cfgfolders: ProjectConfig) -> None:
+    def __init__(self, by: str, cfgfolders: ProjectConfig, githubfolders: list[GithubFolder]) -> None:
         self.available = AvailableFiles(by, cfgfolders.cache_dir, cfgfolders.tmp_dir, cfgfolders.github_dir,
-                                        cfgfolders.download_dirs)
+                                        cfgfolders.download_dirs, githubfolders)
 
         folderstocache: list[FolderToCache] = [FolderToCache(cfgfolders.mo2_dir, [cfgfolders.mo2_mods_dir()])]
         for d in cfgfolders.all_enabled_mo2_mod_dirs():
@@ -44,5 +44,7 @@ class WholeCache:
     def file_retrievers_by_hash(self, h: bytes) -> list[FileRetriever]:  # resolved as fully as feasible
         return self.available.file_retrievers_by_hash(h)
 
+    '''
     def file_retrievers_by_name(self, fname: str) -> list[FileRetriever]:  # resolved as fully as feasible
         return self.available.file_retrievers_by_name(fname)
+    '''
