@@ -353,6 +353,19 @@ def _full_search_retrievers(out: list[tuple[bytes, FileRetriever | None]],
         assert done
 
 
+def _number_covered_by_archive(cluster: list[tuple[bytes, list[FileRetriever]]], h0: bytes) -> int:
+    out = 0
+    for x in cluster:
+        (h, retrs) = x
+        for r in retrs:
+            arh = _archive_hash(r)
+            assert arh is not None
+            if arh == h0:
+                out += 1
+                break  # for r
+    return out
+
+
 def choose_retrievers(inlist: list[tuple[bytes, list[FileRetriever]]], archive_weights: dict[bytes, float]) -> list[
     tuple[bytes, FileRetriever | None]]:
     out: list[tuple[bytes, FileRetriever | None]] = []
@@ -419,12 +432,24 @@ def choose_retrievers(inlist: list[tuple[bytes, list[FileRetriever]]], archive_w
     assert len(clusters_archives) == len(clusters)
     for i in range(len(clusters)):
         cluster = clusters[i]
-        cluster_archives = clusters_archives[i]
-        if len(cluster_archives) <= _MAX_EXPONENT_RETRIEVERS:
-            _full_search_retrievers(out, cluster, cluster_archives, archive_weights)
+        cluster_archives: dict[bytes, int] = clusters_archives[i]
 
-        # "greedy" optimization
-        # TODO!
+        while len(cluster_archives) > _MAX_EXPONENT_RETRIEVERS:
+            # "greedy" reduction of search space
+            #           for the time being, we're just taking lowest-cost archives (starting from highest-use within lowest-cost)
+            xarchives: list[tuple[bytes, float, int]] = sorted(
+                [(arh, archive_weights[arh], _number_covered_by_archive(cluster, arh)) for arh in
+                 cluster_archives.keys()],
+                key=lambda x2: (x2[1], x2[2]))
+            # we should not try cutting all (len(cluster_archives)-_MAX_EXPONENT) at once, as filtering can change
+            #               the pattern
+            arh = xarchives[0][0]
+            assert arh not in cluster_archives
+            cluster_archives[arh] = 1
+            cluster = _filter_with_used(cluster, out, cluster_archives)
+
+        assert len(cluster_archives) <= _MAX_EXPONENT_RETRIEVERS
+        _full_search_retrievers(out, cluster, cluster_archives, archive_weights)
 
     return out
 
