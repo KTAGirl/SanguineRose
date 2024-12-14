@@ -3,6 +3,9 @@ import re
 import tempfile
 import urllib.request
 
+### simple_download is used by install_helpers, so we cannot use any files with non-guaranteed dependencies,
+###                                             and need to be very conservative here
+
 _MAX_PAGE_SIZE = 1000000
 
 

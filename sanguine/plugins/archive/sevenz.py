@@ -2,8 +2,8 @@
 # we'll use 7z.exe which we install into tools folder instead
 import subprocess
 
+from sanguine.archives import ArchivePluginBase
 from sanguine.common import *
-from sanguine.pluginhandler import ArchivePluginBase
 
 
 def _7z_exe() -> str:

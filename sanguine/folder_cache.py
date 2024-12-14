@@ -1,6 +1,7 @@
 import hashlib
 import os.path
 import stat
+import time
 
 import sanguine.tasks as tasks
 from sanguine.common import *
@@ -82,7 +83,7 @@ def _write_dict_of_files(dirpath: str, name: str, files: dict[str, FileOnDisk],
     with open_3rdparty_txt_file_w(fpath2) as wf2:
         srt: list[tuple[str, FileOnDisk]] = sorted(outfiles.items())
         for item in srt:
-            wf2.write(JsonEncoder().encode(item[1]) + '\n')
+            wf2.write(as_json(item[1]) + '\n')
 
 
 def _read_all_scan_stats(dirpath: str, name: str) -> dict[str, dict[str, int]]:

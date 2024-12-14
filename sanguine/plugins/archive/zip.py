@@ -1,7 +1,7 @@
 import zipfile
 
+from sanguine.archives import ArchivePluginBase
 from sanguine.common import *
-from sanguine.pluginhandler import ArchivePluginBase
 
 
 class ZipArchivePlugin(ArchivePluginBase):

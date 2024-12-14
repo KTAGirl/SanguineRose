@@ -6,7 +6,7 @@ import json
 sys.path.append(os.path.split(os.path.abspath(__file__))[0])
 
 from sanguine.common import *
-from sanguine.projectconfig import ProjectConfig
+from sanguine.project_config import ProjectConfig
 from sanguine.cmdcommon import _openCache,_csAndMasterModList,enabledModSizes,_loadUserConfig
 import sanguine.cmdmo2git as cmdmo2git
 import sanguine.cmdgit2mo as cmdgit2mo

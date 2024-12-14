@@ -1,6 +1,4 @@
-from abc import abstractmethod
-
-import sanguine.pluginhandler as pluginhandler
+from sanguine.plugin_handler import load_plugins
 from sanguine.common import *
 
 
@@ -59,7 +57,7 @@ def _found_archive_plugin(plugin: ArchivePluginBase):
         _archive_exts.append(ext)
 
 
-pluginhandler.load_plugins('plugins/archive/', ArchivePluginBase, lambda plugin: _found_archive_plugin(plugin))
+load_plugins('plugins/archive/', ArchivePluginBase, lambda plugin: _found_archive_plugin(plugin))
 
 
 def archive_plugin_for(path: str) -> ArchivePluginBase:

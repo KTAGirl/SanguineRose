@@ -1,13 +1,17 @@
 import re
-from abc import abstractmethod
 
-import sanguine.gitdatafile as gitdatafile
-from sanguine.available import FileRetriever, AvailableFiles, ZeroFileRetriever, GithubFileRetriever
+import sanguine.git_data_file as gitdatafile
+from sanguine.archives import FileInArchive
+from sanguine.available import AvailableFiles
 from sanguine.common import *
-from sanguine.gitdatafile import GitDataParam, GitDataType, GitDataHandler
+from sanguine.file_retriever import FileRetriever, ZeroFileRetriever, GithubFileRetriever
+from sanguine.file_retriever import FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives
+from sanguine.git_data_file import GitDataParam, GitDataType, GitDataHandler
 
 
 ##### Handlers
+
+### base read/write handlers
 
 class GitRetrievedFileWriteHandler(GitDataHandler):
     @abstractmethod
@@ -50,8 +54,14 @@ class GitRetrievedFileReadHandler(GitDataHandler):
     def rel_path(common_param: tuple[str, int, bytes]) -> str:
         return common_param[0]
 
+    @staticmethod
+    def hash_and_size(common_param: tuple[str, int, bytes]) -> tuple[bytes, int]:
+        return common_param[2], common_param[1]
+
 
 ### specifications for Handlers (all Retrievers are known here, no need to deal with plugins)
+
+### for ZeroFileRetriever
 
 class GitRetrievedZeroFileReadHandler(GitRetrievedFileReadHandler):
     SPECIFIC_FIELDS: list[GitDataParam] = []
@@ -61,7 +71,8 @@ class GitRetrievedZeroFileReadHandler(GitRetrievedFileReadHandler):
         super().__init__(GitRetrievedZeroFileReadHandler.SPECIFIC_FIELDS, files)
         self.available = available
 
-    def decompress(self, common_param: tuple[str | int, ...], specific_param: tuple[str | int, ...]) -> None:
+    def decompress(self, common_param: tuple[str | int, ...], specific_param: tuple) -> None:
+        assert len(specific_param) == 0
         (p, s, h) = common_param  # not using init_base_file_retriever as we've overrridden h with None
         assert h is None and s == 0
         self.retrieved_files.append((p, ZeroFileRetriever(self.available, (ZeroFileRetriever.ZEROHASH, 0))))
@@ -69,7 +80,7 @@ class GitRetrievedZeroFileReadHandler(GitRetrievedFileReadHandler):
 
 class GitRetrievedZeroFileWriteHandler(GitRetrievedFileWriteHandler):
     def legend(self) -> str:
-        return ''
+        return '[ nothing else if Zero ]'
 
     def is_my_retriever(self, fr: FileRetriever) -> bool:
         return isinstance(fr, ZeroFileRetriever)
@@ -80,10 +91,13 @@ class GitRetrievedZeroFileWriteHandler(GitRetrievedFileWriteHandler):
                            None))  # not using GitRetrievedFileWriteHandler.common_values() to override h with None
 
 
+### for GithubFileRetriever
+
 class GitRetrievedGithubFileReadHandler(GitRetrievedFileReadHandler):
     SPECIFIC_FIELDS: list[GitDataParam] = [
-        GitDataParam('g', GitDataType.Str, False),
-        GitDataParam('f', GitDataType.Path),
+        GitDataParam('g', GitDataType.Path, False),
+        GitDataParam('a', GitDataType.Str),
+        GitDataParam('p', GitDataType.Str),
     ]
     available: AvailableFiles
 
@@ -91,30 +105,122 @@ class GitRetrievedGithubFileReadHandler(GitRetrievedFileReadHandler):
         super().__init__(GitRetrievedGithubFileReadHandler.SPECIFIC_FIELDS, files)
         self.available = available
 
-    def decompress(self, common_param: tuple[str, int, bytes], specific_param: tuple[str | int, ...]) -> None:
-        (g, f) = specific_param
+    def decompress(self, common_param: tuple[str, int, bytes], specific_param: tuple[str, str, str]) -> None:
+        (g, a, p) = specific_param
         fr = GithubFileRetriever(self.available,
                                  lambda fr2: GitRetrievedFileReadHandler.init_base_file_retriever(self.available, fr2,
                                                                                                   common_param),
-                                 g, f)
+                                 a, p, g)
         self.retrieved_files.append((GitRetrievedFileReadHandler.rel_path(common_param), fr))
 
 
 class GitRetrievedGithubFileWriteHandler(GitRetrievedFileWriteHandler):
     def legend(self) -> str:
-        return '[ g:github project, f:file if GitHub ]'
+        return '[ g:github file path in project, a:github project author, p:github project name if Github ]'
 
     def is_my_retriever(self, fr: FileRetriever) -> bool:
         return isinstance(fr, GithubFileRetriever)
 
     def write_line(self, writer: gitdatafile.GitDataListWriter, rel_path: str, fr: FileRetriever) -> None:
+        assert isinstance(fr, GithubFileRetriever)
         writer.write_line(self,
-                          GitRetrievedFileWriteHandler.common_values(rel_path, fr))
+                          GitRetrievedFileWriteHandler.common_values(rel_path, fr),
+                          (fr.from_path, fr.github_author, fr.github_project))
 
+
+### for FileRetrieverFromSingleArchive
+
+class GitRetrievedSingleArchiveFileReadHandler(GitRetrievedFileReadHandler):
+    SPECIFIC_FIELDS: list[GitDataParam] = [
+        GitDataParam('i', GitDataType.Path, False),
+        GitDataParam('a', GitDataType.Hash),
+        GitDataParam('x', GitDataType.Int),
+    ]
+    available: AvailableFiles
+
+    def __init__(self, available: AvailableFiles, files: list[tuple[str, FileRetriever]]) -> None:
+        super().__init__(GitRetrievedSingleArchiveFileReadHandler.SPECIFIC_FIELDS, files)
+        self.available = available
+
+    def decompress(self, common_param: tuple[str, int, bytes], specific_param: tuple[str, bytes, int]) -> None:
+        (i, a, x) = specific_param
+        (h, s) = GitRetrievedFileReadHandler.hash_and_size(common_param)
+        fr = FileRetrieverFromSingleArchive(self.available,
+                                            lambda fr2: GitRetrievedFileReadHandler.init_base_file_retriever(
+                                                self.available, fr2,
+                                                common_param),
+                                            a, x, FileInArchive(h, s, i))
+        self.retrieved_files.append((GitRetrievedFileReadHandler.rel_path(common_param), fr))
+
+
+class GitRetrievedSingleArchiveFileWriteHandler(GitRetrievedFileWriteHandler):
+    def legend(self) -> str:
+        return '[ i:intra-archive path, a:archive hash, x:archive size if SingleArchive ]'
+
+    def is_my_retriever(self, fr: FileRetriever) -> bool:
+        return isinstance(fr, FileRetrieverFromSingleArchive)
+
+    def write_line(self, writer: gitdatafile.GitDataListWriter, rel_path: str, fr: FileRetriever) -> None:
+        assert isinstance(fr, FileRetrieverFromSingleArchive)
+        writer.write_line(self,
+                          GitRetrievedFileWriteHandler.common_values(rel_path, fr),
+                          (fr.file_in_archive, fr.archive_hash, fr.archive_size))
+
+
+### for FileRetrieverFromNestedArchives (with exactly 2 single_archive_retrievers)
+
+class GitRetrievedNestedArchive2FileReadHandler(GitRetrievedFileReadHandler):
+    SPECIFIC_FIELDS: list[GitDataParam] = [
+        GitDataParam('j', GitDataType.Path, False),
+        GitDataParam('k', GitDataType.Path),
+        GitDataParam('a', GitDataType.Hash),
+        GitDataParam('x', GitDataType.Int),
+    ]
+    available: AvailableFiles
+
+    def __init__(self, available: AvailableFiles, files: list[tuple[str, FileRetriever]]) -> None:
+        super().__init__(GitRetrievedNestedArchive2FileReadHandler.SPECIFIC_FIELDS, files)
+        self.available = available
+
+    def decompress(self, common_param: tuple[str, int, bytes], specific_param: tuple[str, str, bytes, int]) -> None:
+        (j, k, a, x) = specific_param
+        (h, s) = GitRetrievedFileReadHandler.hash_and_size(common_param)
+        baseinit = lambda frx: GitRetrievedFileReadHandler.init_base_file_retriever(
+                                                 self.available,frx, common_param)
+        fr0 = FileRetrieverFromSingleArchive(self.available,baseinit,
+                                             a, x, FileInArchive(h, s, j))
+        h1 = b''
+        s1 = 0
+        fr1 = FileRetrieverFromSingleArchive(self.available,baseinit,
+                                             a, x, FileInArchive(h1, s1, k))
+        fr = FileRetrieverFromNestedArchives(self.available,baseinit,fr0,fr1)
+        self.retrieved_files.append((GitRetrievedFileReadHandler.rel_path(common_param), fr))
+
+
+class GitRetrievedNestedArchive2FileWriteHandler(GitRetrievedFileWriteHandler):
+    def legend(self) -> str:
+        return '[ j:first intra-archive path, k: second intra-archive path, a:archive hash, x:archive size if NestedArchive2 ]'
+
+    def is_my_retriever(self, fr: FileRetriever) -> bool:
+        return isinstance(fr, FileRetrieverFromNestedArchives) and len(fr.single_archive_retrievers) == 2
+
+    def write_line(self, writer: gitdatafile.GitDataListWriter, rel_path: str, fr: FileRetriever) -> None:
+        assert isinstance(fr, FileRetrieverFromNestedArchives) and len(fr.single_archive_retrievers) == 2
+        fr0 = fr.single_archive_retrievers[0]
+        fr1 = fr.single_archive_retrievers[1]
+        writer.write_line(self,
+                          GitRetrievedFileWriteHandler.common_values(rel_path, fr),
+                          (fr0.file_in_archive, fr1.file_in_archive,
+                                        fr0.archive_hash, fr0.archive_size))
+
+
+### all write handlers
 
 _write_handlers: list[GitRetrievedFileWriteHandler] = [
     GitRetrievedZeroFileWriteHandler(),
-    GitRetrievedGithubFileWriteHandler()]
+    GitRetrievedGithubFileWriteHandler(),
+    GitRetrievedSingleArchiveFileWriteHandler()
+]
 
 
 ### GitProjectJson

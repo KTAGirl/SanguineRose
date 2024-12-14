@@ -1,7 +1,7 @@
 from bethesda_structs.archive import BSAArchive
 
+from sanguine.archives import ArchivePluginBase
 from sanguine.common import *
-from sanguine.pluginhandler import ArchivePluginBase
 
 
 class BsaArchivePlugin(ArchivePluginBase):

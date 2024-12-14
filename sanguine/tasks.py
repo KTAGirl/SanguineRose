@@ -1,11 +1,14 @@
 # mini-micro <s>skirt</s>, sorry, lib for data-driven parallel processing
 
+import logging
 # noinspection PyUnresolvedReferences
 import pickle
+import time
 from enum import IntEnum
 from multiprocessing import Process, Queue as PQueue, shared_memory
 from threading import Thread  # only for logging!
 
+from sanguine._logging import add_logging_handler, log_to_file_only
 from sanguine.common import *
 
 _proc_num: int = -1  # number of child process

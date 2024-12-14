@@ -1,10 +1,9 @@
 import re
-from abc import abstractmethod
 
-import sanguine.gitdatafile as gitdatafile
-import sanguine.pluginhandler as pluginhandler
+import sanguine.git_data_file as gitdatafile
+from sanguine.plugin_handler import load_plugins
 from sanguine.common import *
-from sanguine.gitdatafile import GitDataParam, GitDataType, GitDataHandler
+from sanguine.git_data_file import GitDataParam, GitDataType, GitDataHandler
 
 
 class FileOrigin:
@@ -106,7 +105,7 @@ def _found_origin_plugin(plugin: FileOriginPluginBase):
     _file_origin_plugins.append(plugin)
 
 
-pluginhandler.load_plugins('plugins/fileorigin/', FileOriginPluginBase, lambda plugin: _found_origin_plugin(plugin))
+load_plugins('plugins/fileorigin/', FileOriginPluginBase, lambda plugin: _found_origin_plugin(plugin))
 
 
 def file_origins_for_file(fpath: str) -> list[FileOrigin] | None:

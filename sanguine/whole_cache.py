@@ -1,8 +1,8 @@
 import sanguine.tasks as tasks
 from sanguine.available import FileRetriever, AvailableFiles
 from sanguine.common import *
-from sanguine.foldercache import FileOnDisk, FolderCache, FolderToCache
-from sanguine.projectconfig import ProjectConfig
+from sanguine.folder_cache import FileOnDisk, FolderCache, FolderToCache
+from sanguine.project_config import ProjectConfig
 
 
 class WholeCache:

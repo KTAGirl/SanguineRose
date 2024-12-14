@@ -2,8 +2,8 @@
 # python rarfile module expects some rar installed anyway
 import subprocess
 
+from sanguine.archives import ArchivePluginBase
 from sanguine.common import *
-from sanguine.pluginhandler import ArchivePluginBase
 
 
 def _unrar_exe() -> str:

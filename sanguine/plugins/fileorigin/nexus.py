@@ -1,22 +1,22 @@
 import re
 
-import sanguine.fileorigin as fileorigin
-import sanguine.gitdatafile as gitdatafile
+import sanguine.git_data_file as gitdatafile
 from sanguine.common import *
-from sanguine.fileorigin import MetaFileParser, GitFileOriginsReadHandler
-from sanguine.gitdatafile import GitDataParam, GitDataType
+from sanguine.file_origin import FileOrigin, FileOriginPluginBase, MetaFileParser
+from sanguine.file_origin import GitFileOriginsReadHandler, GitFileOriginsWriteHandler
+from sanguine.git_data_file import GitDataParam, GitDataType
 
 
 ### FileOrigin
 
-class NexusFileOrigin(fileorigin.FileOrigin):
+class NexusFileOrigin(FileOrigin):
     gameid: int  # nexus game #
     modid: int
     fileid: int
 
     # md5: bytes
 
-    def __init__(self, baseinit: Callable[[fileorigin.FileOrigin], None] | str, gameid: int, modid: int, fileid: int):
+    def __init__(self, baseinit: Callable[[FileOrigin], None] | str, gameid: int, modid: int, fileid: int):
         if isinstance(baseinit, str):
             super().__init__(baseinit)
         else:
@@ -26,8 +26,8 @@ class NexusFileOrigin(fileorigin.FileOrigin):
         self.fileid = fileid
 
     @staticmethod
-    def is_nexus_gameid_ok(game: fileorigin.GameUniverse, nexusgameid: int) -> bool:
-        if game == fileorigin.GameUniverse.Skyrim:
+    def is_nexus_gameid_ok(game: GameUniverse, nexusgameid: int) -> bool:
+        if game == GameUniverse.Skyrim:
             return nexusgameid in [1704, 110]  # SE, LE
         assert False
 
@@ -37,38 +37,38 @@ class NexusFileOrigin(fileorigin.FileOrigin):
 
 ### Handler
 
-class GitNexusFileOriginsReadHandler(fileorigin.GitFileOriginsReadHandler):
+class GitNexusFileOriginsReadHandler(GitFileOriginsReadHandler):
     SPECIFIC_FIELDS: list[GitDataParam] = [
         GitDataParam('f', GitDataType.Int, False),
         GitDataParam('m', GitDataType.Int),
         GitDataParam('g', GitDataType.Int),
     ]
 
-    def __init__(self, file_origins: dict[bytes, list[fileorigin.FileOrigin]]) -> None:
+    def __init__(self, file_origins: dict[bytes, list[FileOrigin]]) -> None:
         super().__init__(GitNexusFileOriginsReadHandler.SPECIFIC_FIELDS, file_origins)
 
     def decompress(self, common_param: tuple[str, bytes], specific_param: tuple[int, int, int]) -> None:
         (f, m, g) = specific_param
 
-        fo = NexusFileOrigin(lambda fo2: fileorigin.GitFileOriginsReadHandler.init_base_file_origin(fo2, common_param),
+        fo = NexusFileOrigin(lambda fo2: GitFileOriginsReadHandler.init_base_file_origin(fo2, common_param),
                              g, m, f)
-        h = fileorigin.GitFileOriginsReadHandler.hash_from_common_param(common_param)
+        h = GitFileOriginsReadHandler.hash_from_common_param(common_param)
         if h not in self.file_origins:
             self.file_origins[h] = [fo]
         else:
             self.file_origins[h].append(fo)
 
 
-class GitNexusFileOriginsWriteHandler(fileorigin.GitFileOriginsWriteHandler):
+class GitNexusFileOriginsWriteHandler(GitFileOriginsWriteHandler):
     def __init__(self) -> None:
         super().__init__(GitNexusFileOriginsReadHandler.SPECIFIC_FIELDS)
 
-    def is_my_fo(self, fo: fileorigin.FileOrigin) -> bool:
+    def is_my_fo(self, fo: FileOrigin) -> bool:
         return isinstance(fo, NexusFileOrigin)
 
-    def write_line(self, writer: gitdatafile.GitDataListWriter, h: bytes, fo: fileorigin.FileOrigin) -> None:
+    def write_line(self, writer: gitdatafile.GitDataListWriter, h: bytes, fo: FileOrigin) -> None:
         assert isinstance(fo, NexusFileOrigin)
-        writer.write_line(self, fileorigin.GitFileOriginsWriteHandler.common_values(h, fo),
+        writer.write_line(self, GitFileOriginsWriteHandler.common_values(h, fo),
                           (fo.fileid, fo.modid, fo.gameid))
 
     def legend(self) -> str:
@@ -140,7 +140,7 @@ class NexusMetaFileParser(MetaFileParser):
             if filename_from_url is not None:
                 self.file_name = filename_from_url
 
-    def make_file_origin(self) -> fileorigin.FileOrigin | None:
+    def make_file_origin(self) -> FileOrigin | None:
         # warn(str(modid))
         # warn(str(fileid))
         # warn(url)
@@ -158,12 +158,12 @@ class NexusMetaFileParser(MetaFileParser):
 
 ### Plugin
 
-class NexusFileOriginPlugin(fileorigin.FileOriginPluginBase):
-    def write_handler(self) -> fileorigin.GitFileOriginsWriteHandler:
+class NexusFileOriginPlugin(FileOriginPluginBase):
+    def write_handler(self) -> GitFileOriginsWriteHandler:
         return GitNexusFileOriginsWriteHandler()
 
     def meta_file_parser(self, metafilepath: str) -> MetaFileParser:
         return NexusMetaFileParser(metafilepath)
 
-    def read_handler(self, file_origins: dict[bytes, list[fileorigin.FileOrigin]]) -> GitFileOriginsReadHandler:
+    def read_handler(self, file_origins: dict[bytes, list[FileOrigin]]) -> GitFileOriginsReadHandler:
         return GitNexusFileOriginsReadHandler(file_origins)

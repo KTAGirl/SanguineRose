@@ -1,152 +1,17 @@
-import hashlib
 import os.path
 import re
-import tempfile
-from abc import abstractmethod
 
 import sanguine.archives
-import sanguine.gitdatafile as gitdatafile
+import sanguine.git_data_file as gitdatafile
 import sanguine.tasks as tasks
 from sanguine.archives import Archive, FileInArchive
 from sanguine.common import *
-from sanguine.fileorigin import file_origins_for_file, FileOrigin, GitFileOriginsJson
-from sanguine.foldercache import FileOnDisk, FolderCache, FolderToCache, calculate_file_hash, truncate_file_hash
-from sanguine.gitdatafile import GitDataParam, GitDataType, GitDataHandler
-from sanguine.pickledcache import pickled_cache
-
-
-##### FileRetrievers
-
-
-class FileRetriever:  # new dog breed ;-)
-    # Provides a base class for retrieving files from already-available data
-    available: "AvailableFiles"
-    file_hash: bytes
-    file_size: int
-    type _BaseInit = Callable[[FileRetriever], None] | tuple[bytes, int]
-
-    def __init__(self, available: "AvailableFiles", filehash: bytes, filesize: int) -> None:
-        self.available = available
-        self.file_hash = filehash
-        self.file_size = filesize
-
-    @staticmethod
-    def _init_from_child(parent, available: "AvailableFiles", baseinit: _BaseInit) -> None:
-        assert type(parent) is FileRetriever
-        if isinstance(baseinit, tuple):
-            (h, s) = baseinit
-            parent.__init__(available, h, s)
-        else:
-            baseinit(parent)  # calls super().__init__(...) within
-
-    @abstractmethod
-    def fetch(self, targetfpath: str):
-        pass
-
-    @abstractmethod
-    def fetch_for_reading(self,
-                          tmpdirpath: str) -> str:  # returns file path to work with; can be an existing file, or temporary within tmpdirpath
-        pass
-
-
-class ZeroFileRetriever(FileRetriever):
-    ZEROHASH = hashlib.sha256(b"").digest()
-
-    # noinspection PyMissingConstructor
-    #              _init_from_child() calls super().__init__()
-    def __init__(self, available: "AvailableFiles", baseinit: FileRetriever._BaseInit) -> None:
-        if isinstance(baseinit, tuple):  # we can't use _init_from_child() here
-            (h, s) = baseinit
-            assert h == self.ZEROHASH
-            assert s == 0
-        FileRetriever._init_from_child(self, available, baseinit)
-
-    def fetch(self, targetfpath: str):
-        assert is_normalized_file_path(targetfpath)
-        open(targetfpath, 'wb').close()
-
-    def fetch_for_reading(self, tmpdirpath: str) -> str:
-        wf, tfname = tempfile.mkstemp(dir=tmpdirpath)
-        os.close(wf)  # yep, it is exactly enough to create temp zero file
-        return tfname
-
-    @staticmethod
-    def make_retriever_if(available: "AvailableFiles", fi: FileOnDisk) -> "ZeroFileRetriever|None":
-        if fi.file_hash == ZeroFileRetriever.ZEROHASH or fi.file_size == 0:
-            assert fi.file_hash == ZeroFileRetriever.ZEROHASH and fi.file_size == 0
-            return ZeroFileRetriever(available, (ZeroFileRetriever.ZEROHASH, 0))
-        else:
-            return None
-
-
-class GithubFileRetriever(FileRetriever):  # only partially specialized, needs further specialization to be usable
-    from_project: str  # '' means 'this project'
-    from_path: str
-
-    # noinspection PyMissingConstructor
-    #              _init_from_child() calls super().__init__()
-    def __init__(self, available: "AvailableFiles", baseinit: FileRetriever._BaseInit,
-                 fromproject: str, frompath: str) -> None:
-        FileRetriever._init_from_child(super(), available, baseinit)
-        self.from_project = fromproject
-        self.from_path = frompath
-
-    def _full_path(self) -> str:
-        pass  # TODO!
-
-    def fetch(self, targetfpath: str):
-        assert is_normalized_file_path(targetfpath)
-        shutil.copyfile(self._full_path(), targetfpath)
-
-    def fetch_for_reading(self, tmpdirpath: str) -> str:
-        return self._full_path()
-
-
-class FileRetrieverFromSingleArchive(FileRetriever):
-    archive_hash: bytes
-    file_in_archive: FileInArchive
-
-    # noinspection PyMissingConstructor
-    #              _init_from_child() calls super().__init__()
-    def __init__(self, available: "AvailableFiles", baseinit: FileRetriever._BaseInit,
-                 archive_hash: bytes, file_in_archive: FileInArchive) -> None:
-        FileRetriever._init_from_child(super(), available, baseinit)
-        self.archive_hash = archive_hash
-        self.file_in_archive = file_in_archive
-
-    def fetch(self, targetfpath: str) -> None:
-        pass
-        # TODO!
-
-    def fetch_for_reading(self, tmpdirpath: str) -> str:
-        pass
-        # TODO!
-
-
-class FileRetrieverFromNestedArchives(FileRetriever):
-    single_archive_retrievers: list[FileRetrieverFromSingleArchive]
-
-    # noinspection PyMissingConstructor
-    #              _init_from_child() calls super().__init__()
-    def __init__(self, available: "AvailableFiles", baseinit: FileRetriever._BaseInit,
-                 parent: FileRetrieverFromSingleArchive | FileRetrieverFromSingleArchive,
-                 child: FileRetrieverFromSingleArchive) -> None:
-        FileRetriever._init_from_child(super(), available, baseinit)
-        if isinstance(parent, FileRetrieverFromSingleArchive):
-            assert parent.file_in_archive.file_hash == child.archive_hash
-            self.single_archive_retrievers = [parent, child]
-        else:
-            assert isinstance(parent, FileRetrieverFromNestedArchives)
-            assert parent.single_archive_retrievers[-1].file_in_archive.file_hash == child.archive_hash
-            self.single_archive_retrievers = parent.single_archive_retrievers + [child]
-
-    def fetch(self, targetfpath: str) -> None:
-        pass
-        # TODO!
-
-    def fetch_for_reading(self, tmpdirpath: str) -> str:
-        pass
-        # TODO!
+from sanguine.file_origin import file_origins_for_file, FileOrigin, GitFileOriginsJson
+from sanguine.file_retriever import FileRetriever, FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives
+from sanguine.folder_cache import FolderCache, FolderToCache, calculate_file_hash, truncate_file_hash
+from sanguine.git_data_file import GitDataParam, GitDataType, GitDataHandler
+from sanguine.pickled_cache import pickled_cache
+from sanguine.tmp_path import TmpPath
 
 
 ### GitArchivesJson
@@ -348,8 +213,8 @@ def _archive_hashing_task_func(param: tuple[str, str, bytes, int, str]) -> tuple
 def _debug_assert_eq_list(saved_loaded: list, sorted_data: list) -> None:
     assert len(saved_loaded) == len(sorted_data)
     for i in range(len(sorted_data)):
-        olda: str = JsonEncoder().encode(sorted_data[i])
-        newa: str = JsonEncoder().encode(saved_loaded[i])
+        olda: str = as_json(sorted_data[i])
+        newa: str = as_json(saved_loaded[i])
         if olda != newa:
             warn(olda)
             warn(newa)
@@ -545,9 +410,9 @@ class MasterGitData:
 ##### AvailableFiles
 
 def _file_origins_task_func(param: tuple[list[bytes, str]]) -> tuple[list[tuple[bytes, list[FileOrigin]]]]:
-    (filtered_files,) = param
+    (filtered_downloads,) = param
     allorigins: list[tuple[bytes, list[FileOrigin]]] = []
-    for fhash, fpath in filtered_files:
+    for fhash, fpath in filtered_downloads:
         # TODO: multi-picklecache for file origins
         origins = file_origins_for_file(fpath)
         if origins is None:
@@ -558,31 +423,31 @@ def _file_origins_task_func(param: tuple[list[bytes, str]]) -> tuple[list[tuple[
 
 
 class AvailableFiles:
-    foldercache: FolderCache
-    gitdata: MasterGitData
+    _downloads_cache: FolderCache
+    _git_data: MasterGitData
     _READYOWNTASKNAME = 'sanguine.available.readyown'
 
     def __init__(self, by: str, cachedir: str, tmpdir: str, mastergitdir: str, downloads: list[str]) -> None:
-        self.foldercache = FolderCache(cachedir, 'downloads', [FolderToCache(d, []) for d in downloads])
-        self.gitdata = MasterGitData(by, mastergitdir, cachedir, tmpdir, {})
+        self._downloads_cache = FolderCache(cachedir, 'downloads', [FolderToCache(d, []) for d in downloads])
+        self._git_data = MasterGitData(by, mastergitdir, cachedir, tmpdir, {})
 
     # public interface
 
     def start_tasks(self, parallel: tasks.Parallel):
-        self.foldercache.start_tasks(parallel)
-        self.gitdata.start_tasks(parallel)
+        self._downloads_cache.start_tasks(parallel)
+        self._git_data.start_tasks(parallel)
 
         starthashingowntaskname = 'sanguine.available.starthashing'
         starthashingowntask = tasks.OwnTask(starthashingowntaskname,
                                             lambda _, _1, _2: self._start_hashing_own_task_func(parallel), None,
-                                            [self.foldercache.ready_task_name(),
+                                            [self._downloads_cache.ready_task_name(),
                                              MasterGitData.ready_to_start_hashing_task_name()])
         parallel.add_task(starthashingowntask)
 
         startoriginsowntaskname = 'sanguine.available.startfileorigins'
         startoriginsowntask = tasks.OwnTask(startoriginsowntaskname,
                                             lambda _, _1: self._start_origins_own_task_func(parallel), None,
-                                            [self.foldercache.ready_task_name()])
+                                            [self._downloads_cache.ready_task_name()])
         parallel.add_task(startoriginsowntask)
 
     @staticmethod
@@ -590,7 +455,7 @@ class AvailableFiles:
         return AvailableFiles._READYOWNTASKNAME
 
     def _single_archive_retrievers(self, h: bytes) -> list[FileRetrieverFromSingleArchive]:
-        found = self.gitdata.archived_files_by_hash.get(h)
+        found = self._git_data.archived_files_by_hash.get(h)
         if found is None:
             return []
         assert len(found) > 0
@@ -618,8 +483,8 @@ class AvailableFiles:
         return out
 
     def _archived_file_retrievers_by_name(self, fname: str) -> list[
-        "FileRetriever"]:  # not resolving archive_retrievers
-        found = self.gitdata.archived_files_by_name.get(fname)
+        FileRetriever]:  # not resolving archive_retrievers
+        found = self._git_data.archived_files_by_name.get(fname)
         if not found:
             return []
         assert len(found) > 0
@@ -630,40 +495,40 @@ class AvailableFiles:
         assert len(out) > 0
         return out
 
-    def file_retrievers_by_hash(self, h: bytes) -> list["FileRetriever"]:
+    def file_retrievers_by_hash(self, h: bytes) -> list[FileRetriever]:
         # TODO: add retrievers from ownmods
         return self._archived_file_retrievers_by_hash(h)
 
-    def file_retrievers_by_name(self, fname: str) -> list["FileRetriever"]:
+    def file_retrievers_by_name(self, fname: str) -> list[FileRetriever]:
         # TODO: add retrievers from ownmods
         return self._archived_file_retrievers_by_name(fname)
 
     # private functions
 
     def _start_hashing_own_task_func(self, parallel: tasks.Parallel) -> None:
-        for ar in self.foldercache.all_files():
+        for ar in self._downloads_cache.all_files():
             ext = os.path.splitext(ar.file_path)[1]
             if ext == '.meta':
                 continue
 
-            if not ar.file_hash in self.gitdata.archives_by_hash:
+            if not ar.file_hash in self._git_data.archives_by_hash:
                 if ext in sanguine.archives.all_archive_plugins_extensions():
-                    self.gitdata.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
+                    self._git_data.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
                 else:
                     warn('Available: file with unknown extension {}, ignored'.format(ar.file_path))
 
     def _start_origins_own_task_func(self, parallel: tasks.Parallel) -> None:
-        filtered_files: list[tuple[bytes, str]] = []
-        for ar in self.foldercache.all_files():
+        filtered_downloads: list[tuple[bytes, str]] = []
+        for ar in self._downloads_cache.all_files():
             ext = os.path.splitext(ar.file_path)[1]
             if ext == '.meta':
                 continue
 
-            filtered_files.append((ar.file_hash, ar.file_path))
+            filtered_downloads.append((ar.file_hash, ar.file_path))
 
         originstaskname = 'sanguine.available.fileorigins'
         originstask = tasks.Task(originstaskname, _file_origins_task_func,
-                                 (filtered_files,), [])
+                                 (filtered_downloads,), [])
         parallel.add_task(originstask)
         startoriginsowntaskname = 'sanguine.available.ownfileorigins'
         originsowntask = tasks.OwnTask(startoriginsowntaskname,
@@ -677,10 +542,10 @@ class AvailableFiles:
         (origins,) = out
         for fox in origins:
             for fo in fox[1]:
-                self.gitdata.add_file_origin(fox[0], fo)
-        self.gitdata.start_done_adding_file_origins_task(parallel)  # no need to wait for it
+                self._git_data.add_file_origin(fox[0], fo)
+        self._git_data.start_done_adding_file_origins_task(parallel)  # no need to wait for it
 
-        gitarchivesdonehashingtaskname: str = self.gitdata.start_done_hashing_task(parallel)
+        gitarchivesdonehashingtaskname: str = self._git_data.start_done_hashing_task(parallel)
         readyowntaskname = AvailableFiles._READYOWNTASKNAME
         readyowntask = tasks.OwnTask(readyowntaskname,
                                      lambda _, _1: AvailableFiles._sync_only_own_task_func(), None,
@@ -696,13 +561,12 @@ if __name__ == '__main__':
     import sys
 
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
-        from sanguine.sanguine_install_helpers import check_sanguine_prerequisites
+        from sanguine.install_checks import check_sanguine_prerequisites
 
         ttmppath = normalize_dir_path('..\\..\\sanguine.tmp\\')
         add_file_logging(ttmppath + 'sanguine.log.html')
 
         check_sanguine_prerequisites()
-        # dbgasalert(ttmppath)
 
         with TmpPath(ttmppath) as ttmpdir:
             tavailable = AvailableFiles('KTAGirl',

@@ -1,6 +1,3 @@
-# noinspection PyUnresolvedReferences
-import pickle
-
 from sanguine.common import *
 
 
@@ -11,8 +8,8 @@ def pickled_cache(cachedir: str, cachedata: dict[str, any], prefix: str, origfil
 
     if params is not None:
         # comparing as JSONs is important
-        readparams = JsonEncoder().encode(cachedata.get(prefix + '.params'))
-        jparams = JsonEncoder().encode(params)
+        readparams = as_json(cachedata.get(prefix + '.params'))
+        jparams = as_json(params)
         sameparams = (readparams == jparams)
     else:
         sameparams = True
@@ -28,8 +25,8 @@ def pickled_cache(cachedir: str, cachedata: dict[str, any], prefix: str, origfil
             assert is_normalized_file_path(rd[0])
             assert is_normalized_file_path(of[0])
 
-            jrd = JsonEncoder().encode(rd)
-            jof = JsonEncoder().encode(of)
+            jrd = as_json(rd)
+            jof = as_json(of)
 
             if jrd != jof:  # lists are sorted, there should be exact match here
                 samefiles = False
