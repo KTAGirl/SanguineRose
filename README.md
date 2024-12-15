@@ -16,32 +16,32 @@ Think of a modpack like a library in programming. It’s a building block for bi
 
 ## On Sanguine Rose
 
-**Sanguine Rose** is a tool for modders that makes it easy to collaborate on modpack development using GitHub. *Sanguine Rose* is inspired by [Wabbajack](https://github.com/wabbajack-tools/wabbajack), but is a completely separate development, with lots of improvements (more on it below). 
-
+**Sanguine Rose** is a tool for modders that makes it easy to work together on modpacks using GitHub. It's inspired by [Wabbajack](https://github.com/wabbajack-tools/wabbajack), but it's a totally separate project with a bunch of improvements (more on that below).
 
 ### An automated 'how to build' instruction 
 
-In essence, each Sanguine Rose-based project is just a (machine-executable, but human-readable) *instruction on 'how to build your game folder (and MO2 folder, if applicable) from Downloads folder'*. As in "go to such and such URL, get a file there, unpack it, and copy file X from the archive to this target". Rinse and repeat 200'000 times.
+Basically, each project made with *Sanguine Rose* is just a set of instructions (which are both computer-readable and human-readable) on how to build your game folder (and MO2 folder, if needed) from your Downloads folder. It’s like, "go to this URL, grab a file, unpack it, and copy file X from the archive to this spot." Rinse and repeat 200'000 times.
 
-BTW, with Sanguine Rose (and unlike with WJ), you can easily see this instruction on GitHub. build.json (which is actually a [JSON5](https://json5.org/) file) is this instruction, so the whole thing is absolutely transparent. And as it is a text-based instruction - it can be managed by using standard GitHub mechanisms (history tracking, merges, pull requests, and so on). 
+Oh, and with *Sanguine Rose* (unlike Wabbajack), you can easily see these instructions on GitHub. The build.json (which is actually a [JSON5](https://json5.org/) file) holds these instructions, so everything’s totally transparent. Plus, since it’s just text, you can use regular GitHub goodies like history tracking, merges, and pull requests to manage it.
 
-### Using in lieu of Wabbajack
+### Using Sanguine Rose instead of Wabbajack
 
-*Sanguine Rose* can be used to describe arbitrarily large modpacks, to the extent of the whole modded setup. In this sense, it can be used as a replacement for Wabbajack. Still, I am encouraging modpack developers to build your *Sanguine Rose* projects in modular manner, reusing work of the others, and keeping things "open" for the downstream changes. While I cannot prohibit using *Sanguine Rose* in other manner, huge closed monolithic setups are certainly not what *Sanguine Rose* is designed for. 
+*Sanguine Rose* can be used to describe modpacks of any size, even entire modded setups. In that way, it could replace Wabbajack. But, I still encourage modpack creators to build their *Sanguine Rose* projects in a modular way, reusing others' work, and keeping things "open" for future changes. Huge, closed-off setups aren't really what *Sanguine Rose* is meant for.
 
 ## A Word to Mod Authors
 
-*Sanguine Rose* project, being merely a *'how to build' instruction*, does not include any third-party copyrighted materials. With *Sanguine Rose* modpack (just like with Wabbajack modlist) users **still have to download your mod from the site where you have posted it**.
+The *Sanguine Rose* project is just a 'how to build' instruction and doesn't include any third-party copyrighted materials. With a *Sanguine Rose* modpack (just like with a Wabbajack modlist), users **still need to download your mod from the site where you've posted it.**
 
-### Why Sanguine Rose is Beneficial for mod authors
 
-- 📢 Overall, *Sanguine Rose* aims to improve your bottom line (whether measured in endorsements or in bitcoins) by enabling Joe Average user to make complicated setups, and by taking honest users away from those swindling folks who publish those whole downloadable half-terabyte folders without mod author's permission. **Unlike such modlists, *Sanguine Rose* projects do not include anything copyrighted, so end-users still need to download mods from wherever you decided to publish it**
-- ❤️ *Sanguine Rose* will provide a button to endorse all the mods included, and will advertise mod author's links to Patreon, Discord, etc. 
-- 👓 *Sanguine Rose* projects are 100% transparent. A faithfully-built *Sanguine Rose* project should contain **exactly zero** third-party material (and if your mod is copied without your permission - you'll be able to see it on GitHub, and ask GitHub to remove it). This is a major improvement over non-transparent Wabbajack images.
-- 🔧 I realize perfectly well that supporting users who are using 3rd-party modpacks, is not an option. However, *supporting modpack writers - who take care of supporting their users themselves - will save you a lot of effort*. After all, supporting 1 modpack developer is easier than supporting 100 users, and also we can expect that modpack developers are more dedicated and more knowledgeable than mod users.
-- 🔓 Last but not least, *Sanguine Rose* considers *all* mod authors as first-class citizens, *regardless of where they post their mods*. In other words, if your mod is on Loverslab (or anywhere else for that matter), it will get the same treatment as mods from Nexus (well, as long as I can get a permission from site owner). This will include screenshots while installing, links to your Patreon/Discord, bulk endorsements, and so on. For mod authors from LL, it is a major improvement over Nexus-centric Wabbajack. And smaller sites are very welcome to submit their own plugins to provide equivalent functionality. 
+### Why Sanguine Rose is Good for Mod Authors
 
-## Comparison with Wabbajack
+- 📢 Overall, *Sanguine Rose* aims to improve your bottom line (whether it’s more endorsements or more bitcoins) by making it easier for regular users to set up complex modded games.  It also tries to keep honest users away from those shady folks who share massive half-terabyte archives with hundreds of mods without getting permission from the mod authors. Unlike those modlists, *Sanguine Rose* projects don’t include any third-party copyrighted content, so **users still need to download your mods from wherever you’ve posted them.**
+- ❤️ *Sanguine Rose* will provide a button to endorse all the mods included, and will advertise mod author's links to their Patreon, Discord, etc. 
+- 👓 *Sanguine Rose* projects are 100% transparent. A faithfully-built *Sanguine Rose* project should contain **absolutely no** third-party material (and if someone copies your mod without permission, you’ll see it on GitHub and can ask GitHub to remove it). This is a big improvement over the non-transparent Wabbajack images.
+- 🔧 I totally get that supporting users who are using third-party modpacks won't work. But supporting *modpack developers* – who handle support for their users – can save you a ton of effort. After all, it’s way easier to support one modpack developer than 100 users, and modpack creators are usually more dedicated and knowledgeable than regular mod users.
+- 🔓 Last but not least, *Sanguine Rose* treats all mod authors as first-class citizens, *no matter where they post their mods*. So, if your mod is on Loverslab, it’ll get the same treatment as mods from Nexus (as long as I can get permission from Ashal). This includes things like showing screenshots while installing, links to your Patreon/Discord, bulk endorsements, and more. For mod authors on LL, this is a big upgrade over Nexus-focused Wabbajack. And smaller mod sites are welcome to submit their own plugins to provide the same features.
+
+## Sanguine Rose vs Wabbajack
 ### Similarities with Wabbajack
  
 - The idea is to build the whole game setup from some downloadable "image" ('how to build' instruction), and files from your Downloads folder.
