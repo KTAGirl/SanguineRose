@@ -1,6 +1,6 @@
 # Sanguine Rose
 
-**Sanguine Rose** is a *collaborative mod development environment*. It is designed to help several people to work together on [Mod Organizer 2](https://www.modorganizer.org/) (MO2) setups using GitHub, and is centered around "modpacks" - bunches of mods carefully assembled together, to facilitate further modding. 
+**Sanguine Rose** is a *collaborative development tool* for modded games. It is designed to help several people to work together on a heavily modded setup using GitHub, and is centered around "modpacks" - bunches of mods carefully assembled together, to facilitate further modding. It is aimed to be usable with both copy-everything-directly-to-game-folder setups (think NMM) and virtualized ([Mod Organizer 2](https://www.modorganizer.org/, MO2) setups. 
 
 ## This project is a Work In Progress! It’s not ready to use yet. Stay tuned! 
 
@@ -16,18 +16,18 @@ modpack is similar to a *library* from traditional software development. It is a
 
 ## On Sanguine Rose
 
-**Sanguine Rose** is a tool for MO2 users that makes it easy to collaborate on modpack development using GitHub. *Sanguine Rose* is inspired by [Wabbajack](https://github.com/wabbajack-tools/wabbajack), but is a completely separate development, with lots of improvements. 
+**Sanguine Rose** is a tool for modders that makes it easy to collaborate on modpack development using GitHub. *Sanguine Rose* is inspired by [Wabbajack](https://github.com/wabbajack-tools/wabbajack), but is a completely separate development, with lots of improvements (more on it below). 
 
 
 ### An automated 'how to build' instruction 
 
-In essence, each Sanguine Rose-based project is just a (machine-executable, but human-readable) *instruction on 'how to build the MO2 folder from Downloads folder'*. As in "go to such and such URL, get a file there, unpack it, and copy file X from the archive to this place within MO2 hierarchy". Rinse and repeat 200'000 times.
+In essence, each Sanguine Rose-based project is just a (machine-executable, but human-readable) *instruction on 'how to build your game folder (and MO2 folder, if applicable) from Downloads folder'*. As in "go to such and such URL, get a file there, unpack it, and copy file X from the archive to this target". Rinse and repeat 200'000 times.
 
 BTW, with Sanguine Rose (and unlike with WJ), you can easily see this instruction on GitHub. build.json (which is actually a [JSON5](https://json5.org/) file) is this instruction, so the whole thing is absolutely transparent. And as it is a text-based instruction - it can be managed by using standard GitHub mechanisms (history tracking, merges, pull requests, and so on). 
 
 ### Using in lieu of Wabbajack
 
-*Sanguine Rose* can be used to describe arbitrarily large modpacks, to the extent of the whole setup. In this sense, it can be used as a replacement for Wabbajack. Still, I am encouraging modpack developers to build your *Sanguine Rose* projects in modular manner, reusing work of the others, and keeping things "open" for the downstream changes. I cannot prohibit using *Sanguine Rose* in other manner, but huge closed monolithic setups are certainly not what *Sanguine Rose* is designed for. 
+*Sanguine Rose* can be used to describe arbitrarily large modpacks, to the extent of the whole modded setup. In this sense, it can be used as a replacement for Wabbajack. Still, I am encouraging modpack developers to build your *Sanguine Rose* projects in modular manner, reusing work of the others, and keeping things "open" for the downstream changes. While I cannot prohibit using *Sanguine Rose* in other manner, huge closed monolithic setups are certainly not what *Sanguine Rose* is designed for. 
 
 ## A Word to Mod Authors
 
@@ -43,46 +43,47 @@ BTW, with Sanguine Rose (and unlike with WJ), you can easily see this instructio
 
 ## Comparison with Wabbajack
 ### Similarities with Wabbajack
-
-- You absolutely must have a pristine Skyrim install. You should even keep SKSE and ENB out of your Skyrim folder by using the Root Builder plugin for MO2.
-   + *Sanguine Rose* will help you with making your Skyrim folder pristine. 
-- The idea is to build a portable MO2 setup from some downloadable "image", and files from your Downloads folder.
+ 
+- The idea is to build the whole game setup from some downloadable "image" ('how to build' instruction), and files from your Downloads folder.
 
 ### Advantages over Wabbajack
 
-- 📂 modpacks. Modpack is a *Sanguine Rose*-described bunch of closely related mods, which are only loosely related to the rest of the mod universe. For example, making a nice-looking female appearance modpack (such as 3BA) is a piece of art by itself, but it does not interfere too much with environment modding, or with male appearance modpack, or with quest mods. I hope that with time, there will be various modpacks all over github, so you can choose which ones to use as building blocks for your own modpack or setup. It is all about division of labor,   specialization, and encouraging collaboration. 
+- 📂 modpacks. Modpack is a *Sanguine Rose*-described bunch of closely related mods, which are only loosely related to the rest of the mod universe. For example, making a nice-looking female appearance modpack (such as 3BA) is a piece of art by itself, but it does not interfere too much with environment modding, or with male appearance modpack, or with quest mods. I hope that with time, there will be various modpacks all over github, so you can choose which ones to use as building blocks for your own modpack or setup. It is all about division of labor,   specialization, and encouraging collaboration.
+- ✔️ No strict requirement to use Mod Organizer. Sure, MO2 is a beautiful tool, and I am using it myself and wholeheartedly recommend it, but if you prefer other ways to build your mod pack - it is up to you. [this depends on "differential snapshots" feature, which is inherently heuristical, but hey - why not?] We should also be able to convert between MO and non-MO setups automatically.
+- 🚯 No strict requirement to use "pristine" game folder either. 
 - 🗽*Sanguine Rose* is independent and neutral. This is in contrast with Wabbajack, where top 2 contributors are from Nexus Mods. Among other things it means that while WJ does not allow paid mods, Sanguine Rose is completely neutral about it; as a piece of truly free software, Sanguine Rose doesn't feel like imposing any restrictions on the users, period. 
 - 📄 *Sanguine Rose* image is not a monolithic binary. Instead, it is a github project (with JSON5 file at its heart), with all the changes visible and most of them even understandable.
 - 👫 multiple ppl can now work on the same *Sanguine Rose* modpack.
 - ♻️ *Sanguine Rose* allows to share and re-use information such as "what's inside this particular archive", speeding things up (for such known archives, there is no need to extract and hash them locally on each box, saving time and global CO<sub>2</sub> footprint).  
-- 🔨 concept of transform: why uploading-downloading all those Bodyslide files  or DDSOpt-optimized textures, when they can be generated on the end-user box (using the same tools as you use, as all the tools and their config come in the same MO2 folder)?
+- 🔨 concept of transform: why uploading-downloading all those Bodyslide files  or DDSOpt-optimized textures, when they can be generated on the end-user box (using exactly the same tools as you use, as all the tools and their config are just files described by *Sanguine Rose* project)?
 - 🔩 automated file patch calculation and application 
 - 💰 *Sanguine Rose* as such does not have problems with paid mods. Modders also deserve to get paid, you know. Keep in mind that as a modder, it is your responsibility to comply with all the other licenses (including Bethesda's one).  
 - 📆 GitHub features, such as change tracking, merges, and pull requests. And it will be you deciding whether to accept pull request or not.
 - 🚀 Better Performance: *Sanguine Rose* is highly paralellized, and uses some significant improvements over WJ logic. *Sanguine Rose* is apparently already faster than Wabbajack, in spite of using allegedly slow Python rather than C#. `<troll mode>` Python rulezzzz! 🥇 `</troll mode>`
-- [PLANNED] ability to "mo-ify" existing non-MO ("overwrite-based, OMG") setup. We probably have enough information to start educated guesses. 
-- [FUTURE] an alternative way (using ReFS's CoW feature) to launch Skyrim without MO2 running and hooking into the game processes, may be a bit cleaner in runtime than MO2 at the cost of longer startup and shutdown times. Will still preserve MO2 compatibility, and will make MO-like development even cleaner than MO itself (I should be able to enforce that all writes go to overwrites, with both Skyrim and mod folders always kept pristine (well, after Sanguine Rose restores them back 😉).
+- [FUTURE] an alternative way (using ReFS's CoW feature) to provide MO2-like virtual file system but without MO2 running and hooking into the game processes. It may be a bit cleaner in runtime than MO2 at the cost of longer startup and shutdown times. Will still preserve MO2 compatibility, and will make MO-like development even cleaner than MO itself (I should be able to enforce that all writes go to overwrites, with both Skyrim and mod folders always kept pristine (well, after *Sanguine Rose* restores them back 😉).
 
 ### Downsides Compared to Wabbajack
 
-- ❌ No User Interface (UI): If you or someone else wants to create a GitHub project with a UI for Sanguine Rose, that would be great! I’m happy to support that by providing non-UI functions in Sanguine Rose, as long as your project uses a permissive license; no copyleft or other restrictions, please. This also means no stuff such as "Any quid-pro-quo payment structure in connection with... is strictly prohibited." either :angry: :rage: :scream: .
+- ❌ No User Interface (UI): sanguine-rose as such is already complicated enough, and UIs are not my cup of tea either. That being said, **if you want to create a GitHub project with a UI for Sanguine Rose, that would be great!** I’m happy to support that by providing non-UI functions in Sanguine Rose, as long as your project uses a permissive license; no copyleft or other restrictions, please. This also means no stuff such as "Any quid-pro-quo payment structure in connection with... is strictly prohibited." either :angry: :rage: :scream: .
 
 
 ## Prerequisites
 
+Note that the list below is for Skyrim. While sanguine-rose as such is game-neutral, supporting a game (in *sanguine-rose* speak, it is named "game universe") needs a "root" GitHub project - describing what "pristine" setup is, what are the well-known mods, where to get them, and so on. For example, for Skyrim such a root project is [sanguine-skyrim-root](https://github.com/dwemer-anonymous/sanguine-skyrim-root) (it was created using Sanguine Rose itself, but it requires some initial effort and quite a bit of maintenance). 
+
 ### Hardware
 - *Whatever you need to run your setup.*
 - *16GB RAM is a must; 32GB is super recommended.*
-- *You’ll also need additional disk space, quite a bit of it.*
+- *You’ll also need additional disk space, and quite a bit of it.*
 
 ### Accounts
-- *Steam* - You’ll need this for Skyrim or Fallout.
+- *Steam* - You’ll need this for original Skyrim. 
 - *[NexusMods](https://www.nexusmods.com/)* (preferably premium) - You’ll use this for downloads.
 - Accounts for all the other mod sites you are going to use (such as [LoversLab](https://www.loverslab.com/))
 
 ### Installed Stuff
 - *Steam*
-- *Skyrim* (Make sure it’s a PRISTINE install folder)
+- *Skyrim*
 - *You don’t necessarily need to install MO2 or tools like LOOT or xEdit separately. If you set up your YOUR-MODPACK project right, those will get installed into your portable MO2 instance by Sanguine Rose.*
 - *Python v3.10+*. Grab it from [Python Releases for Windows](https://www.python.org/downloads/windows/). The latest version is perfect, and no, I'm not going to support Python 2. Make sure to add `py` to your PATH environment variable.
 - You’ll also need to run sanguine-install.py from sanguine-rose project. It will download and install several things we need. 
