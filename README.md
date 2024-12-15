@@ -1,18 +1,18 @@
 # Sanguine Rose
 
-**Sanguine Rose** is a *collaborative development tool* for modded games. It is designed to help several people to work together on a heavily modded setup using GitHub, and is centered around "modpacks" - bunches of mods carefully assembled together, to facilitate further modding. It is aimed to be usable with both copy-everything-directly-to-game-folder setups (think NMM) and virtualized ([Mod Organizer 2](https://www.modorganizer.org/, MO2) setups. 
+**Sanguine Rose** is a tool that helps people work together to add hundreds of mods to a game.  It uses GitHub to share things, and makes managing big mod setups easier. *Sanguine Rose* is all about "modpacks" – groups of mods that make modding easier. You can use it for simple setups (just putting mods in the game folder) or for virtualized setups with mod managers like [Mod Organizer 2](https://www.modorganizer.org/) (MO2).
 
 ## This project is a Work In Progress! It’s not ready to use yet. Stay tuned! 
 
 ## WTF is modpack?
 
-We all know "mods" and "mod lists". Unfortunately, "mods" are way too small to deal with individually (managing 500 individual mods is quite an effort), and "mod list" is way too large, unwieldy, and tightly coupled to be easy to use (more often than not, mod lists are "closed" in a sense that there is very little chance to modify a typical mod list without breaking it). 
+We all know about "mods" and "mod lists." But here's the problem: mods are too small to deal with one by one (managing 500 mods is a big hassle), and mod lists are too big and messy to work with easily (plus, most are "closed," meaning you can't really change them without breaking things).
 
-Imagine, how nice it would be if somebody made a bunch of mods - such as female appearance (3BA or BHUNP), or male appearance (SOS or SAM), or weather+ENB (whatever your fancy is), or FNIS+Nemesis, or whatever-else - with such a bunch of mods _easily re-usable_. Then, when making your own mod setup, you wouldn't need to master all the modding - and can concentrate on whatever your fancy is, _building upon work which others want to share_. 
+Now, imagine if someone made a bunch of mods – like different looks for characters (3BA or BHUNP for females, SOS or SAM for males), weather mods+ENBs, FNIS+Nemesis, or whatever else – that were *super easy to reuse*. So, when you're setting up your own heavily modded game, you don't have to start from scratch – you can just *build on what others have already shared*, combine it as you wish, and simply add your own tweaks on top. It’s way easier to just say, "I want to use 3BA, this ENB+weather, and Nemesis, plus these few mods I’m really into," than setting up the whole thing from scratch.
 
-Here it goes - a concept of **modpack** - a pack of closely related mods, which are only loosely related to the rest of the mods out there. In theory, it can be as small as one single mod, or as large as the whole setup, but such extremes are usually not too practical. What is important is that developers should try to keep their modpacks *open* - in a sense, that adding another mod should not break too much. Modpacks can include other modpacks, allowing to create hierarchies, where each level adds its own value. 
+That's where the idea of modpacks comes in. A modpack is a group of closely related mods that are not tightly tied to other mods. It can be as small as one mod or as big as a whole setup, but usually, it's somewhere in between. The key is that modpacks should be open – meaning you can add stuff without breaking everything. The best part is, you can mix and match modpacks, stacking them so each one adds something cool and useful.
 
-modpack is similar to a *library* from traditional software development. It is a building block to enable development of larger things. Ideally, just as any software library, modpacks should be ["highly cohesive"](https://en.wikipedia.org/wiki/Cohesion_(computer_science)#High_cohesion) within the modpack, and only ["loosely coupled"](https://en.wikipedia.org/wiki/Coupling_(computer_programming)) with other modpacks and individual mods. 
+Think of a modpack like a library in programming. It’s a building block for bigger projects. Just like in coding, modpacks should be ["highly cohesive"](https://en.wikipedia.org/wiki/Cohesion_(computer_science)#High_cohesion) (everything in the pack works well together) and ["loosely coupled"](https://en.wikipedia.org/wiki/Coupling_(computer_programming)) (they don’t break other mods or modpacks when you add them).
 
 ## On Sanguine Rose
 
