@@ -95,8 +95,9 @@ def _install_vs_build_tools() -> None:
     exe = _download_file_nice_name(url)
     _print_green('Download complete.')
     _run_installer([exe], url, 'Make sure to check "Desktop Development with C++" checkbox.')
-    _print_green('Visual C++ build tools successfully installed.')
-
+    _print_green('Visual C++ build tools install started.')
+    _print_green('Please proceed with installation and restart {} afterwards.'.format(sys.argv[0]))
+    os._exit(0)
 
 def install_sanguine_prerequisites() -> None:
     _install_vs_build_tools()  # should run before installing pip modules
