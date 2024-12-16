@@ -70,11 +70,14 @@ def _read_dict_of_files(dirpath: str, name: str) -> dict[str, FileOnDisk]:
     return read_dict_from_pickled_file(fpath)
 
 
-def _write_dict_of_files(dirpath: str, name: str, files: dict[str, FileOnDisk],
-                         filteredfiles: dict[str, FileOnDisk]) -> None:
+def _write_dict_of_files(dirpath: str, name: str, filesbypath: dict[str, FileOnDisk],
+                         filteredfiles: list[FileOnDisk]) -> None:
     assert is_normalized_dir_path(dirpath)
     fpath = dirpath + 'foldercache.' + name + '.pickle'
-    outfiles: dict[str, FileOnDisk] = files | filteredfiles
+    outfiles: dict[str, FileOnDisk] = filesbypath
+    for f in filteredfiles:
+        assert f.file_path not in outfiles
+        outfiles[f.file_path] = f
     with open(fpath, 'wb') as wf:
         # noinspection PyTypeChecker
         pickle.dump(outfiles, wf)
@@ -207,7 +210,7 @@ def _calc_hash_task_func(param: tuple[str, float, int]) -> tuple[FileOnDisk]:
 
 
 def _save_files_task_func(
-        param: tuple[str, str, dict[str, FileOnDisk], dict[str, FileOnDisk], dict[str, dict[str, int]]]) -> None:
+        param: tuple[str, str, dict[str, FileOnDisk], list[FileOnDisk], dict[str, dict[str, int]]]) -> None:
     (cachedir, name, filesbypath, filteredfiles, scan_stats) = param
     _write_dict_of_files(cachedir, name, filesbypath, filteredfiles)
     _write_all_scan_stats(cachedir, name, scan_stats)

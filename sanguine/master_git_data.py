@@ -270,7 +270,7 @@ class MasterGitData:
     _new_hashes_by: str
     _dirty_ar: bool
     _dirty_fo: bool
-    _ar_is_ready: bool
+    _ar_is_ready: int  # 0 - not ready, 1 - partially ready, 2 - fully ready
     _fo_is_ready: bool
 
     _LOADAROWNTASKNAME = 'sanguine.mastergit.loadarown'
@@ -290,7 +290,7 @@ class MasterGitData:
         self._nhashes_requested = 0
         self._dirty_ar = False
         self._dirty_fo = False
-        self._ar_is_ready = False
+        self._ar_is_ready = 0
         self._fo_is_ready = False
 
     def _append_archive(self, ar: Archive) -> None:
@@ -317,6 +317,8 @@ class MasterGitData:
         for ar in archives:
             self._append_archive(ar)
         self._cache_data |= cacheoverrides
+        assert self._ar_is_ready == 0
+        self._ar_is_ready = 1
 
     def _archive_hashing_own_task_func(self, out: tuple[list[Archive]]):
         (archives,) = out
@@ -330,7 +332,7 @@ class MasterGitData:
             savetask = tasks.Task(savetaskname, _save_archives_task_func,
                                   (self._master_git_dir, list(self._archives_by_hash.values())), [])
             parallel.add_task(savetask)
-        self._ar_is_ready = True
+        self._ar_is_ready = 2
 
     def _load_file_origins_own_task_func(self, out: tuple[dict[bytes, list[FileOrigin]], dict[str, any]]) -> None:
         (forigins, cacheoverrides) = out
@@ -412,6 +414,6 @@ class MasterGitData:
 
         self._fo_is_ready = True
 
-    def archived_file_by_hash(self, h: bytes) -> list[tuple[Archive, FileInArchive]] | None:
-        assert self._ar_is_ready
+    def archived_file_by_hash(self, h: bytes, partialok: bool = False) -> list[tuple[Archive, FileInArchive]] | None:
+        assert (self._ar_is_ready >= 1) if partialok else (self._ar_is_ready >= 2)
         return self._file_origins_by_hash.get(h)

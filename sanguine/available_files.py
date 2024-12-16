@@ -171,7 +171,7 @@ class AvailableFiles:
             if ext == '.meta':
                 continue
 
-            if not self._master_data.archived_file_by_hash(ar.file_hash):
+            if not self._master_data.archived_file_by_hash(ar.file_hash, partialok=True):
                 if ext in sanguine.archives.all_archive_plugins_extensions():
                     self._master_data.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
                 else:
