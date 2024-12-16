@@ -414,6 +414,10 @@ class MasterGitData:
 
         self._fo_is_ready = True
 
-    def archived_file_by_hash(self, h: bytes, partialok: bool = False) -> list[tuple[Archive, FileInArchive]] | None:
+    def archived_file_by_hash(self, h: bytes) -> list[tuple[Archive, FileInArchive]] | None:
+        assert self._ar_is_ready == 2
+        return self._archived_files_by_hash.get(h)
+
+    def archive_by_hash(self, arh: bytes, partialok: bool = False) -> Archive | None:
         assert (self._ar_is_ready >= 1) if partialok else (self._ar_is_ready >= 2)
-        return self._file_origins_by_hash.get(h)
+        return self._archives_by_hash.get(arh)
