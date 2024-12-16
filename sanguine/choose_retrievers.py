@@ -1,5 +1,5 @@
 from sanguine.file_retriever import (FileRetriever, FileRetrieverFromSingleArchive,
-                                     FileRetrieverFromNestedArchives, GithubFileRetriever)
+                                     FileRetrieverFromNestedArchives, GithubFileRetriever, ZeroFileRetriever)
 
 
 def _archive_hash(r: FileRetriever) -> bytes | None:
@@ -146,9 +146,27 @@ def _number_covered_by_archive(cluster: list[tuple[bytes, list[FileRetriever]]],
     return out
 
 
-def choose_retrievers(inlist: list[tuple[bytes, list[FileRetriever]]], archive_weights: dict[bytes, float]) -> list[
+def _retriever_key(fr: FileRetriever, archive_weights: dict[bytes, float]) -> str:
+    if isinstance(fr, ZeroFileRetriever):
+        return '0'
+    elif isinstance(fr, GithubFileRetriever):
+        return '1.' + str(fr.file_hash)
+    elif isinstance(fr, FileRetrieverFromSingleArchive) or isinstance(fr, FileRetrieverFromNestedArchives):
+        arh = _archive_hash(fr)
+        assert arh is not None
+        return '2.' + str(int(archive_weights[arh])) + '.' + str(fr.file_hash)
+    else:
+        assert False
+
+
+def choose_retrievers(inlist0: list[tuple[bytes, list[FileRetriever]]], archive_weights: dict[bytes, float]) -> list[
     tuple[bytes, FileRetriever | None]]:
     out: list[tuple[bytes, FileRetriever | None]] = []
+
+    # sorting
+    inlist: list[tuple[bytes, list[FileRetriever]]] = []
+    for item in inlist0:
+        inlist.append((item[0], sorted(item[1], key=lambda fr: _retriever_key(fr, archive_weights))))
 
     # first pass: choosing unique ones, as well as GitHub ones
     remaining: list[tuple[bytes, list[FileRetriever]]] = []
