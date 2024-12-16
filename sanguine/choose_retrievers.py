@@ -96,8 +96,8 @@ def _covers_set(cluster: list[tuple[bytes, list[FileRetriever]]], filtered_archi
     return True
 
 
-def _cost_of_set(filtered_archives: dict[bytes, int], archive_weights: dict[bytes, float]) -> float:
-    out = 0.
+def _cost_of_set(filtered_archives: dict[bytes, int], archive_weights: dict[bytes, int]) -> int:
+    out = 0
     for arh in filtered_archives:
         out += archive_weights[arh]
     return out
@@ -105,7 +105,7 @@ def _cost_of_set(filtered_archives: dict[bytes, int], archive_weights: dict[byte
 
 def _full_search_retrievers(out: list[tuple[bytes, FileRetriever | None]],
                             cluster: list[tuple[bytes, list[FileRetriever]]], cluster_archives0: dict[bytes, int],
-                            archive_weights: dict[bytes, float]):
+                            archive_weights: dict[bytes, int]):
     cluster_archives = [h for h in cluster_archives0.keys()]
     assert len(cluster_archives) <= _MAX_EXPONENT_RETRIEVERS
     bestcost = None
@@ -146,7 +146,7 @@ def _number_covered_by_archive(cluster: list[tuple[bytes, list[FileRetriever]]],
     return out
 
 
-def _retriever_key(fr: FileRetriever, archive_weights: dict[bytes, float]) -> str:
+def _retriever_key(fr: FileRetriever, archive_weights: dict[bytes, int]) -> str:
     if isinstance(fr, ZeroFileRetriever):
         return '0'
     elif isinstance(fr, GithubFileRetriever):
@@ -154,12 +154,12 @@ def _retriever_key(fr: FileRetriever, archive_weights: dict[bytes, float]) -> st
     elif isinstance(fr, FileRetrieverFromSingleArchive) or isinstance(fr, FileRetrieverFromNestedArchives):
         arh = _archive_hash(fr)
         assert arh is not None
-        return '2.' + str(int(archive_weights[arh])) + '.' + str(fr.file_hash)
+        return '2.' + str(archive_weights[arh]) + '.' + str(fr.file_hash)
     else:
         assert False
 
 
-def choose_retrievers(inlist0: list[tuple[bytes, list[FileRetriever]]], archive_weights: dict[bytes, float]) -> list[
+def choose_retrievers(inlist0: list[tuple[bytes, list[FileRetriever]]], archive_weights: dict[bytes, int]) -> list[
     tuple[bytes, FileRetriever | None]]:
     out: list[tuple[bytes, FileRetriever | None]] = []
 
@@ -235,7 +235,7 @@ def choose_retrievers(inlist0: list[tuple[bytes, list[FileRetriever]]], archive_
         while len(cluster_archives) > _MAX_EXPONENT_RETRIEVERS:
             # "greedy" reduction of search space
             #           for the time being, we're just taking lowest-cost archives (starting from highest-use within lowest-cost)
-            xarchives: list[tuple[bytes, float, int]] = sorted(
+            xarchives: list[tuple[bytes, int, int]] = sorted(
                 [(arh, archive_weights[arh], _number_covered_by_archive(cluster, arh)) for arh in
                  cluster_archives.keys()],
                 key=lambda x2: (x2[1], x2[2]))
