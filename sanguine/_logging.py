@@ -1,5 +1,7 @@
 import logging
 import logging.handlers
+import time
+
 
 class _SanguineFormatter(logging.Formatter):
     FORMAT: str = '[%(levelname)s]: %(message)s (%(filename)s:%(lineno)d)'
@@ -17,12 +19,12 @@ class _SanguineFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-_FORMAT: str = '[%(levelname)s@%(asctime)s]: %(message)s (%(filename)s:%(lineno)d)'
+_FILEFORMAT: str = '[%(levelname)s@%(sanguine_when).2f]:%(sanguine_prefix)s %(message)s (%(filename)s:%(lineno)d)'
 
 
 def _html_format(color: str, bold: bool = False) -> str:
     return '<div style="margin: -1em -1em; padding: 0.5em 1em; white-space:nowrap; font-size:1.2em; background-color:black; color:' + color + (
-        '; font-weight:600' if bold else '') + '; font-family:monospace;">' + _FORMAT + '</div>'
+        '; font-weight:600' if bold else '') + '; font-family:monospace;">' + _FILEFORMAT + '</div>'
 
 
 class _SanguineFileFormatter(logging.Formatter):
@@ -34,13 +36,14 @@ class _SanguineFileFormatter(logging.Formatter):
         logging.CRITICAL: _html_format('#ff0000', True)
     }
 
-    def __init__(self) -> None:
-        super().__init__(datefmt='%H:%M:%S')
-
     def format(self, record) -> str:
         record.msg = record.msg.replace('\n', '<br>')
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt)
+        if not hasattr(record, 'sanguine_when'):
+            record.sanguine_when = time.perf_counter() - _started
+        if not hasattr(record, 'sanguine_prefix'):
+            record.sanguine_prefix = ''
         return formatter.format(record)
 
 
@@ -55,6 +58,8 @@ _console_handler.setFormatter(_SanguineFormatter())
 _logger.addHandler(_console_handler)
 
 _logger_file_handler: logging.StreamHandler | None = None
+
+_started: float = time.perf_counter()
 
 
 def add_file_logging(fpath: str) -> None:
@@ -71,12 +76,20 @@ def add_logging_handler(handler: logging.StreamHandler) -> None:
     _logger.addHandler(handler)
 
 
-def log_to_file_only(record: logging.LogRecord, prefix: str = None) -> None:
+def log_to_file_only(record: logging.LogRecord) -> None:
     global _logger_file_handler
-    if prefix:
-        record.msg = prefix + record.msg
+    if _logger_file_handler is None:
+        return
     _logger_file_handler.emit(record)
 
+
+def logging_started() -> float:
+    global _started
+    return _started
+
+
+# def logging_format_when(dt:float) -> str:
+#    return '{:.2f}'.format(dt)
 
 def debug(msg: str) -> None:
     if not __debug__:

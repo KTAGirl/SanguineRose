@@ -196,8 +196,8 @@ def _scan_folder_task_func(
     started = time.perf_counter()
     lfilesbypath = len(filesbypath)
     FolderCache.scan_dir(started, sdout, stats, rootpath, taskroot, filesbypath, pubfilesbypath, exdirs, name)
-    debug('{}FolderCache._scan_folder_task_func(): requested_files/requested_dirs/scanned_files={}/{}/{}'.format(
-        tasks.log_process_prefix(), len(sdout.requested_files), len(sdout.requested_dirs), len(sdout.scanned_files)))
+    debug('FolderCache._scan_folder_task_func(): requested_files/requested_dirs/scanned_files={}/{}/{}'.format(
+        len(sdout.requested_files), len(sdout.requested_dirs), len(sdout.scanned_files)))
     assert len(filesbypath) == lfilesbypath
     return exdirs, stats, sdout
 

@@ -6,15 +6,15 @@ from enum import IntEnum
 from multiprocessing import Process, Queue as PQueue, shared_memory
 from threading import Thread  # only for logging!
 
-from sanguine._logging import add_logging_handler, log_to_file_only
+from sanguine._logging import add_logging_handler, log_to_file_only, logging_started
 from sanguine.common import *
 
 _proc_num: int = -1  # number of child process
 
 
-def this_proc_num() -> int:
-    global _proc_num
-    return _proc_num
+# def this_proc_num() -> int:
+#    global _proc_num
+#    return _proc_num
 
 
 class _ChildProcessLogHandler(logging.StreamHandler):
@@ -26,7 +26,7 @@ class _ChildProcessLogHandler(logging.StreamHandler):
 
     def emit(self, record: logging.LogRecord) -> None:
         global _proc_num
-        self.logq.put((_proc_num, record))
+        self.logq.put((_proc_num, time.perf_counter(), record))
 
 
 class SharedReturn:
@@ -78,11 +78,10 @@ class _PoolOfSharedReturns:
 
 
 _pool_of_shared_returns = _PoolOfSharedReturns()
-_started: float = time.perf_counter()
 
 
-def _log_time() -> float:
-    return time.perf_counter() - _started
+# def _log_time() -> float:
+#    return time.perf_counter() - _started
 
 
 class SharedPublication:
@@ -174,9 +173,9 @@ def make_shared_return_param(shared: SharedReturn) -> SharedReturnParam:
     return shared.name(), _proc_num
 
 
-def log_process_prefix() -> str:
-    global _proc_num
-    return 'Process #{}: '.format(_proc_num + 1)
+# def log_process_prefix() -> str:
+#    global _proc_num
+#    return 'Process #{}: '.format(_proc_num + 1)
 
 
 type SharedPubParam = str
@@ -205,8 +204,10 @@ def _log_proc_func(loqq: PQueue) -> None:
         record = loqq.get()
         if record is None:
             break
-        (procnum, rec) = record
-        log_to_file_only(rec, 'Process #{}: '.format(procnum))
+        (procnum, t, rec) = record
+        rec.sanguine_when = t - logging_started()
+        rec.sanguine_prefix = 'Process #{}: '.format(procnum + 1)
+        log_to_file_only(rec)
 
 
 class _Started:
@@ -214,7 +215,7 @@ class _Started:
         self.proc_num = proc_num
 
 
-def _process_nonown_tasks(tasks: list[list], proc_num: int, dwait: float | None) -> tuple[Exception | None, any]:
+def _process_nonown_tasks(tasks: list[list], dwait: float | None) -> tuple[Exception | None, any]:
     assert isinstance(tasks, list)
     outtasks: list[tuple[str, tuple[float, float], any]] = []
     for tplus in tasks:
@@ -224,35 +225,30 @@ def _process_nonown_tasks(tasks: list[list], proc_num: int, dwait: float | None)
         t0 = time.perf_counter()
         tp0 = time.process_time()
         if dwait is not None:
-            info('{:.2f}: Process #{}: after waiting for {:.2f}s, starting task {}'.format(
-                _log_time(), proc_num + 1, dwait, task.name))
+            info('after waiting for {:.2f}s, starting task {}'.format(dwait, task.name))
             dwait = None
         else:
-            info('{:.2f}: Process #{}: starting task {}'.format(
-                _log_time(), proc_num + 1, task.name))
+            info('starting task {}'.format(task.name))
         (ex, out) = _run_task(task, tplus[1:])
         if ex is not None:
             return ex, None  # for tplus
         elapsed = time.perf_counter() - t0
         cpu = time.process_time() - tp0
-        info('{:.2f}: Process #{}: done task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
-            _log_time(), proc_num + 1, task.name, cpu, elapsed))
+        info('done task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(task.name, cpu, elapsed))
         outtasks.append((task.name, (cpu, elapsed), out))
         # end of for tplus
     return None, outtasks
 
 
-def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue, logq: PQueue) -> None:
+def _proc_func(proc_num: int, inq: PQueue, outq: PQueue, logq: PQueue) -> None:
     try:
-        global _started
-        _started = parent_started
         global _proc_num
         assert _proc_num == -1
         _proc_num = proc_num
 
         add_logging_handler(_ChildProcessLogHandler(logq))
 
-        debug('Process #{} started'.format(proc_num + 1))
+        debug('Process started')
         outq.put(_Started(_proc_num))
         ex = None
         while True:
@@ -266,12 +262,11 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue, 
             (tasks, processedshm) = msg
             if processedshm is not None:
                 assert tasks is None
-                info('Process #{}: after waiting for {:.2f}s, releasing shm={}'.format(
-                    proc_num + 1, dwait, processedshm))
+                info('after waiting for {:.2f}s, releasing shm={}'.format(dwait, processedshm))
                 _pool_of_shared_returns.done_with(processedshm)
                 continue  # while True
 
-            ex, outtasks = _process_nonown_tasks(tasks, proc_num, dwait)
+            ex, outtasks = _process_nonown_tasks(tasks, dwait)
             if ex is not None:
                 break  # while True
             outq.put((proc_num, outtasks))
@@ -280,11 +275,11 @@ def _proc_func(parent_started: float, proc_num: int, inq: PQueue, outq: PQueue, 
         if ex is not None:
             outq.put(ex)
     except Exception as e:
-        critical('Process #{}: tasks internal exception: {}'.format(proc_num + 1, e))
+        critical('_proc_func() internal exception: {}'.format(e))
         warn(traceback.format_exc())
         outq.put(e)
     _pool_of_shared_returns.cleanup()
-    debug('Process #{}: exiting'.format(proc_num + 1))
+    debug('exiting process')
 
 
 class _TaskGraphNodeState(IntEnum):
@@ -383,6 +378,9 @@ class Parallel:
 
     def __init__(self, jsonfname: str | None, nproc: int = 0, dbg_serialize: bool = False) -> None:
         # dbg_serialize allows debugging non-own Tasks
+        global _proc_num
+        assert _proc_num == -1
+
         assert nproc >= 0
         if nproc:
             self.nprocesses = nproc
@@ -428,7 +426,7 @@ class Parallel:
         for i in range(self.nprocesses):
             inq = PQueue()
             self.inqueues.append(inq)
-            p = Process(target=_proc_func, args=(_started, i, inq, self.outq, self.logq))
+            p = Process(target=_proc_func, args=(i, inq, self.outq, self.logq))
             self.processes.append(p)
             p.start()
             self.processesload.append(0)
@@ -630,8 +628,8 @@ class Parallel:
 
         maintelapsed = time.perf_counter() - maintstarted
         info(
-            '{:.2f}: Parallel: main thread: waited+owntasks+scheduler+unaccounted=elapsed {:.2f}+{:.2f}+{:.2f}+{:.2f}={:.2f}s, {:.1f}% load'.format(
-                _log_time(), maintwait, maintown, maintschedule, maintelapsed - maintwait - maintown - maintschedule,
+            'Parallel/main process: waited+owntasks+scheduler+unaccounted=elapsed {:.2f}+{:.2f}+{:.2f}+{:.2f}={:.2f}s, {:.1f}% load'.format(
+                maintwait, maintown, maintschedule, maintelapsed - maintwait - maintown - maintschedule,
                 maintelapsed, 100 * (1. - maintwait / maintelapsed)))
         info("Parallel: breakdown per task type (task name before '.'):")
         for key, val in owntaskstats.items():
@@ -647,12 +645,12 @@ class Parallel:
             dt = time.perf_counter() - started
             if strwait is not None:
                 info(
-                    '{:.2f}: Parallel: after waiting for {}, received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
-                        _log_time(), strwait, taskname, procnum + 1, dt, taskt, cput))
+                    'Parallel: after waiting for {}, received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
+                        strwait, taskname, procnum + 1, dt, taskt, cput))
             else:
                 info(
-                    '{:.2f}: Parallel: received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
-                        _log_time(), taskname, procnum + 1, dt, taskt, cput))
+                    'Parallel: received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
+                        taskname, procnum + 1, dt, taskt, cput))
 
             strwait = None
             self._update_weight(taskname, taskt)
@@ -702,7 +700,7 @@ class Parallel:
             return False
 
         if self.dbg_serialize:
-            ex, out = _process_nonown_tasks(taskpluses, -1, None)
+            ex, out = _process_nonown_tasks(taskpluses, None)
             if ex is not None:
                 raise ex
             self._process_out_tasks(pidx, out, None)
@@ -710,7 +708,7 @@ class Parallel:
 
         msg = (taskpluses, None)
         self.inqueues[pidx].put(msg)
-        info('{:.2f}: Parallel: assigned tasks {} to process #{}'.format(_log_time(), tasksstr, pidx + 1))
+        info('Parallel: assigned tasks {} to process #{}'.format(tasksstr, pidx + 1))
         if __debug__:  # pickle.dumps is expensive by itself
             debug('Parallel: request size: {}'.format(len(pickle.dumps(msg))))
         self.processesload[pidx] += 1
@@ -719,7 +717,7 @@ class Parallel:
     def _notify_sender_shm_done(self, pidx: int, name: str) -> None:
         if pidx < 0:
             assert pidx == -1
-            debug('{:.2f}: Parallel: Releasing own shm={}'.format(_log_time(), name))
+            debug('Parallel: Releasing own shm={}'.format(name))
             _pool_of_shared_returns.done_with(name)
         else:
             self.inqueues[pidx].put((None, name))
@@ -744,7 +742,7 @@ class Parallel:
         assert len(params) <= len(ot.task.dependencies)
         assert len(params) <= 3
 
-        info('{:.2f}: Parallel: running own task {}'.format(_log_time(), ot.task.name))
+        info('Parallel: running own task {}'.format(ot.task.name))
         t0 = time.perf_counter()
         tp0 = time.process_time()
 
@@ -759,8 +757,8 @@ class Parallel:
 
         elapsed = time.perf_counter() - t0
         cpu = time.process_time() - tp0
-        info('{:.2f}: Parallel: done own task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
-            _log_time(), ot.task.name, cpu, elapsed))
+        info('Parallel: done own task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
+            ot.task.name, cpu, elapsed))
         towntask += elapsed
 
         lastdot = ot.task.name.rfind('.')
