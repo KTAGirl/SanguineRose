@@ -1,9 +1,24 @@
 import importlib
 import subprocess
 
-# unlike install_helpers, install_checks runs after install, so we're free to use anything we want
-from sanguine.common import *
-from sanguine.install_helpers import REQUIRED_PIP_MODULES, PIP2PYTHON_MODULE_NAME_REMAPPING
+# for install_checks we cannot use any files with non-guaranteed dependencies, so we:
+#                    1. may use only those Python modules installed by default, and
+#                    2. may use only those sanguine modules which are specifically designated as install-friendly
+
+REQUIRED_PIP_MODULES = ['json5', 'bethesda-structs', 'pywin32']
+PIP2PYTHON_MODULE_NAME_REMAPPING = {'bethesda-structs': 'bethesda_structs', 'pywin32': ['win32api', 'win32file']}
+
+
+def print_yellow(s: str) -> None:
+    print('\x1b[93m' + s + '\x1b[0m')
+
+
+def print_redbold(s: str) -> None:
+    print('\x1b[91;1m' + s + '\x1b[0m')
+
+
+def print_green(s: str) -> None:
+    print('\x1b[32m' + s + '\x1b[0m')
 
 
 def _is_module_installed(module: str) -> bool:
@@ -15,8 +30,9 @@ def _is_module_installed(module: str) -> bool:
 
 
 def _not_installed(msg: str) -> None:
-    critical(msg)
-    critical('Aborting. Please make sure to run sanguine-rose/sanguine-install.py')
+    print_redbold(msg)
+    print_redbold('Aborting. Please make sure to run sanguine-rose/sanguine-install.py')
+    # noinspection PyProtectedMember, PyUnresolvedReferences
     os._exit(1)
 
 
@@ -40,8 +56,8 @@ def check_sanguine_prerequisites() -> None:
             _check_module(m)
 
     if subprocess.call(['git', '--version']) != 0:
-        critical('git is not found in PATH.')
-        critical(
+        print_redbold('git is not found in PATH.')
+        print_redbold(
             'Aborting. Please make sure to install "Git for Windows" or "GitHub Desktop" (preferred) and include folder with git.exe into PATH.')
 
-    info('All sanguine prerequisites are ok.')
+    print_green('All sanguine prerequisites are ok.')

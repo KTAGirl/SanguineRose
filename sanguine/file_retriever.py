@@ -11,7 +11,7 @@ if typing.TYPE_CHECKING:
 
 ### generic FileRetriever
 
-class FileRetriever:  # new dog breed ;-)
+class FileRetriever(ABC):  # new dog breed ;-)
     # Provides a base class for retrieving files from already-available data
     available: AvailableFiles
     file_hash: bytes

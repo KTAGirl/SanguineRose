@@ -1,5 +1,5 @@
-from sanguine.plugin_handler import load_plugins
 from sanguine.common import *
+from sanguine.plugin_handler import load_plugins
 
 
 class FileInArchive:
@@ -27,7 +27,7 @@ class Archive:
         self.by = by
 
 
-class ArchivePluginBase:
+class ArchivePluginBase(ABC):
     def __init__(self) -> None:
         pass
 

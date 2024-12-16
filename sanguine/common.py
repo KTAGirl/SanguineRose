@@ -8,7 +8,7 @@ import pickle
 import traceback
 import typing
 # noinspection PyUnresolvedReferences
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 # noinspection PyUnresolvedReferences
 from collections.abc import Callable, Generator, Iterable
 # noinspection PyUnresolvedReferences

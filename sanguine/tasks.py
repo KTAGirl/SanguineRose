@@ -1,8 +1,6 @@
 # mini-micro <s>skirt</s>, sorry, lib for data-driven parallel processing
 
 import logging
-# noinspection PyUnresolvedReferences
-import pickle
 import time
 from enum import IntEnum
 from multiprocessing import Process, Queue as PQueue, shared_memory
@@ -608,8 +606,8 @@ class Parallel:
 
                 critical(
                     'Parallel: All children terminated, aborting due to an exception in a child process. For the exception itself, see log above.')
-                # noinspection PyProtectedMember
-                os._exit(13)  # if using sys.exit(), confusing logging will occur
+                # noinspection PyProtectedMember, PyUnresolvedReferences
+                os._exit(1)  # if using sys.exit(), confusing logging will occur
 
             if isinstance(got, _Started):
                 self.procrunningconfirmed[got.proc_num] = True

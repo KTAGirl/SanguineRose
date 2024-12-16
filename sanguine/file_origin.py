@@ -1,12 +1,12 @@
 import re
 
 import sanguine.git_data_file as gitdatafile
-from sanguine.plugin_handler import load_plugins
 from sanguine.common import *
 from sanguine.git_data_file import GitDataParam, GitDataType, GitDataHandler
+from sanguine.plugin_handler import load_plugins
 
 
-class FileOrigin:
+class FileOrigin(ABC):
     tentative_name: str
 
     def __init__(self, name: str) -> None:
@@ -62,7 +62,7 @@ class GitFileOriginsReadHandler(GitDataHandler):
         return h
 
 
-class MetaFileParser:
+class MetaFileParser(ABC):
     meta_file_path: str
 
     def __init__(self, meta_file_path: str) -> None:
@@ -79,7 +79,7 @@ class MetaFileParser:
 
 ### plugins
 
-class FileOriginPluginBase:
+class FileOriginPluginBase(ABC):
     def __init__(self) -> None:
         pass
 

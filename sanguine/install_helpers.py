@@ -4,8 +4,13 @@ import shutil
 import subprocess
 import sys
 
-# for install_helpers we cannot use any files with non-guaranteed dependencies, so we need to be very conservative here
 import sanguine.simple_download as simple_download
+from sanguine.install_checks import REQUIRED_PIP_MODULES, print_green, print_yellow, print_redbold
+
+
+# for install_helpers we cannot use any files with non-guaranteed dependencies, so we:
+#                     1. may use only those Python modules installed by default, and
+#                     2. may use only those sanguine modules which are specifically designated as install-friendly
 
 
 ### helpers
@@ -14,40 +19,25 @@ def _install_pip_module(module: str) -> None:
     subprocess.check_call([sys.executable, '-m', 'pip', 'install', module])
 
 
-REQUIRED_PIP_MODULES = ['json5', 'bethesda-structs', 'pywin32']
-PIP2PYTHON_MODULE_NAME_REMAPPING = {'bethesda-structs': 'bethesda_structs', 'pywin32': ['win32api', 'win32file']}
-
-
-def _print_yellow(s: str) -> None:
-    print('\x1b[93m' + s + '\x1b[0m')
-
-
-def _print_redbold(s: str) -> None:
-    print('\x1b[91;1m' + s + '\x1b[0m')
-
-
-def _print_green(s: str) -> None:
-    print('\x1b[32m' + s + '\x1b[0m')
-
-
 ### install
 
 def _run_installer(cmd: list[str], sitefrom: str, msg: str) -> None:
-    _print_redbold("We're about to run the following installer: {}".format(cmd[0]))
-    _print_yellow("It was downloaded from {}".format(sitefrom))
-    _print_yellow("Feel free to run it through your favorite virus checker,")
-    _print_yellow("     but when, after entering 'Y' below, Windows will ask you stupid questions,")
-    _print_redbold("     please make sure to tell Windows that you're ok with it")
+    print_redbold("We're about to run the following installer: {}".format(cmd[0]))
+    print_yellow("It was downloaded from {}".format(sitefrom))
+    print_yellow("Feel free to run it through your favorite virus checker,")
+    print_yellow("     but when, after entering 'Y' below, Windows will ask you stupid questions,")
+    print_redbold("     please make sure to tell Windows that you're ok with it")
 
     if msg:
-        _print_redbold(msg)
+        print_redbold(msg)
 
     while True:
         ok = input('Do you want to proceed (Y/N)?')
         if ok == 'Y' or ok == 'y':
             break
         if ok == 'N' or ok == 'n':
-            _print_redbold('Aborting installation. sanguine-rose is likely to be unusable')
+            print_redbold('Aborting installation. sanguine-rose is likely to be unusable')
+            # noinspection PyProtectedMember, PyUnresolvedReferences
             os._exit(1)
 
     subprocess.check_call(cmd, shell=True)
@@ -84,24 +74,26 @@ def _install_vs_build_tools() -> None:
             # _print_yellow(outstr)
             m = re.search(r'productId\s*:\s*(Microsoft.VisualStudio.Product.[a-zA-Z0-9]*)', outstr)
             if m:
-                _print_green('{} found, no need to download/install Visual Studio'.format(m.group(1)))
+                print_green('{} found, no need to download/install Visual Studio'.format(m.group(1)))
                 return
 
     urls = simple_download.pattern_from_url('https://visualstudio.microsoft.com/visual-cpp-build-tools/',
                                             r'href="(https://aka.ms/vs/.*/release/vs_BuildTools.exe)"')
     assert len(urls) == 1
     url = urls[0]
-    _print_green('Downloading {}...'.format(url))
+    print_green('Downloading {}...'.format(url))
     exe = _download_file_nice_name(url)
-    _print_green('Download complete.')
+    print_green('Download complete.')
     _run_installer([exe], url, 'Make sure to check "Desktop Development with C++" checkbox.')
-    _print_green('Visual C++ build tools install started.')
-    _print_green('Please proceed with installation and restart {} afterwards.'.format(sys.argv[0]))
+    print_green('Visual C++ build tools install started.')
+    print_green('Please proceed with installation and restart {} afterwards.'.format(sys.argv[0]))
+    # noinspection PyProtectedMember, PyUnresolvedReferences
     os._exit(0)
+
 
 def install_sanguine_prerequisites() -> None:
     _install_vs_build_tools()  # should run before installing pip modules
 
     for m in REQUIRED_PIP_MODULES:
         _install_pip_module(m)
-        _print_green('pip module {} successfully installed.'.format(m))
+        print_green('pip module {} successfully installed.'.format(m))
