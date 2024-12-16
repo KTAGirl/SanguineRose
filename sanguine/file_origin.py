@@ -52,9 +52,11 @@ class GitFileOriginsReadHandler(GitDataHandler):
 
     @staticmethod
     def init_base_file_origin(fo: FileOrigin, common_param: tuple[str, bytes]) -> None:
-        assert type(fo) is FileOrigin  # should be exactly FileOrigin, not a subclass
+        #breakpoint()
+        #assert type(fo) is FileOrigin  # should be exactly FileOrigin, not a subclass
         (n, _) = common_param
         fo.__init__(n)
+        #warn('init_base_file_origin')
 
     @staticmethod
     def hash_from_common_param(common_param: tuple[str, bytes]) -> bytes:

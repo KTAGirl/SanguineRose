@@ -382,10 +382,9 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         allscantasks: list[tuple[str, str, int, list[str]]] = []  # [(root,path,nf,exdirs)]
 
         for folderplus in self._folder_list:
-            (rootpath, extexdirs) = folderplus
-            scan_stats = self._all_scan_stats.get(rootpath)
-            rootstatnode = _ScanStatsNode.make_tree(scan_stats, rootpath, extexdirs)
-            rootstatnode.fill_tasks(allscantasks, rootpath, extexdirs)
+            scan_stats = self._all_scan_stats.get(folderplus.folder)
+            rootstatnode = _ScanStatsNode.make_tree(scan_stats, folderplus.folder, folderplus.exdirs)
+            rootstatnode.fill_tasks(allscantasks, folderplus.folder, folderplus.exdirs)
 
         # ready to start tasks
         scannedfiles = {}

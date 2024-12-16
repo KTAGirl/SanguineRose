@@ -677,7 +677,7 @@ class _GitDataListContentsReader:
                     self.last_handler = h
 
                 ncommon = len(self.df.common_fields)
-                h.decompress(tuple(param[:ncommon + 1]), tuple(param[ncommon + 1:]))
+                h.decompress(tuple(param[:ncommon]), tuple(param[ncommon:]))
                 return True
 
         return False

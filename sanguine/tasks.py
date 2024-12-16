@@ -752,7 +752,7 @@ class Parallel:
         # ATTENTION: ot.task.f(...) may call add_task() or add_task(s) within
         (ex, out) = _run_task(ot.task, params)
         if ex is not None:
-            raise Exception('Parallel: Exception in user task, quitting')
+            raise Exception('Parallel: Exception in user OwnTask.run(), quitting')
         # newnall = len(self.all_task_nodes)
         # assert newnall >= nall
         # wereadded = newnall > nall

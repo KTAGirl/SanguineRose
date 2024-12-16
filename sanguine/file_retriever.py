@@ -13,18 +13,18 @@ if typing.TYPE_CHECKING:
 
 class FileRetriever(ABC):  # new dog breed ;-)
     # Provides a base class for retrieving files from already-available data
-    available: AvailableFiles
+    available: "AvailableFiles"
     file_hash: bytes
     file_size: int
     type _BaseInit = Callable[[FileRetriever], None] | tuple[bytes, int]
 
-    def __init__(self, available: AvailableFiles, filehash: bytes, filesize: int) -> None:
+    def __init__(self, available: "AvailableFiles", filehash: bytes, filesize: int) -> None:
         self.available = available
         self.file_hash = filehash
         self.file_size = filesize
 
     @staticmethod
-    def _init_from_child(parent, available: AvailableFiles, baseinit: _BaseInit) -> None:
+    def _init_from_child(parent, available: "AvailableFiles", baseinit: _BaseInit) -> None:
         assert type(parent) is FileRetriever
         if isinstance(baseinit, tuple):
             (h, s) = baseinit
@@ -47,7 +47,7 @@ class ZeroFileRetriever(FileRetriever):
 
     # noinspection PyMissingConstructor
     #              _init_from_child() calls super().__init__()
-    def __init__(self, available: AvailableFiles, baseinit: FileRetriever._BaseInit) -> None:
+    def __init__(self, available: "AvailableFiles", baseinit: FileRetriever._BaseInit) -> None:
         if isinstance(baseinit, tuple):  # we can't use _init_from_child() here
             (h, s) = baseinit
             assert h == self.ZEROHASH
@@ -64,7 +64,7 @@ class ZeroFileRetriever(FileRetriever):
         return tfname
 
     @staticmethod
-    def make_retriever_if(available: AvailableFiles, h: bytes) -> "ZeroFileRetriever|None":
+    def make_retriever_if(available: "AvailableFiles", h: bytes) -> "ZeroFileRetriever|None":
         if h == ZeroFileRetriever.ZEROHASH:
             return ZeroFileRetriever(available, (ZeroFileRetriever.ZEROHASH, 0))
         else:
@@ -78,7 +78,7 @@ class GithubFileRetriever(FileRetriever):  # only partially specialized, needs f
 
     # noinspection PyMissingConstructor
     #              _init_from_child() calls super().__init__()
-    def __init__(self, available: AvailableFiles, baseinit: FileRetriever._BaseInit,
+    def __init__(self, available: "AvailableFiles", baseinit: FileRetriever._BaseInit,
                  githubauthor: str, githubproject: str, frompath: str) -> None:
         FileRetriever._init_from_child(super(), available, baseinit)
         self.github_author = githubauthor
@@ -103,7 +103,7 @@ class FileRetrieverFromSingleArchive(FileRetriever):
 
     # noinspection PyMissingConstructor
     #              _init_from_child() calls super().__init__()
-    def __init__(self, available: AvailableFiles, baseinit: FileRetriever._BaseInit,
+    def __init__(self, available: "AvailableFiles", baseinit: FileRetriever._BaseInit,
                  archive_hash: bytes, archive_size: int, file_in_archive: FileInArchive) -> None:
         FileRetriever._init_from_child(super(), available, baseinit)
         self.archive_hash = archive_hash
@@ -124,7 +124,7 @@ class FileRetrieverFromNestedArchives(FileRetriever):
 
     # noinspection PyMissingConstructor
     #              _init_from_child() calls super().__init__()
-    def __init__(self, available: AvailableFiles, baseinit: FileRetriever._BaseInit,
+    def __init__(self, available: "AvailableFiles", baseinit: FileRetriever._BaseInit,
                  parent: "FileRetrieverFromSingleArchive|FileRetrieverFromNestedArchives",
                  child: FileRetrieverFromSingleArchive) -> None:
         FileRetriever._init_from_child(super(), available, baseinit)
