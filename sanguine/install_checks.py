@@ -64,4 +64,5 @@ def check_sanguine_prerequisites(frominstall: bool = False) -> None:
         # noinspection PyProtectedMember, PyUnresolvedReferences
         os._exit(1)
 
-    _print_green('All sanguine prerequisites are ok.')
+    from sanguine.common import info  # by this time, we're already ok to use non-install stuff
+    info('All sanguine prerequisites are ok.')

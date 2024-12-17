@@ -228,6 +228,8 @@ if __name__ == '__main__':
 
         ttmppath = normalize_dir_path('..\\..\\sanguine.tmp\\')
         add_file_logging(ttmppath + 'sanguine.log.html')
+        #alert('Test alert')
+        #critical('Test critical')
 
         check_sanguine_prerequisites()
 
