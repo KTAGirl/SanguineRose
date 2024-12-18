@@ -18,8 +18,8 @@ from types import TracebackType
 
 Type = typing.Type
 
-# noinspection PyUnresolvedReferences
-from sanguine.helpers.logging import debug, info, warn, alert, critical, add_file_logging
+# noinspection PyUnresolvedReferences, PyProtectedMember
+from sanguine.helpers._logging import debug, info, warn, alert, critical, add_file_logging
 
 
 ### inter-file interfaces
