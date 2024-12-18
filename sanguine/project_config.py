@@ -1,8 +1,7 @@
 import re
 
 from sanguine.common import *
-from sanguine.folder_cache import FolderToCache
-from sanguine.modlist import ModList
+from sanguine.plugin_handler import load_plugins
 
 
 def _normalize_config_dir_path(path: str, configdir: str) -> str:  # relative to config dir
@@ -59,12 +58,10 @@ def folder_size(rootpath: str):
 
 
 class ModManagerConfig:
-    def __init__(self) -> None:
-        pass
+    mod_manager_name: str
 
-    @abstractmethod
-    def mod_manager_name(self) -> str:  # also used as config section name
-        pass
+    def __init__(self, modmanagername: str) -> None:
+        self.mod_manager_name = modmanagername
 
     @abstractmethod
     def parse_config_section(self, section: dict[str, any], configdir: str, fullconfig: dict[str, any]) -> None:
@@ -79,90 +76,47 @@ class ModManagerConfig:
         pass
 
 
-class Mo2ProjectConfig(ModManagerConfig):
-    mo2dir: FolderToCache | None
-    master_profile: str | None
-    generated_profiles: list[str] | None
-    master_modlist: ModList | None
-
+class ModManagerPluginBase(ABC):
     def __init__(self) -> None:
-        super().__init__()
-        self.mo2dir = None
-        self.master_profile = None
-        self.generated_profiles = None
-        self.master_modlist = None
+        pass
 
+    @abstractmethod
     def mod_manager_name(self) -> str:
-        return 'mo2'
+        pass
 
-    def parse_config_section(self, section: dict[str, any], configdir: str, fullconfig: dict[str, any]) -> None:
-        abort_if_not('mo2dir' in section, "'mo2dir' must be present in config.mo2 for modmanager=mo2")
-        mo2dir = _config_dir_path(section['mo2dir'], configdir, fullconfig)
-        abort_if_not(isinstance(mo2dir, str), 'config.mo2.mo2dir must be a string')
-
-        ignores = section.get('ignores', ['{DEFAULT-MO2-IGNORES}'])
-        abort_if_not(isinstance(ignores, list), lambda: "config.mo2.ignores must be a list, got " + repr(ignores))
-        ignore_dirs = []
-        for ignore in ignores:
-            if ignore == '{DEFAULT-MO2-IGNORES}':
-                ignore_dirs += [normalize_dir_path(mo2dir + defignore) for defignore in [
-                    'plugins\\data\\RootBuilder',
-                    'crashDumps',
-                    'logs',
-                    'webcache',
-                    'overwrite\\Root\\Logs',
-                    'overwrite\\ShaderCache'
-                ]]
-            else:
-                ignore_dirs.append(_normalize_vfs_dir_path(ignore, mo2dir))
-
-        assert self.mo2dir is None
-        self.mo2dir = FolderToCache(mo2dir, ignore_dirs)
-
-        assert self.master_profile is None
-        assert self.generated_profiles is None
-        self.master_profile = fullconfig.get('masterprofile')
-        abort_if_not(self.master_profile is not None and isinstance(self.master_profile, str),
-                     lambda: "'masterprofile' in config must be a string, got " + repr(self.master_profile))
-        abort_if_not(os.path.isdir(self.mo2dir.folder + 'profiles\\' + self.master_profile))
-
-        self.generated_profiles = fullconfig.get('generatedprofiles')
-        abort_if_not(self.generated_profiles is not None and isinstance(self.generated_profiles, list),
-                     lambda: "'genprofiles' in config must be a list, got " + repr(self.generated_profiles))
-        for gp in self.generated_profiles:
-            abort_if_not(os.path.isdir(self.mo2dir.folder + 'profiles\\' + gp))
-
-        assert self.master_modlist is None
-        self.master_modlist = ModList(self.mo2dir.folder + 'profiles\\' + self.master_profile + '\\')
-
-    def active_vfs_folders(self) -> FolderListToCache:
-        out: FolderListToCache = [self.mo2dir]
-        for mod in self.master_modlist.all_enabled():
-            out.append(FolderToCache(self.mo2dir.folder + 'mods\\' + mod + '\\', self.mo2dir.exdirs))
-        return out
-
-    def default_download_dirs(self) -> list[str]:
-        return ['{mo2.mo2dir}downloads\\']
+    @abstractmethod
+    def config_factory(self) -> ModManagerConfig:
+        pass
 
 
-_mod_manager_configs: list[ModManagerConfig] = [Mo2ProjectConfig()]
+_modmanager_plugins: list[ModManagerPluginBase] = []
+
+
+def _found_plugin(plugin: ModManagerPluginBase):
+    global _modmanager_plugins
+    _modmanager_plugins.append(plugin)
+
+
+load_plugins('plugins/modmanager/', ModManagerPluginBase, lambda plugin: _found_plugin(plugin))
 
 
 def _find_config(name: str) -> ModManagerConfig | None:
-    global _mod_manager_configs
-    for mmc in _mod_manager_configs:
-        if mmc.mod_manager_name() == name:
+    global _modmanager_plugins
+    for mm in _modmanager_plugins:
+        if mm.mod_manager_name() == name:
+            mmc = mm.config_factory()
+            assert mmc.mod_manager_name == name
             return mmc
     return None
 
 
 def _all_configs_string() -> str:
-    global _mod_manager_configs
+    global _modmanager_plugins
     out = ''
-    for mmc in _mod_manager_configs:
+    for mm in _modmanager_plugins:
         if out != '':
             out += ','
-        out += "'" + mmc.mod_manager_name() + "'"
+        out += "'" + mm.mod_manager_name() + "'"
     return out
 
 
@@ -186,12 +140,12 @@ class ProjectConfig:
         mmc = _find_config(modmanager)
         abort_if_not(mmc is not None, lambda: "config.modmanager must be one of [{}]".format(_all_configs_string()))
 
-        abort_if_not(mmc.mod_manager_name() in jsonconfig,
-                     lambda: "'{}' must be present in config for modmanager={}".format(mmc.mod_manager_name(),
-                                                                                       mmc.mod_manager_name()))
-        mmc_config = jsonconfig[mmc.mod_manager_name()]
+        abort_if_not(mmc.mod_manager_name in jsonconfig,
+                     lambda: "'{}' must be present in config for modmanager={}".format(mmc.mod_manager_name,
+                                                                                       mmc.mod_manager_name))
+        mmc_config = jsonconfig[mmc.mod_manager_name]
         abort_if_not(isinstance(mmc_config, dict),
-                     lambda: "config.{} must be a dictionary, got {}".format(mmc.mod_manager_name(), repr(mmc_config)))
+                     lambda: "config.{} must be a dictionary, got {}".format(mmc.mod_manager_name, repr(mmc_config)))
         mmc.parse_config_section(mmc_config, self.config_dir, jsonconfig)
 
         if 'downloads' not in jsonconfig:
