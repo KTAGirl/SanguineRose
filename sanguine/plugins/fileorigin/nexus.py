@@ -1,10 +1,10 @@
 import re
 
-import sanguine.git_data_file as gitdatafile
+import sanguine.gitdata.git_data_file as gitdatafile
 from sanguine.common import *
-from sanguine.file_origin import FileOrigin, FileOriginPluginBase, MetaFileParser
-from sanguine.file_origin import GitFileOriginsReadHandler, GitFileOriginsWriteHandler
-from sanguine.git_data_file import GitDataParam, GitDataType
+from sanguine.gitdata.file_origin import FileOrigin, FileOriginPluginBase, MetaFileParser
+from sanguine.gitdata.file_origin import GitFileOriginsReadHandler, GitFileOriginsWriteHandler
+from sanguine.gitdata.git_data_file import GitDataParam, GitDataType
 
 
 ### FileOrigin

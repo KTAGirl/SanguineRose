@@ -1,14 +1,14 @@
 import os.path
 
-import sanguine.archives
 import sanguine.tasks as tasks
+from sanguine.cache.folder_cache import FolderCache, FileOnDisk
 from sanguine.common import *
-from sanguine.file_origin import file_origins_for_file, FileOrigin
-from sanguine.file_retriever import (FileRetriever, ZeroFileRetriever, GithubFileRetriever,
-                                     FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives)
-from sanguine.folder_cache import FolderCache, FolderToCache, FileOnDisk
-from sanguine.master_git_data import MasterGitData
-from sanguine.tmp_path import TmpPath
+from sanguine.gitdata.file_origin import file_origins_for_file, FileOrigin
+from sanguine.gitdata.master_git_data import MasterGitData
+from sanguine.helpers.archives import all_archive_plugins_extensions
+from sanguine.helpers.file_retriever import (FileRetriever, ZeroFileRetriever, GithubFileRetriever,
+                                             FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives)
+from sanguine.helpers.tmp_path import TmpPath
 
 
 def _file_origins_task_func(param: tuple[list[bytes, str]]) -> tuple[list[tuple[bytes, list[FileOrigin]]]]:
@@ -172,7 +172,7 @@ class AvailableFiles:
                 continue
 
             if not self._master_data.archive_by_hash(ar.file_hash, partialok=True):
-                if ext in sanguine.archives.all_archive_plugins_extensions():
+                if ext in all_archive_plugins_extensions():
                     self._master_data.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
                 else:
                     warn('Available: file with unknown extension {}, ignored'.format(ar.file_path))
@@ -224,23 +224,23 @@ if __name__ == '__main__':
     import sys
 
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
-        from sanguine.install_checks import check_sanguine_prerequisites
+        from sanguine.install.install_checks import check_sanguine_prerequisites
 
-        ttmppath = normalize_dir_path('..\\..\\sanguine.tmp\\')
+        ttmppath = normalize_dir_path('../../../sanguine.tmp\\')
         add_file_logging(ttmppath + 'sanguine.log.html')
-        #alert('Test alert')
-        #critical('Test critical')
+        # alert('Test alert')
+        # critical('Test critical')
 
         check_sanguine_prerequisites()
 
         with TmpPath(ttmppath) as ttmpdir:
             tavailable = AvailableFiles('KTAGirl',
-                                        normalize_dir_path('..\\..\\sanguine.cache\\'),
+                                        normalize_dir_path('../../../sanguine.cache\\'),
                                         ttmpdir.tmp_dir(),
-                                        normalize_dir_path('..\\..\\sanguine-skyrim-root\\'),
-                                        [normalize_dir_path('..\\..\\..\\mo2\\downloads')],
+                                        normalize_dir_path('../../../sanguine-skyrim-root\\'),
+                                        [normalize_dir_path('../../../../MO2/downloads')],
                                         [GithubFolder('KTAGirl', 'KTA',
-                                                      normalize_dir_path('..\\..\\KTA\\'))])
+                                                      normalize_dir_path('../../../KTA\\'))])
             with tasks.Parallel(None, dbg_serialize=False) as tparallel:
                 tavailable.start_tasks(tparallel)
                 tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()

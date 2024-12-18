@@ -1,5 +1,5 @@
 from sanguine.common import *
-from sanguine.plugin_handler import load_plugins
+from sanguine.helpers.plugin_handler import load_plugins
 
 
 class FileInArchive:

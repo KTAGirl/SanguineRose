@@ -1,12 +1,11 @@
-import hashlib
 import shutil
 import tempfile
 
-from sanguine.archives import FileInArchive
 from sanguine.common import *
+from sanguine.helpers.archives import FileInArchive
 
 if typing.TYPE_CHECKING:
-    from sanguine.available_files import AvailableFiles
+    from sanguine.cache.available_files import AvailableFiles
 
 
 ### generic FileRetriever

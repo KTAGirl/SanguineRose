@@ -1,13 +1,13 @@
+import glob
 import importlib
 import inspect
-import glob
 
 from sanguine.common import *
 
 
 def load_plugins(plugindir: str, basecls: any, found: Callable[[any], None]) -> None:
     # plugindir is relative to the path of this very file
-    thisdir = os.path.split(os.path.abspath(__file__))[0] + '/'
+    thisdir = os.path.split(os.path.abspath(__file__))[0] + '\\..\\'
     # print(thisdir)
     sortedpys = sorted([py for py in glob.glob(thisdir + plugindir + '*.py')])
     for py in sortedpys:

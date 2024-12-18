@@ -1,5 +1,5 @@
 from sanguine.common import *
-from sanguine.modlist import ModList
+from sanguine.helpers.modlist import ModList
 from sanguine.project_config import ModManagerConfig, ModManagerPluginBase, _config_dir_path, _normalize_vfs_dir_path
 
 

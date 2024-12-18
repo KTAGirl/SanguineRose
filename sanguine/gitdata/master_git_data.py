@@ -1,15 +1,14 @@
 import re
 
-import sanguine.archives
-import sanguine.git_data_file as gitdatafile
+import sanguine.gitdata.git_data_file as gitdatafile
 import sanguine.tasks as tasks
-from sanguine.archives import Archive, FileInArchive
 from sanguine.common import *
-from sanguine.file_origin import FileOrigin, GitFileOriginsJson
-from sanguine.folder_cache import calculate_file_hash, truncate_file_hash
-from sanguine.git_data_file import GitDataParam, GitDataType, GitDataHandler
-from sanguine.pickled_cache import pickled_cache
-from sanguine.tmp_path import TmpPath
+from sanguine.gitdata.file_origin import FileOrigin, GitFileOriginsJson
+from sanguine.gitdata.git_data_file import GitDataParam, GitDataType, GitDataHandler
+from sanguine.helpers.archives import Archive, FileInArchive
+from sanguine.helpers.archives import ArchivePluginBase, all_archive_plugins_extensions, archive_plugin_for
+from sanguine.helpers.pickled_cache import pickled_cache
+from sanguine.helpers.tmp_path import TmpPath
 
 
 ### GitArchivesJson
@@ -134,11 +133,11 @@ def _write_git_archives(mastergitdir: str, archives: list[Archive]) -> None:
 
 
 def _hash_archive(archives: list[Archive], by: str, tmppath: str,  # recursive!
-                  plugin: sanguine.archives.ArchivePluginBase,
+                  plugin: ArchivePluginBase,
                   archivepath: str, arhash: bytes, arsize: int) -> None:
     assert os.path.isdir(tmppath)
     plugin.extract_all(archivepath, tmppath)
-    pluginexts = sanguine.archives.all_archive_plugins_extensions()  # for nested archives
+    pluginexts = all_archive_plugins_extensions()  # for nested archives
     ar = Archive(arhash, arsize, by)
     archives.append(ar)
     for root, dirs, files in os.walk(tmppath):
@@ -153,7 +152,7 @@ def _hash_archive(archives: list[Archive], by: str, tmppath: str,  # recursive!
 
             ext = os.path.split(fpath)[1].lower()
             if ext in pluginexts:
-                nested_plugin = sanguine.archives.archive_plugin_for(fpath)
+                nested_plugin = archive_plugin_for(fpath)
                 assert nested_plugin is not None
                 newtmppath = TmpPath.tmp_in_tmp(tmppath,
                                                 'T3lIzNDx.',  # tmp is not from root,
@@ -199,7 +198,7 @@ def _archive_hashing_task_func(param: tuple[str, str, bytes, int, str]) -> tuple
     (by, arpath, arhash, arsize, tmppath) = param
     assert not os.path.isdir(tmppath)
     os.makedirs(tmppath)
-    plugin = sanguine.archives.archive_plugin_for(arpath)
+    plugin = archive_plugin_for(arpath)
     assert plugin is not None
     archives = []
     _hash_archive(archives, by, tmppath, plugin, arpath, arhash, arsize)

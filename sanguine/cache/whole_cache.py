@@ -1,7 +1,7 @@
 import sanguine.tasks as tasks
-from sanguine.available_files import FileRetriever, AvailableFiles, GithubFolder
+from sanguine.cache.available_files import FileRetriever, AvailableFiles, GithubFolder
+from sanguine.cache.folder_cache import FileOnDisk, FolderCache
 from sanguine.common import *
-from sanguine.folder_cache import FileOnDisk, FolderCache
 from sanguine.project_config import ProjectConfig
 
 

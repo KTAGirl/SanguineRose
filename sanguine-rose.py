@@ -7,7 +7,7 @@ import time
 sys.path.append(os.path.split(os.path.abspath(__file__))[0])
 
 from sanguine.common import *
-from sanguine.install_checks import check_sanguine_prerequisites
+from sanguine.install.install_checks import check_sanguine_prerequisites
 
 if __name__ == '__main__':
     if not sys.version_info >= (3, 10):

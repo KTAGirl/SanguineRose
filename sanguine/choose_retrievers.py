@@ -1,5 +1,5 @@
-from sanguine.file_retriever import (FileRetriever, FileRetrieverFromSingleArchive,
-                                     FileRetrieverFromNestedArchives, GithubFileRetriever, ZeroFileRetriever)
+from sanguine.helpers.file_retriever import (FileRetriever, FileRetrieverFromSingleArchive,
+                                             FileRetrieverFromNestedArchives, GithubFileRetriever, ZeroFileRetriever)
 
 
 def _archive_hash(r: FileRetriever) -> bytes | None:

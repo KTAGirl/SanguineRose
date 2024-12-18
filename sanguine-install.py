@@ -3,6 +3,6 @@ import sys
 
 sys.path.append(os.path.split(os.path.abspath(__file__))[0])
 
-import sanguine.install_helpers as sanguine_install
+from sanguine.install.install_helpers import install_sanguine_prerequisites
 
-sanguine_install.install_sanguine_prerequisites()
+install_sanguine_prerequisites()

@@ -2,7 +2,7 @@
 # we'll use 7z.exe which we install into tools folder instead
 import subprocess
 
-from sanguine.archives import ArchivePluginBase
+from sanguine.helpers.archives import ArchivePluginBase
 from sanguine.common import *
 
 

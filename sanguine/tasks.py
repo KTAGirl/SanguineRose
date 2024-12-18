@@ -6,8 +6,8 @@ from enum import IntEnum
 from multiprocessing import Process, Queue as PQueue, shared_memory
 from threading import Thread  # only for logging!
 
-from sanguine._logging import add_logging_handler, log_to_file_only, logging_started
 from sanguine.common import *
+from sanguine.helpers.logging import add_logging_handler, log_to_file_only, logging_started
 
 _proc_num: int = -1  # number of child process
 

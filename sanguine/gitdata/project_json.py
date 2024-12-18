@@ -1,12 +1,14 @@
 import re
 
-import sanguine.git_data_file as gitdatafile
-from sanguine.archives import FileInArchive
-from sanguine.available_files import AvailableFiles
+import sanguine.gitdata.git_data_file as gitdatafile
 from sanguine.common import *
-from sanguine.file_retriever import FileRetriever, ZeroFileRetriever, GithubFileRetriever
-from sanguine.file_retriever import FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives
-from sanguine.git_data_file import GitDataParam, GitDataType, GitDataHandler
+from sanguine.gitdata.git_data_file import GitDataParam, GitDataType, GitDataHandler
+from sanguine.helpers.archives import FileInArchive
+from sanguine.helpers.file_retriever import (FileRetriever, ZeroFileRetriever, GithubFileRetriever,
+                                             FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives)
+
+if typing.TYPE_CHECKING:
+    from sanguine.cache.available_files import AvailableFiles
 
 
 ##### Handlers
@@ -44,7 +46,7 @@ class GitRetrievedFileReadHandler(GitDataHandler):
         self.retrieved_files = files
 
     @staticmethod
-    def init_base_file_retriever(available: AvailableFiles, fr: FileRetriever,
+    def init_base_file_retriever(available: "AvailableFiles", fr: FileRetriever,
                                  common_param: tuple[str, int, bytes]) -> None:
         assert type(fr) == FileRetriever  # should be exactly FileRetriever, not a subclass
         (p, s, h) = common_param
@@ -65,9 +67,9 @@ class GitRetrievedFileReadHandler(GitDataHandler):
 
 class GitRetrievedZeroFileReadHandler(GitRetrievedFileReadHandler):
     SPECIFIC_FIELDS: list[GitDataParam] = []
-    available: AvailableFiles
+    available: "AvailableFiles"
 
-    def __init__(self, available: AvailableFiles, files: list[tuple[str, FileRetriever]]) -> None:
+    def __init__(self, available: "AvailableFiles", files: list[tuple[str, FileRetriever]]) -> None:
         super().__init__(GitRetrievedZeroFileReadHandler.SPECIFIC_FIELDS, files)
         self.available = available
 
@@ -99,9 +101,9 @@ class GitRetrievedGithubFileReadHandler(GitRetrievedFileReadHandler):
         GitDataParam('a', GitDataType.Str),
         GitDataParam('p', GitDataType.Str),
     ]
-    available: AvailableFiles
+    available: "AvailableFiles"
 
-    def __init__(self, available: AvailableFiles, files: list[tuple[str, FileRetriever]]) -> None:
+    def __init__(self, available: "AvailableFiles", files: list[tuple[str, FileRetriever]]) -> None:
         super().__init__(GitRetrievedGithubFileReadHandler.SPECIFIC_FIELDS, files)
         self.available = available
 
@@ -136,9 +138,9 @@ class GitRetrievedSingleArchiveFileReadHandler(GitRetrievedFileReadHandler):
         GitDataParam('a', GitDataType.Hash),
         GitDataParam('x', GitDataType.Int),
     ]
-    available: AvailableFiles
+    available: "AvailableFiles"
 
-    def __init__(self, available: AvailableFiles, files: list[tuple[str, FileRetriever]]) -> None:
+    def __init__(self, available: "AvailableFiles", files: list[tuple[str, FileRetriever]]) -> None:
         super().__init__(GitRetrievedSingleArchiveFileReadHandler.SPECIFIC_FIELDS, files)
         self.available = available
 
@@ -178,10 +180,10 @@ class GitRetrievedNestedArchiveFileReadHandler(GitRetrievedFileReadHandler):
         GitDataParam('a', GitDataType.Hash),
         GitDataParam('x', GitDataType.Int),
     ]
-    available: AvailableFiles
+    available: "AvailableFiles"
     intermediate: _IntermediateArchives
 
-    def __init__(self, available: AvailableFiles, intermediate: _IntermediateArchives,
+    def __init__(self, available: "AvailableFiles", intermediate: _IntermediateArchives,
                  files: list[tuple[str, FileRetriever]]) -> None:
         super().__init__(GitRetrievedNestedArchiveFileReadHandler.SPECIFIC_FIELDS, files)
         self.available = available
@@ -228,9 +230,9 @@ _write_handlers: list[GitRetrievedFileWriteHandler] = [
 ### GitProjectJson
 
 class GitProjectJson:
-    available: AvailableFiles
+    available: "AvailableFiles"
 
-    def __init__(self, available: AvailableFiles) -> None:
+    def __init__(self, available: "AvailableFiles") -> None:
         self.available = available
 
     def write(self, wfile: typing.TextIO, retrievers: list[tuple[str, FileRetriever]]) -> None:

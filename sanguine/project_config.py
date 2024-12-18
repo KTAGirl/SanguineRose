@@ -1,7 +1,7 @@
 import re
 
 from sanguine.common import *
-from sanguine.plugin_handler import load_plugins
+from sanguine.helpers.plugin_handler import load_plugins
 
 
 def _normalize_config_dir_path(path: str, configdir: str) -> str:  # relative to config dir

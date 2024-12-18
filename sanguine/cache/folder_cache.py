@@ -1,42 +1,9 @@
-import hashlib
 import os.path
 import stat
 import time
 
 import sanguine.tasks as tasks
 from sanguine.common import *
-
-
-### *_file_hash() and FileOnDisk
-
-def calculate_file_hash(
-        fpath: str) -> tuple[int, bytes]:  # using SHA-256, the fastest crypto-hash because of hardware instruction
-    st = os.lstat(fpath)
-    assert stat.S_ISREG(st.st_mode) and not stat.S_ISLNK(st.st_mode)
-    h = hashlib.sha256()
-    blocksize = 1048576
-    fsize = 0
-    with open(fpath, 'rb') as f:
-        while True:
-            bb = f.read(blocksize)
-            if not bb:
-                break
-            h.update(bb)
-            lbb = len(bb)
-            assert lbb <= blocksize
-            fsize += lbb
-
-    # were there any changes while we were working?
-    assert st.st_size == fsize
-    st2 = os.lstat(fpath)
-    assert st2.st_size == st.st_size
-    assert st2.st_mtime == st.st_mtime
-    return fsize, h.digest()
-
-
-def truncate_file_hash(h: bytes) -> bytes:
-    assert len(h) == 32
-    return h[:9]
 
 
 class FileOnDisk:

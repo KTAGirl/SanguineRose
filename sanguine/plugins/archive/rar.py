@@ -2,7 +2,7 @@
 # python rarfile module expects some rar installed anyway
 import subprocess
 
-from sanguine.archives import ArchivePluginBase
+from sanguine.helpers.archives import ArchivePluginBase
 from sanguine.common import *
 
 

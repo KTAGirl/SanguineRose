@@ -4,9 +4,9 @@ import shutil
 import subprocess
 import sys
 
-import sanguine.simple_download as simple_download
-from sanguine.install_checks import (REQUIRED_PIP_MODULES, _print_green, _print_yellow, _print_redbold,
-                                     check_sanguine_prerequisites)
+import sanguine.install.simple_download as simple_download
+from sanguine.install.install_checks import (REQUIRED_PIP_MODULES, _print_green, _print_yellow, _print_redbold,
+                                             check_sanguine_prerequisites)
 
 
 # for install_helpers we cannot use any files with non-guaranteed dependencies, so we:
