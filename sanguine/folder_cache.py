@@ -139,18 +139,6 @@ class _FolderScanDirOut:
         self.scan_stats = {}
 
 
-class FolderToCache:
-    folder: str
-    exdirs: list[str]
-
-    def __init__(self, folder: str, exdirs: list[str] = None) -> None:
-        self.folder = folder
-        self.exdirs = [] if exdirs is None else exdirs
-
-
-type FolderListToCache = list[FolderToCache]
-
-
 def filter_ex_dirs(exdirs: list[str], fpath) -> list[str]:
     return [xd for xd in exdirs if xd.startswith(fpath)]
 

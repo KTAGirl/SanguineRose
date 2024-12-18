@@ -1,4 +1,7 @@
+import re
+
 from sanguine.common import *
+from sanguine.folder_cache import FolderToCache
 from sanguine.modlist import ModList
 
 
@@ -13,12 +16,18 @@ def _config_dir_path(path: str, configdir: str, config: dict[str, any]):
     path = _normalize_config_dir_path(path, configdir)
     path = path.replace('{CONFIG-DIR}', configdir)
     replaced = False
-    for key, val in config.items():
-        if isinstance(val, str):
-            newpath = path.replace('{' + key + '}', val)
-            if newpath != path:
-                replaced = True
-                path = newpath
+    pattern = re.compile(r'\{(.*)}')
+    m = pattern.search(path)
+    if m:
+        found = m.group(1)
+        spl = found.split('.')
+        cur = config
+        for name in spl:
+            abort_if_not(name in cur, lambda: 'unable to resolve {} in {}'.format(found, configdir))
+            cur = cur[name]
+        abort_if_not(isinstance(cur, str), lambda: '{} in {} must be a string'.format(found, configdir))
+        path = pattern.sub(cur, path)
+        replaced = True
 
     if replaced:
         return _config_dir_path(path, configdir, config)
@@ -26,12 +35,12 @@ def _config_dir_path(path: str, configdir: str, config: dict[str, any]):
         return path
 
 
-def _normalize_mo2_dir_path(path: str, mo2dir: str) -> str:  # relative to mo2 dir
+def _normalize_vfs_dir_path(path: str, vfsdir: str) -> str:  # relative to vfs dir
     if os.path.isabs(path):
         out = normalize_dir_path(path)
     else:
-        out = normalize_dir_path(mo2dir + path)
-    abort_if_not(out.startswith(mo2dir), lambda: 'expected path within mo2, got ' + repr(path))
+        out = normalize_dir_path(vfsdir + path)
+    abort_if_not(out.startswith(vfsdir), lambda: 'expected path within vfs, got ' + repr(path))
     return out
 
 
@@ -49,40 +58,54 @@ def folder_size(rootpath: str):
     return total
 
 
-class ProjectConfig:
-    config_dir: str
-    mo2_dir: str
-    download_dirs: list[str]
-    ignore_dirs: list[str]
-    cache_dir: str
-    tmp_dir: str
-    github_dir: str
-    own_mod_names: list[str]
+class ModManagerConfig:
+    def __init__(self) -> None:
+        pass
 
-    # TODO: check that sanguine-rose itself, cache_dir, and tmp_dir don't overlap with any of the dirs
-    def __init__(self, jsonconfigfname: str, jsonconfig: dict[str, any]) -> None:
-        self.config_dir = normalize_dir_path(os.path.split(jsonconfigfname)[0])
-        abort_if_not('mo2' in jsonconfig, lambda: "'mo2' must be present in config")
-        mo2 = jsonconfig['mo2']
-        abort_if_not(isinstance(mo2, str), lambda: "config.'mo2' must be a string, got " + repr(mo2))
-        self.mo2_dir = _config_dir_path(mo2, self.config_dir, jsonconfig)
+    @abstractmethod
+    def mod_manager_name(self) -> str:  # also used as config section name
+        pass
 
-        if 'downloads' not in jsonconfig:
-            dls = [self.mo2_dir + 'downloads\\']
-        else:
-            dls = jsonconfig['downloads']
-        if isinstance(dls, str):
-            dls = [dls]
-        abort_if_not(isinstance(dls, list),
-                     lambda: "'downloads' in config must be a string or a list, got " + repr(dls))
-        self.download_dirs = [_config_dir_path(dl, self.config_dir, jsonconfig) for dl in dls]
+    @abstractmethod
+    def parse_config_section(self, section: dict[str, any], configdir: str, fullconfig: dict[str, any]) -> None:
+        pass
 
-        ignores = jsonconfig.get('ignores', ['{DEFAULT-IGNORES}'])
-        abort_if_not(isinstance(ignores, list), lambda: "'ignores' in config must be a list, got " + repr(ignores))
-        self.ignore_dirs = []
+    @abstractmethod
+    def default_download_dirs(self) -> list[str]:
+        pass
+
+    @abstractmethod
+    def active_vfs_folders(self) -> FolderListToCache:
+        pass
+
+
+class Mo2ProjectConfig(ModManagerConfig):
+    mo2dir: FolderToCache | None
+    master_profile: str | None
+    generated_profiles: list[str] | None
+    master_modlist: ModList | None
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.mo2dir = None
+        self.master_profile = None
+        self.generated_profiles = None
+        self.master_modlist = None
+
+    def mod_manager_name(self) -> str:
+        return 'mo2'
+
+    def parse_config_section(self, section: dict[str, any], configdir: str, fullconfig: dict[str, any]) -> None:
+        abort_if_not('mo2dir' in section, "'mo2dir' must be present in config.mo2 for modmanager=mo2")
+        mo2dir = _config_dir_path(section['mo2dir'], configdir, fullconfig)
+        abort_if_not(isinstance(mo2dir, str), 'config.mo2.mo2dir must be a string')
+
+        ignores = section.get('ignores', ['{DEFAULT-MO2-IGNORES}'])
+        abort_if_not(isinstance(ignores, list), lambda: "config.mo2.ignores must be a list, got " + repr(ignores))
+        ignore_dirs = []
         for ignore in ignores:
-            if ignore == '{DEFAULT-IGNORES}':
-                self.ignore_dirs += [normalize_dir_path(self.mo2_dir + defignore) for defignore in [
+            if ignore == '{DEFAULT-MO2-IGNORES}':
+                ignore_dirs += [normalize_dir_path(mo2dir + defignore) for defignore in [
                     'plugins\\data\\RootBuilder',
                     'crashDumps',
                     'logs',
@@ -91,7 +114,95 @@ class ProjectConfig:
                     'overwrite\\ShaderCache'
                 ]]
             else:
-                self.ignore_dirs.append(_normalize_mo2_dir_path(ignore, self.mo2_dir))
+                ignore_dirs.append(_normalize_vfs_dir_path(ignore, mo2dir))
+
+        assert self.mo2dir is None
+        self.mo2dir = FolderToCache(mo2dir, ignore_dirs)
+
+        assert self.master_profile is None
+        assert self.generated_profiles is None
+        self.master_profile = fullconfig.get('masterprofile')
+        abort_if_not(self.master_profile is not None and isinstance(self.master_profile, str),
+                     lambda: "'masterprofile' in config must be a string, got " + repr(self.master_profile))
+        abort_if_not(os.path.isdir(self.mo2dir.folder + 'profiles\\' + self.master_profile))
+
+        self.generated_profiles = fullconfig.get('generatedprofiles')
+        abort_if_not(self.generated_profiles is not None and isinstance(self.generated_profiles, list),
+                     lambda: "'genprofiles' in config must be a list, got " + repr(self.generated_profiles))
+        for gp in self.generated_profiles:
+            abort_if_not(os.path.isdir(self.mo2dir.folder + 'profiles\\' + gp))
+
+        assert self.master_modlist is None
+        self.master_modlist = ModList(self.mo2dir.folder + 'profiles\\' + self.master_profile + '\\')
+
+    def active_vfs_folders(self) -> FolderListToCache:
+        out: FolderListToCache = [self.mo2dir]
+        for mod in self.master_modlist.all_enabled():
+            out.append(FolderToCache(self.mo2dir.folder + 'mods\\' + mod + '\\', self.mo2dir.exdirs))
+        return out
+
+    def default_download_dirs(self) -> list[str]:
+        return ['{mo2.mo2dir}downloads\\']
+
+
+_mod_manager_configs: list[ModManagerConfig] = [Mo2ProjectConfig()]
+
+
+def _find_config(name: str) -> ModManagerConfig | None:
+    global _mod_manager_configs
+    for mmc in _mod_manager_configs:
+        if mmc.mod_manager_name() == name:
+            return mmc
+    return None
+
+
+def _all_configs_string() -> str:
+    global _mod_manager_configs
+    out = ''
+    for mmc in _mod_manager_configs:
+        if out != '':
+            out += ','
+        out += "'" + mmc.mod_manager_name() + "'"
+    return out
+
+
+class ProjectConfig:
+    config_dir: str
+    # vfs_dir: str
+    mod_manager_config: ModManagerConfig
+    download_dirs: list[str]
+    # ignore_dirs: list[str]
+    cache_dir: str
+    tmp_dir: str
+    github_dir: str
+    own_mod_names: list[str]
+
+    # TODO: check that sanguine-rose itself, cache_dir, and tmp_dir don't overlap with any of the dirs
+    def __init__(self, jsonconfigfname: str, jsonconfig: dict[str, any]) -> None:
+        self.config_dir = normalize_dir_path(os.path.split(jsonconfigfname)[0])
+
+        abort_if_not('modmanager' in jsonconfig, "'modmanager' must be present in config")
+        modmanager = jsonconfig['modmanager']
+        mmc = _find_config(modmanager)
+        abort_if_not(mmc is not None, lambda: "config.modmanager must be one of [{}]".format(_all_configs_string()))
+
+        abort_if_not(mmc.mod_manager_name() in jsonconfig,
+                     lambda: "'{}' must be present in config for modmanager={}".format(mmc.mod_manager_name(),
+                                                                                       mmc.mod_manager_name()))
+        mmc_config = jsonconfig[mmc.mod_manager_name()]
+        abort_if_not(isinstance(mmc_config, dict),
+                     lambda: "config.{} must be a dictionary, got {}".format(mmc.mod_manager_name(), repr(mmc_config)))
+        mmc.parse_config_section(mmc_config, self.config_dir, jsonconfig)
+
+        if 'downloads' not in jsonconfig:
+            dls = mmc.default_download_dirs()
+        else:
+            dls = jsonconfig['downloads']
+        if isinstance(dls, str):
+            dls = [dls]
+        abort_if_not(isinstance(dls, list),
+                     lambda: "'downloads' in config must be a string or a list, got " + repr(dls))
+        self.download_dirs = [_config_dir_path(dl, self.config_dir, jsonconfig) for dl in dls]
 
         self.cache_dir = _config_dir_path(jsonconfig.get('cache', self.config_dir + '..\\sanguine.cache\\'),
                                           self.config_dir,
@@ -101,19 +212,6 @@ class ProjectConfig:
         self.github_dir = _config_dir_path(jsonconfig.get('github', self.config_dir), self.config_dir, jsonconfig)
 
         self.own_mod_names = [normalize_file_name(om) for om in jsonconfig.get('ownmods', [])]
-
-        self.master_profile = jsonconfig.get('masterprofile')
-        abort_if_not(self.master_profile is not None and isinstance(self.master_profile, str),
-                     lambda: "'masterprofile' in config must be a string, got " + repr(self.master_profile))
-        abort_if_not(os.path.isdir(self.mo2_dir + 'profiles\\' + self.master_profile))
-
-        self.gen_profiles = jsonconfig.get('genprofiles')
-        abort_if_not(self.gen_profiles is not None and isinstance(self.gen_profiles, list),
-                     lambda: "'genprofiles' in config must be a list, got " + repr(self.gen_profiles))
-        for gp in self.gen_profiles:
-            abort_if_not(os.path.isdir(self.mo2_dir + 'profiles\\' + gp))
-
-        self.master_modlist = ModList(self.mo2_dir + 'profiles\\' + self.master_profile + '\\')
 
     '''
     def normalize_config_dir_path(self, path: str) -> str:
@@ -140,9 +238,5 @@ class ProjectConfig:
         return self.mo2_dir + dirpath
     '''
 
-    def mo2_mods_dir(self) -> str:
-        return self.mo2_dir + 'mods\\'
-
-    def all_enabled_mo2_mod_dirs(self) -> Generator[str]:
-        for mod in self.master_modlist.all_enabled():
-            yield self.mo2_mods_dir() + mod + '\\'
+    def active_vfs_folders(self) -> FolderListToCache:
+        return self.mod_manager_config.active_vfs_folders()

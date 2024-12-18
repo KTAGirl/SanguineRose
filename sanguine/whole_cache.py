@@ -1,33 +1,31 @@
 import sanguine.tasks as tasks
 from sanguine.available_files import FileRetriever, AvailableFiles, GithubFolder
 from sanguine.common import *
-from sanguine.folder_cache import FileOnDisk, FolderCache, FolderToCache
+from sanguine.folder_cache import FileOnDisk, FolderCache
 from sanguine.project_config import ProjectConfig
 
 
 class WholeCache:
     # WholeCache, once ready_task_name() is reached, contains whole information about the folders, and available files
     #             all the information is in-memory, so it can work incredibly fast
-    mo2cache: FolderCache
+    vfscache: FolderCache
     available: AvailableFiles
     _SYNCOWNTASKNAME: str = 'sanguine.wholecache.sync'
 
-    def __init__(self, by: str, cfgfolders: ProjectConfig, githubfolders: list[GithubFolder]) -> None:
-        self.available = AvailableFiles(by, cfgfolders.cache_dir, cfgfolders.tmp_dir, cfgfolders.github_dir,
-                                        cfgfolders.download_dirs, githubfolders)
+    def __init__(self, by: str, projectcfg: ProjectConfig, githubfolders: list[GithubFolder]) -> None:
+        self.available = AvailableFiles(by, projectcfg.cache_dir, projectcfg.tmp_dir, projectcfg.github_dir,
+                                        projectcfg.download_dirs, githubfolders)
 
-        folderstocache: list[FolderToCache] = [FolderToCache(cfgfolders.mo2_dir, [cfgfolders.mo2_mods_dir()])]
-        for d in cfgfolders.all_enabled_mo2_mod_dirs():
-            folderstocache.append(FolderToCache(d))
-        self.mo2cache = FolderCache(cfgfolders.cache_dir, 'mo2', folderstocache)
+        folderstocache: FolderListToCache = projectcfg.active_vfs_folders()
+        self.vfscache = FolderCache(projectcfg.cache_dir, 'vfs', folderstocache)
 
     def start_tasks(self, parallel: tasks.Parallel) -> None:
-        self.mo2cache.start_tasks(parallel)
+        self.vfscache.start_tasks(parallel)
         self.available.start_tasks(parallel)
 
         syncowntask = tasks.OwnTask(WholeCache._SYNCOWNTASKNAME,
                                     lambda _, _1, _2: self._start_sync_own_task_func(), None,
-                                    [self.mo2cache.ready_task_name(),
+                                    [self.vfscache.ready_task_name(),
                                      self.available.ready_task_name()])
         parallel.add_task(syncowntask)
 
@@ -38,8 +36,8 @@ class WholeCache:
     def ready_task_name() -> str:
         return WholeCache._SYNCOWNTASKNAME
 
-    def all_mo2_files(self) -> Iterable[FileOnDisk]:
-        return self.mo2cache.all_files()
+    def all_vfs_files(self) -> Iterable[FileOnDisk]:
+        return self.vfscache.all_files()
 
     def file_retrievers_by_hash(self, h: bytes) -> list[FileRetriever]:  # resolved as fully as feasible
         return self.available.file_retrievers_by_hash(h)

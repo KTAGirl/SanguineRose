@@ -20,6 +20,8 @@ Type = typing.Type
 from sanguine._logging import debug, info, warn, alert, critical, add_file_logging
 
 
+### inter-file interfaces
+
 class GameUniverse(enum.Enum):
     Skyrim = 0,
     Fallout = 1
@@ -28,6 +30,20 @@ class GameUniverse(enum.Enum):
 def game_universe() -> GameUniverse:
     return GameUniverse.Skyrim  # TODO: read from project config
 
+
+class FolderToCache:
+    folder: str
+    exdirs: list[str]
+
+    def __init__(self, folder: str, exdirs: list[str] = None) -> None:
+        self.folder = folder
+        self.exdirs = [] if exdirs is None else exdirs
+
+
+type FolderListToCache = list[FolderToCache]
+
+
+### generic helpers
 
 class Val:
     val: any
@@ -52,16 +68,21 @@ class SanguinicError(Exception):
     pass
 
 
-def abort_if_not(cond: bool,
-                 f: Callable[
-                     [], str] = None):  # 'always assert', even if __debug__ is False. f is a lambda printing error message before throwing
+def abort_if_not(cond: bool, msg: Callable[[], str] | str | None = None):
+    # 'always assert', even if __debug__ is False.
+    # msg is a string or lambda which returns error message
     if not cond:
-        msg = 'abort_if_not() failed'
-        if f is not None:
-            msg += ':' + f()
+        msg1 = 'abort_if_not() failed'
+        if msg is not None:
+            if callable(msg):
+                msg1 += ':' + msg()
+            elif isinstance(msg, str):
+                msg1 += ':' + msg
+            else:
+                assert False
         where = traceback.extract_stack(limit=2)[0]
-        critical(msg + ' @line ' + str(where.lineno) + ' of ' + os.path.split(where.filename)[1])
-        raise SanguinicError(msg)
+        critical(msg1 + ' @line ' + str(where.lineno) + ' of ' + os.path.split(where.filename)[1])
+        raise SanguinicError(msg1)
 
 
 ### JSON-related

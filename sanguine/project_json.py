@@ -240,7 +240,7 @@ class GitProjectJson:
         # TODO: write intermediate_archives
 
         wfile.write(
-            '  files: // Legend: p=path (relative to MO2), s=size, h=hash\n')
+            '  files: // Legend: p=path (relative to VFS), s=size, h=hash\n')
 
         global _write_handlers
         for wh in _write_handlers:
