@@ -70,7 +70,7 @@ class ZeroFileRetriever(FileRetriever):
             return None
 
 
-class GithubFileRetriever(FileRetriever):  # only partially specialized, needs further specialization to be usable
+class GithubFileRetriever(FileRetriever):
     github_author: str  # '' for 'this project'
     github_project: str  # '' means 'this project'
     from_path: str

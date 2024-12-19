@@ -427,23 +427,25 @@ def _decompressor(p: GitDataParam) -> GitParamDecompressor:
             assert False
 
 
-class GitDataHandler(ABC):
+class GitDataWriteHandler:
     specific_fields: list[GitDataParam]  # fields in the list entry which are specific to handler
 
     def __init__(self, specific_fields: list[GitDataParam] = None) -> None:
         self.specific_fields = specific_fields if specific_fields is not None else []
 
+
+class GitDataReadHandler(GitDataWriteHandler):
+    @abstractmethod
     def decompress(self, common_param: tuple[str | int | bytes, ...],
-                   specific_param: tuple[str | int | bytes, ...]) -> None:  # we want to instantiate GitDataHandler,
-        # but for such instantiations we don't need decompress()
-        assert False
+                   specific_param: tuple[str | int | bytes, ...]) -> None:
+        pass
 
 
-class GitDataList:
+class GitDataWriteList:
     common_fields: list[GitDataParam]  # fields which are common for all handlers
-    handlers: list[GitDataHandler]
+    handlers: list[GitDataWriteHandler]
 
-    def __init__(self, common_fields: list[GitDataParam], handlers: list[GitDataHandler]) -> None:
+    def __init__(self, common_fields: list[GitDataParam], handlers: list[GitDataWriteHandler]) -> None:
         if __debug__:
             assert not common_fields[0].can_skip
 
@@ -465,6 +467,16 @@ class GitDataList:
         self.handlers = handlers
 
 
+class GitDataReadList(GitDataWriteList):
+    def __init__(self, common_fields: list[GitDataParam], handlers: list[GitDataReadHandler]) -> None:
+        super().__init__(common_fields, handlers)
+
+    def read_handlers(self) -> list[GitDataReadHandler]:
+        # noinspection PyTypeChecker
+        # we do know what we're doing here: it is indeed a list of GitDataReadHanders, as guaranteed by __init__(handlers:list[GitDataReadHandler])
+        return self.handlers
+
+
 ### writing
 
 def write_git_file_header(wfile: typing.TextIO) -> None:
@@ -478,15 +490,15 @@ def write_git_file_footer(wfile: typing.TextIO) -> None:
 
 
 class GitDataListWriter:
-    df: GitDataList
+    df: GitDataWriteList
     wfile: typing.TextIO
     common_fields_compressors: list[GitParamCompressor]
-    last_handler: GitDataHandler | None
+    last_handler: GitDataWriteHandler | None
     last_handler_compressors: list[
         GitParamCompressor]  # we never go beyond last line, so only one (last) per-handler compressor is ever necessary
     line_num: int
 
-    def __init__(self, df: GitDataList, wfile: typing.TextIO) -> None:
+    def __init__(self, df: GitDataWriteList, wfile: typing.TextIO) -> None:
         self.df = df
         self.wfile = wfile
         self.common_fields_compressors = [_compressor(cf) for cf in df.common_fields]
@@ -497,7 +509,7 @@ class GitDataListWriter:
     def write_begin(self) -> None:
         self.wfile.write('[\n')
 
-    def write_line(self, handler: GitDataHandler, common_values: tuple, specific_values: tuple = ()) -> None:
+    def write_line(self, handler: GitDataWriteHandler, common_values: tuple, specific_values: tuple = ()) -> None:
         assert len(common_values) == len(self.df.common_fields)
         assert len(specific_values) == len(handler.specific_fields)
         if self.line_num > 0:
@@ -557,15 +569,15 @@ class _GitHeaderFooterReader:
 
 
 class _GitDataListContentsReader:
-    df: GitDataList
+    df: GitDataReadList
     common_fields_decompressor: list[GitParamDecompressor]
-    last_handler: GitDataHandler | None
+    last_handler: GitDataReadHandler | None
     comment_only_line: re.Pattern
     regexps: list[
-        tuple[re.Pattern, GitDataHandler, list[tuple[int, GitParamDecompressor]], list[
+        tuple[re.Pattern, GitDataReadHandler, list[tuple[int, GitParamDecompressor]], list[
             tuple[int, GitParamDecompressor]]]]  # decompressor lists are matched, skipped
 
-    def __init__(self, df: GitDataList) -> None:
+    def __init__(self, df: GitDataReadList) -> None:
         self.df = df
         self.common_fields_decompressor = [_decompressor(cf) for cf in df.common_fields]
         self.last_handler = None
@@ -573,7 +585,7 @@ class _GitDataListContentsReader:
         self.regexps = []
 
         ncommon = len(self.df.common_fields)
-        for h in self.df.handlers:
+        for h in self.df.read_handlers():
             canskip = []
             for i in range(ncommon):
                 if self.df.common_fields[i].can_skip:
@@ -703,7 +715,7 @@ def skip_git_file_header(rfile: typing.TextIO) -> tuple[str, int]:
                 return ln, lineno
 
 
-def read_git_file_list(dlist: GitDataList, rfile: typing.TextIO, lineno: int) -> int:
+def read_git_file_list(dlist: GitDataReadList, rfile: typing.TextIO, lineno: int) -> int:
     rda = _GitDataListContentsReader(dlist)
 
     ln = rfile.readline()

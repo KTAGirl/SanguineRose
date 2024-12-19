@@ -2,7 +2,7 @@ import re
 
 import sanguine.gitdata.git_data_file as gitdatafile
 from sanguine.common import *
-from sanguine.gitdata.git_data_file import GitDataParam, GitDataType, GitDataHandler
+from sanguine.gitdata.git_data_file import GitDataParam, GitDataType, GitDataWriteHandler, GitDataReadHandler
 from sanguine.helpers.plugin_handler import load_plugins
 
 
@@ -20,7 +20,7 @@ class FileOrigin(ABC):
         return self.tentative_name == b.tentative_name
 
 
-class GitFileOriginsWriteHandler(GitDataHandler):
+class GitFileOriginsWriteHandler(GitDataWriteHandler):
     @abstractmethod
     def legend(self) -> str:
         pass
@@ -38,7 +38,7 @@ class GitFileOriginsWriteHandler(GitDataHandler):
         return fo.tentative_name, h
 
 
-class GitFileOriginsReadHandler(GitDataHandler):
+class GitFileOriginsReadHandler(GitDataReadHandler):
     file_origins: dict[bytes, list[FileOrigin]]
     COMMON_FIELDS: list[GitDataParam] = [
         GitDataParam('n', GitDataType.Str, False),
@@ -49,6 +49,10 @@ class GitFileOriginsReadHandler(GitDataHandler):
     def __init__(self, specific_fields: list[GitDataParam], file_origins: dict[bytes, list[FileOrigin]]) -> None:
         super().__init__(specific_fields)
         self.file_origins = file_origins
+
+    @abstractmethod
+    def decompress(self, common_param: tuple, specific_param: tuple) -> None:
+        pass
 
     @staticmethod
     def init_base_file_origin(fo: FileOrigin, common_param: tuple[str, bytes]) -> None:
@@ -147,7 +151,7 @@ class GitFileOriginsJson:
             wfile.write(
                 '                //         ' + wh.legend() + '\n')
 
-        da = gitdatafile.GitDataList(GitFileOriginsReadHandler.COMMON_FIELDS, handlers)
+        da = gitdatafile.GitDataWriteList(GitFileOriginsReadHandler.COMMON_FIELDS, handlers)
         writer = gitdatafile.GitDataListWriter(da, wfile)
         writer.write_begin()
         for fox in folist:
@@ -176,7 +180,7 @@ class GitFileOriginsJson:
         assert re.search(r'^\s*file_origins\s*:\s*//', ln)
 
         handlers = [plugin.read_handler(file_origins) for plugin in _file_origin_plugins]
-        da = gitdatafile.GitDataList(GitFileOriginsReadHandler.COMMON_FIELDS, handlers)
+        da = gitdatafile.GitDataReadList(GitFileOriginsReadHandler.COMMON_FIELDS, handlers)
         lineno = gitdatafile.read_git_file_list(da, rfile, lineno)
 
         # skipping footer

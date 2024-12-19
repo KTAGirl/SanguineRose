@@ -4,7 +4,7 @@ import sanguine.gitdata.git_data_file as gitdatafile
 import sanguine.tasks as tasks
 from sanguine.common import *
 from sanguine.gitdata.file_origin import FileOrigin, GitFileOriginsJson
-from sanguine.gitdata.git_data_file import GitDataParam, GitDataType, GitDataHandler
+from sanguine.gitdata.git_data_file import GitDataParam, GitDataType, GitDataWriteHandler, GitDataReadHandler
 from sanguine.helpers.archives import Archive, FileInArchive
 from sanguine.helpers.archives import ArchivePluginBase, all_archive_plugins_extensions, archive_plugin_for
 from sanguine.helpers.pickled_cache import pickled_cache
@@ -13,7 +13,7 @@ from sanguine.helpers.tmp_path import TmpPath
 
 ### GitArchivesJson
 
-class GitArchivesReadHandler(GitDataHandler):
+class GitArchivesReadHandler(GitDataReadHandler):
     archives: list[Archive]
 
     def __init__(self, archives: list[Archive]) -> None:
@@ -59,8 +59,8 @@ class GitArchivesJson:
         wfile.write(
             '  archives: // Legend: i=intra_archive_path, a=archive_hash, x=archive_size, h=file_hash, s=file_size, b=by\n')
 
-        ahandler = GitDataHandler()
-        da = gitdatafile.GitDataList(self._COMMON_FIELDS, [ahandler])
+        ahandler = GitDataWriteHandler()
+        da = gitdatafile.GitDataWriteList(self._COMMON_FIELDS, [ahandler])
         alwriter = gitdatafile.GitDataListWriter(da, wfile)
         alwriter.write_begin()
         # warn('archives: ' + str(len(archives)))
@@ -84,7 +84,7 @@ class GitArchivesJson:
         # info(ln)
         assert re.search(r'^\s*archives\s*:\s*//', ln)
 
-        da = gitdatafile.GitDataList(self._COMMON_FIELDS, [GitArchivesReadHandler(archives)])
+        da = gitdatafile.GitDataReadList(self._COMMON_FIELDS, [GitArchivesReadHandler(archives)])
         lineno = gitdatafile.read_git_file_list(da, rfile, lineno)
 
         # skipping footer

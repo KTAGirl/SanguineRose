@@ -74,8 +74,6 @@ class GitNexusFileOriginsWriteHandler(GitFileOriginsWriteHandler):
     def legend(self) -> str:
         return '[ f:fileid, m:modid, g:gameid if Nexus ]'
 
-    ### MetaFileParser
-
 
 class NexusMetaFileParser(MetaFileParser):
     MOD_ID_PATTERN = re.compile(r'^modID\s*=\s*([0-9]+)\s*$', re.IGNORECASE)

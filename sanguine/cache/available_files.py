@@ -1,13 +1,13 @@
 import os.path
 
 import sanguine.tasks as tasks
+from sanguine.cache.file_retriever import (FileRetriever, ZeroFileRetriever, GithubFileRetriever,
+                                           FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives)
 from sanguine.cache.folder_cache import FolderCache, FileOnDisk
 from sanguine.common import *
 from sanguine.gitdata.file_origin import file_origins_for_file, FileOrigin
 from sanguine.gitdata.master_git_data import MasterGitData
 from sanguine.helpers.archives import all_archive_plugins_extensions
-from sanguine.helpers.file_retriever import (FileRetriever, ZeroFileRetriever, GithubFileRetriever,
-                                             FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives)
 from sanguine.helpers.tmp_path import TmpPath
 
 

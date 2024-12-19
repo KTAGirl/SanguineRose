@@ -1,11 +1,11 @@
 import re
 
 import sanguine.gitdata.git_data_file as gitdatafile
+from sanguine.cache.file_retriever import (FileRetriever, ZeroFileRetriever, GithubFileRetriever,
+                                           FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives)
 from sanguine.common import *
-from sanguine.gitdata.git_data_file import GitDataParam, GitDataType, GitDataHandler
+from sanguine.gitdata.git_data_file import GitDataParam, GitDataType, GitDataWriteHandler, GitDataReadHandler
 from sanguine.helpers.archives import FileInArchive
-from sanguine.helpers.file_retriever import (FileRetriever, ZeroFileRetriever, GithubFileRetriever,
-                                             FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives)
 
 if typing.TYPE_CHECKING:
     from sanguine.cache.available_files import AvailableFiles
@@ -15,7 +15,7 @@ if typing.TYPE_CHECKING:
 
 ### base read/write handlers
 
-class GitRetrievedFileWriteHandler(GitDataHandler):
+class GitRetrievedFileWriteHandler(GitDataWriteHandler):
     @abstractmethod
     def legend(self) -> str:
         pass
@@ -33,7 +33,7 @@ class GitRetrievedFileWriteHandler(GitDataHandler):
         return rel_path, fr.file_size, fr.file_hash
 
 
-class GitRetrievedFileReadHandler(GitDataHandler):
+class GitRetrievedFileReadHandler(GitDataReadHandler):
     retrieved_files: list[tuple[str, FileRetriever]]
     COMMON_FIELDS: list[GitDataParam] = [
         GitDataParam('p', GitDataType.Path, False, compress_level=0),  # no path compression for readability
@@ -44,6 +44,10 @@ class GitRetrievedFileReadHandler(GitDataHandler):
     def __init__(self, specific_fields: list[GitDataParam], files: list[tuple[str, FileRetriever]]) -> None:
         super().__init__(specific_fields)
         self.retrieved_files = files
+
+    @abstractmethod
+    def decompress(self, common_param: tuple, specific_param: tuple) -> None:
+        pass
 
     @staticmethod
     def init_base_file_retriever(available: "AvailableFiles", fr: FileRetriever,
@@ -251,7 +255,7 @@ class GitProjectJson:
                 wfile.write(
                     '         //         ' + legend + '\n')
 
-        da = gitdatafile.GitDataList(GitRetrievedFileReadHandler.COMMON_FIELDS, _write_handlers)
+        da = gitdatafile.GitDataWriteList(GitRetrievedFileReadHandler.COMMON_FIELDS, _write_handlers)
         writer = gitdatafile.GitDataListWriter(da, wfile)
         writer.write_begin()
         for rx in rsorted:
@@ -288,7 +292,7 @@ class GitProjectJson:
             GitRetrievedSingleArchiveFileReadHandler(self.available, retrievers),
             GitRetrievedNestedArchiveFileReadHandler(self.available, intermediate_archives, retrievers)
         ]
-        da = gitdatafile.GitDataList(GitRetrievedFileReadHandler.COMMON_FIELDS, handlers)
+        da = gitdatafile.GitDataReadList(GitRetrievedFileReadHandler.COMMON_FIELDS, handlers)
         lineno = gitdatafile.read_git_file_list(da, rfile, lineno)
 
         # skipping footer
