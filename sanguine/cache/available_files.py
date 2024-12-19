@@ -79,7 +79,7 @@ class AvailableFiles:
         return AvailableFiles._READYOWNTASKNAME
 
     def file_retrievers_by_hash(self, h: bytes) -> list[FileRetriever]:
-        zero = ZeroFileRetriever.make_retriever_if(self, h)
+        zero = ZeroFileRetriever.make_retriever_if(h)
         if zero is not None:
             return [zero]  # if it is zero file, we won't even try looking elsewhere
         archived = self._archived_file_retrievers_by_hash(h)
@@ -92,7 +92,7 @@ class AvailableFiles:
         if found is None:
             return []
         assert len(found) > 0
-        return [FileRetrieverFromSingleArchive(self, (h, fi.file_size), ar.archive_hash, ar.archive_size, fi)
+        return [FileRetrieverFromSingleArchive((h, fi.file_size), ar.archive_hash, ar.archive_size, fi)
                 for ar, fi in found]
 
     def _add_nested_to_retrievers(self, out: list[FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives],
@@ -102,7 +102,7 @@ class AvailableFiles:
             out.append(r)
             found2 = self._archived_file_retrievers_by_hash(r.archive_hash)
             for r2 in found2:
-                out.append(FileRetrieverFromNestedArchives(self, (r2.file_hash, r2.file_size), r2, r))
+                out.append(FileRetrieverFromNestedArchives( (r2.file_hash, r2.file_size), r2, r))
 
     def _archived_file_retrievers_by_hash(self, h: bytes) -> list[
         FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives]:  # recursive
@@ -142,7 +142,7 @@ class AvailableFiles:
             assert projectname is not None
             assert intrapath is not None
 
-            out.append(GithubFileRetriever(self, (h, gh.file_size), author, projectname, intrapath))
+            out.append(GithubFileRetriever((h, gh.file_size), author, projectname, intrapath))
 
     '''
     def _archived_file_retrievers_by_name(self, fname: str) -> list[FileRetriever]:
@@ -244,3 +244,5 @@ if __name__ == '__main__':
             with tasks.Parallel(None, dbg_serialize=False) as tparallel:
                 tavailable.start_tasks(tparallel)
                 tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()
+
+        info('available_files.py test finished ok')
