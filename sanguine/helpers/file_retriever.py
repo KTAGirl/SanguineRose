@@ -108,13 +108,12 @@ class FileRetrieverFromSingleArchive(FileRetriever):
         self.file_in_archive = file_in_archive
 
     def fetch(self, available: "AvailableFiles", targetfpath: str) -> None:
-        pass
-        # TODO!
+        assert False # should not be called directly, only via archive aggregation
 
     def fetch_for_reading(self, available: "AvailableFiles", tmpdirpath: str) -> str:
-        pass
-        # TODO!
-
+        assert False # should not be called directly, only via aggregation
+        # noinspection PyUnreachableCode
+        return ''
 
 class FileRetrieverFromNestedArchives(FileRetriever):
     single_archive_retrievers: list[FileRetrieverFromSingleArchive]
@@ -134,9 +133,9 @@ class FileRetrieverFromNestedArchives(FileRetriever):
             self.single_archive_retrievers = parent.single_archive_retrievers + [child]
 
     def fetch(self, available: "AvailableFiles", targetfpath: str) -> None:
-        pass
-        # TODO!
+        assert False # should not be called directly, only via archive aggregation
 
     def fetch_for_reading(self, available: "AvailableFiles", tmpdirpath: str) -> str:
-        pass
-        # TODO!
+        assert False # should not be called directly, only via archive aggregation
+        # noinspection PyUnreachableCode
+        return ''

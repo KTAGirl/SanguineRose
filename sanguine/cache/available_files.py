@@ -1,8 +1,8 @@
 import os.path
 
 import sanguine.tasks as tasks
-from sanguine.cache.file_retriever import (FileRetriever, ZeroFileRetriever, GithubFileRetriever,
-                                           FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives)
+from sanguine.helpers.file_retriever import (FileRetriever, ZeroFileRetriever, GithubFileRetriever,
+                                             FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives)
 from sanguine.cache.folder_cache import FolderCache, FileOnDisk
 from sanguine.cache.all_master_git_data import AllMasterGitData
 from sanguine.common import *
