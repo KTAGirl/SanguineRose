@@ -1,105 +1,14 @@
-import re
-
 import sanguine.gitdata.git_data_file as gitdatafile
 import sanguine.tasks as tasks
+from sanguine.cache.pickled_cache import pickled_cache
 from sanguine.common import *
 from sanguine.gitdata.file_origin import FileOrigin, GitFileOriginsJson
-from sanguine.gitdata.git_data_file import GitDataParam, GitDataType, GitDataWriteHandler, GitDataReadHandler
+from sanguine.gitdata.master_git_archives import GitArchivesJson
 from sanguine.helpers.archives import Archive, FileInArchive
 from sanguine.helpers.archives import ArchivePluginBase, all_archive_plugins_extensions, archive_plugin_for
-from sanguine.helpers.pickled_cache import pickled_cache
 from sanguine.helpers.tmp_path import TmpPath
 
-
-### GitArchivesJson
-
-class GitArchivesReadHandler(GitDataReadHandler):
-    archives: list[Archive]
-
-    def __init__(self, archives: list[Archive]) -> None:
-        super().__init__()
-        self.archives = archives
-
-    def decompress(self, common_param: tuple[bytes, str, bytes, int, int, str], specific_param: tuple) -> None:
-        assert len(specific_param) == 0
-        # warn(repr(param))
-        # time.sleep(1)
-        (h, i, a, x, s, b) = common_param
-        found = None
-        if len(self.archives) > 0:
-            ar = self.archives[-1]
-            if ar.archive_hash == a:
-                assert ar.archive_size == x
-                found = ar
-
-        if found is None:
-            found = Archive(a, x, b)
-            self.archives.append(found)
-
-        found.files.append(FileInArchive(h, s, i))
-
-
-class GitArchivesJson:
-    _COMMON_FIELDS: list[GitDataParam] = [
-        GitDataParam('h', GitDataType.Hash, False),  # file_hash (truncated)
-        GitDataParam('i', GitDataType.Path),  # intra_path
-        GitDataParam('a', GitDataType.Hash),  # archive_hash
-        GitDataParam('x', GitDataType.Int),  # archive_size
-        GitDataParam('s', GitDataType.Int),  # file_size
-        GitDataParam('b', GitDataType.Str)
-    ]
-
-    def __init__(self) -> None:
-        pass
-
-    def write(self, wfile: typing.TextIO, archives0: Iterable[Archive]) -> None:
-        archives = sorted(archives0, key=lambda a: a.archive_hash)
-        # warn(str(len(archives)))
-        gitdatafile.write_git_file_header(wfile)
-        wfile.write(
-            '  archives: // Legend: i=intra_archive_path, a=archive_hash, x=archive_size, h=file_hash, s=file_size, b=by\n')
-
-        ahandler = GitDataWriteHandler()
-        da = gitdatafile.GitDataWriteList(self._COMMON_FIELDS, [ahandler])
-        alwriter = gitdatafile.GitDataListWriter(da, wfile)
-        alwriter.write_begin()
-        # warn('archives: ' + str(len(archives)))
-        for ar in archives:
-            # warn('files: ' + str(len(ar.files)))
-            for fi in sorted(ar.files,
-                             key=lambda f: f.intra_path):
-                alwriter.write_line(ahandler, (
-                    fi.file_hash, fi.intra_path, ar.archive_hash,
-                    ar.archive_size, fi.file_size, ar.by))
-        alwriter.write_end()
-        gitdatafile.write_git_file_footer(wfile)
-
-    def read_from_file(self, rfile: typing.TextIO) -> list[Archive]:
-        archives: list[Archive] = []
-
-        # skipping header
-        ln, lineno = gitdatafile.skip_git_file_header(rfile)
-
-        # reading archives:  ...
-        # info(ln)
-        assert re.search(r'^\s*archives\s*:\s*//', ln)
-
-        da = gitdatafile.GitDataReadList(self._COMMON_FIELDS, [GitArchivesReadHandler(archives)])
-        lineno = gitdatafile.read_git_file_list(da, rfile, lineno)
-
-        # skipping footer
-        gitdatafile.skip_git_file_footer(rfile, lineno)
-
-        if __debug__:
-            assert len(set([ar.archive_hash for ar in archives])) == len(archives)
-
-        # warn(str(len(archives)))
-        return archives
-
-
-##### MasterGitData
-
-### MasterGitData Helpers
+### AllMasterGitData Helpers
 
 _KNOWN_ARCHIVES_FNAME = 'known-archives.json5'
 _KNOWN_FILE_ORIGINS_FNAME = 'known-file-origins.json5'
@@ -186,7 +95,7 @@ def _write_git_file_origins(mastergitdir: str, forigins: dict[bytes, list[FileOr
         GitFileOriginsJson().write(wf, forigins)
 
 
-### MasterGitData Tasks
+### AllMasterGitData Tasks
 
 def _load_archives_task_func(param: tuple[str, str, dict[str, any]]) -> tuple[list[Archive], dict[str, any]]:
     (mastergitdir, cachedir, cachedata) = param
@@ -202,7 +111,7 @@ def _archive_hashing_task_func(param: tuple[str, str, bytes, int, str]) -> tuple
     assert plugin is not None
     archives = []
     _hash_archive(archives, by, tmppath, plugin, arpath, arhash, arsize)
-    debug('MasterGitData: about to remove temporary tree {}'.format(tmppath))
+    debug('AllMasterGitData: about to remove temporary tree {}'.format(tmppath))
     TmpPath.rm_tmp_tree(tmppath)
     return (archives,)
 
@@ -254,9 +163,9 @@ def _save_file_origins_task_func(param: tuple[str, dict[bytes, list[FileOrigin]]
         _debug_assert_eq_list(saved_loaded, sorted_forigins)
 
 
-### MasterGitData itself
+### AllMasterGitData itself
 
-class MasterGitData:
+class AllMasterGitData:
     _master_git_dir: str
     _cache_dir: str
     _tmp_dir: str
@@ -344,7 +253,7 @@ class MasterGitData:
         loadtask = tasks.Task(loadtaskname, _load_archives_task_func,
                               (self._master_git_dir, self._cache_dir, self._cache_data), [])
         parallel.add_task(loadtask)
-        loadowntaskname = MasterGitData._LOADAROWNTASKNAME
+        loadowntaskname = AllMasterGitData._LOADAROWNTASKNAME
         loadowntask = tasks.OwnTask(loadowntaskname,
                                     lambda _, out: self._load_archives_own_task_func(out), None,
                                     [loadtaskname])
@@ -354,7 +263,7 @@ class MasterGitData:
         load2task = tasks.Task(load2taskname, _load_file_origins_task_func,
                                (self._master_git_dir, self._cache_dir, self._cache_data), [])
         parallel.add_task(load2task)
-        load2owntaskname = MasterGitData._LOADFOOWNTASKNAME
+        load2owntaskname = AllMasterGitData._LOADFOOWNTASKNAME
         load2owntask = tasks.OwnTask(load2owntaskname,
                                      lambda _, out: self._load_file_origins_own_task_func(out), None,
                                      [load2taskname])
@@ -362,11 +271,11 @@ class MasterGitData:
 
     @staticmethod
     def ready_to_start_hashing_task_name() -> str:
-        return MasterGitData._LOADAROWNTASKNAME
+        return AllMasterGitData._LOADAROWNTASKNAME
 
     @staticmethod
     def ready_to_start_adding_file_origins_task_name() -> str:
-        return MasterGitData._LOADFOOWNTASKNAME
+        return AllMasterGitData._LOADFOOWNTASKNAME
 
     def start_hashing_archive(self, parallel: tasks.Parallel, arpath: str, arhash: bytes, arsize: int) -> None:
         hashingtaskname = 'sanguine.mastergit.hash.' + arpath
@@ -398,7 +307,7 @@ class MasterGitData:
         donehashingowntaskname = 'sanguine.mastergit.donehashing'
         donehashingowntask = tasks.OwnTask(donehashingowntaskname,
                                            lambda _, _1: self._done_hashing_own_task_func(parallel), None,
-                                           [MasterGitData._LOADAROWNTASKNAME, 'sanguine.mastergit.hashown.*'])
+                                           [AllMasterGitData._LOADAROWNTASKNAME, 'sanguine.mastergit.hashown.*'])
         parallel.add_task(donehashingowntask)
 
         return donehashingowntaskname

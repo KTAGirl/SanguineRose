@@ -7,6 +7,7 @@ from sanguine.common import *
 from sanguine.gitdata.git_data_file import GitDataParam, GitDataType, GitDataWriteHandler, GitDataReadHandler
 from sanguine.helpers.archives import FileInArchive
 
+
 ##### Handlers
 
 ### base read/write handlers
@@ -138,9 +139,9 @@ class GitRetrievedSingleArchiveFileReadHandler(GitRetrievedFileReadHandler):
     def decompress(self, common_param: tuple[str, int, bytes], specific_param: tuple[str, bytes, int]) -> None:
         (i, a, x) = specific_param
         (h, s) = GitRetrievedFileReadHandler.hash_and_size(common_param)
-        fr = FileRetrieverFromSingleArchive(lambda fr2: GitRetrievedFileReadHandler.init_base_file_retriever(
-                                                fr2,common_param),
-                                            a, x, FileInArchive(h, s, i))
+        fr = FileRetrieverFromSingleArchive(
+            lambda fr2: GitRetrievedFileReadHandler.init_base_file_retriever(fr2, common_param),
+            a, x, FileInArchive(h, s, i))
         self.retrieved_files.append((GitRetrievedFileReadHandler.rel_path(common_param), fr))
 
 
@@ -178,7 +179,7 @@ class GitRetrievedNestedArchiveFileReadHandler(GitRetrievedFileReadHandler):
     def decompress(self, common_param: tuple[str, int, bytes], specific_param: tuple[str, bytes, int]) -> None:
         (j, a, x) = specific_param
         (h, s) = GitRetrievedFileReadHandler.hash_and_size(common_param)
-        baseinit = lambda fr2: GitRetrievedFileReadHandler.init_base_file_retriever( fr2, common_param)
+        baseinit = lambda fr2: GitRetrievedFileReadHandler.init_base_file_retriever(fr2, common_param)
         frlast = FileRetrieverFromSingleArchive(baseinit, a, x, FileInArchive(h, s, j))
         inter = self.intermediate[frlast.archive_hash]  # must be present
         fr = FileRetrieverFromNestedArchives(baseinit, inter, frlast)

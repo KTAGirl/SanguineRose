@@ -4,9 +4,9 @@ import sanguine.tasks as tasks
 from sanguine.cache.file_retriever import (FileRetriever, ZeroFileRetriever, GithubFileRetriever,
                                            FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives)
 from sanguine.cache.folder_cache import FolderCache, FileOnDisk
+from sanguine.cache.all_master_git_data import AllMasterGitData
 from sanguine.common import *
 from sanguine.gitdata.file_origin import file_origins_for_file, FileOrigin
-from sanguine.gitdata.master_git_data import MasterGitData
 from sanguine.helpers.archives import all_archive_plugins_extensions
 from sanguine.helpers.tmp_path import TmpPath
 
@@ -39,7 +39,7 @@ class AvailableFiles:
     _github_cache: FolderCache
     _github_cache_by_hash: dict[bytes, list[FileOnDisk]] | None
     _downloads_cache: FolderCache
-    _master_data: MasterGitData
+    _master_data: AllMasterGitData
     _github_folders: list[GithubFolder]
     _READYOWNTASKNAME = 'sanguine.available.readyown'
     _is_ready: bool
@@ -51,7 +51,7 @@ class AvailableFiles:
                                          [FolderToCache(g.local_folder, []) for g in github_folders])
         self._github_cache_by_hash = None
         self._github_folders = github_folders
-        self._master_data = MasterGitData(by, mastergitdir, cachedir, tmpdir, {})
+        self._master_data = AllMasterGitData(by, mastergitdir, cachedir, tmpdir, {})
         self._is_ready = False
 
     # public interface
@@ -65,7 +65,7 @@ class AvailableFiles:
         starthashingowntask = tasks.OwnTask(starthashingowntaskname,
                                             lambda _, _1, _2: self._start_hashing_own_task_func(parallel), None,
                                             [self._downloads_cache.ready_task_name(),
-                                             MasterGitData.ready_to_start_hashing_task_name()])
+                                             AllMasterGitData.ready_to_start_hashing_task_name()])
         parallel.add_task(starthashingowntask)
 
         startoriginsowntaskname = 'sanguine.available.startfileorigins'
@@ -102,7 +102,7 @@ class AvailableFiles:
             out.append(r)
             found2 = self._archived_file_retrievers_by_hash(r.archive_hash)
             for r2 in found2:
-                out.append(FileRetrieverFromNestedArchives( (r2.file_hash, r2.file_size), r2, r))
+                out.append(FileRetrieverFromNestedArchives((r2.file_hash, r2.file_size), r2, r))
 
     def _archived_file_retrievers_by_hash(self, h: bytes) -> list[
         FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives]:  # recursive
@@ -194,7 +194,7 @@ class AvailableFiles:
         originsowntask = tasks.OwnTask(startoriginsowntaskname,
                                        lambda _, out, _1: self._file_origins_own_task_func(parallel, out), None,
                                        [originstaskname,
-                                        MasterGitData.ready_to_start_adding_file_origins_task_name()])
+                                        AllMasterGitData.ready_to_start_adding_file_origins_task_name()])
         parallel.add_task(originsowntask)
 
     def _file_origins_own_task_func(self, parallel: tasks.Parallel,
