@@ -1,25 +1,12 @@
 # common is used by sanguine_install_helpers, so it must not import any installable modules
 
 import base64
-import enum
 import hashlib
 import json
-import os
 import pickle
-import traceback
-import typing
-# noinspection PyUnresolvedReferences
-from abc import ABC, abstractmethod
-# noinspection PyUnresolvedReferences
-from collections.abc import Callable, Generator, Iterable
 from stat import S_ISREG, S_ISLNK
-# noinspection PyUnresolvedReferences
-from types import TracebackType
 
-Type = typing.Type
-
-# noinspection PyUnresolvedReferences, PyProtectedMember
-from sanguine.helpers._logging import debug, info, warn, alert, critical, add_file_logging
+from sanguine.install.install_common import *
 
 
 ### inter-file interfaces
@@ -92,29 +79,6 @@ def add_to_dict_of_lists(dicttolook: dict[any, list[any]], key: any, val: any) -
         dicttolook[key] = [val]
     else:
         dicttolook[key].append(val)
-
-
-### error-handling related
-
-class SanguinicError(Exception):
-    pass
-
-
-def abort_if_not(cond: bool, msg: Callable[[], str] | str | None = None):
-    # 'always assert', even if __debug__ is False.
-    # msg is a string or lambda which returns error message
-    if not cond:
-        msg1 = 'abort_if_not() failed'
-        if msg is not None:
-            if callable(msg):
-                msg1 += ':' + msg()
-            elif isinstance(msg, str):
-                msg1 += ':' + msg
-            else:
-                assert False
-        where = traceback.extract_stack(limit=2)[0]
-        critical(msg1 + ' @line ' + str(where.lineno) + ' of ' + os.path.split(where.filename)[1])
-        raise SanguinicError(msg1)
 
 
 ### JSON-related

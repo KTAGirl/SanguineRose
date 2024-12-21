@@ -52,12 +52,10 @@ if __name__ == '__main__':
     import sys
 
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
-        from sanguine.install.install_checks import check_sanguine_prerequisites
-
         ttmppath = normalize_dir_path('../../../sanguine.tmp\\')
         add_file_logging(ttmppath + 'sanguine.log.html')
-
         check_sanguine_prerequisites()
+
         cfgfname = normalize_file_path('../../../KTA\\KTA.json5')
         cfg = ProjectConfig(cfgfname)
         pass
