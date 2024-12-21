@@ -62,6 +62,17 @@ def truncate_file_hash(h: bytes) -> bytes:
     return h[:9]
 
 
+class GithubFolder:
+    author: str
+    project_name: str
+    local_folder: str
+
+    def __init__(self, author: str, project_name: str, local_folder: str) -> None:
+        self.author = author
+        self.project_name = project_name
+        self.local_folder = local_folder
+
+
 ### generic helpers
 
 class Val:

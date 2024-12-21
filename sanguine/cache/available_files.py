@@ -24,17 +24,6 @@ def _file_origins_task_func(param: tuple[list[bytes, str]]) -> tuple[list[tuple[
     return (allorigins,)
 
 
-class GithubFolder:
-    author: str
-    project_name: str
-    local_folder: str
-
-    def __init__(self, author: str, project_name: str, local_folder: str) -> None:
-        self.author = author
-        self.project_name = project_name
-        self.local_folder = local_folder
-
-
 class AvailableFiles:
     _github_cache: FolderCache
     _github_cache_by_hash: dict[bytes, list[FileOnDisk]] | None
@@ -207,8 +196,6 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
         ttmppath = normalize_dir_path('../../../sanguine.tmp\\')
         add_file_logging(ttmppath + 'sanguine.log.html')
-        # alert('Test alert')
-        # critical('Test critical')
 
         check_sanguine_prerequisites()
 

@@ -300,7 +300,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
     @staticmethod
     def _two_folders_overlap(a: str, aex: list[str], b: str, bex: list[str]) -> bool:
         if a == b:
-            return False
+            return True
         ok = True
         if a.startswith(b):  # b contains a
             ok = False
@@ -314,7 +314,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 if b.startswith(x):
                     ok = True
                     break
-        return ok
+        return not ok
 
     @staticmethod
     def _folder_list_self_overlaps(l: FolderListToCache) -> bool:
@@ -323,6 +323,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 if aidx == bidx:
                     continue
                 if FolderCache._two_folders_overlap(l[aidx].folder, l[aidx].exdirs, l[bidx].folder, l[bidx].exdirs):
+                    debug('FolderCache: {} overlaps {}'.format(l[aidx].folder, l[bidx].folder))
                     return True
         return False
 

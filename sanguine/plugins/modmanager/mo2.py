@@ -67,9 +67,10 @@ class Mo2ProjectConfig(ModManagerConfig):
             normalize_dir_path(self.mo2dir.folder + 'profiles\\' + self.master_profile + '\\'))
 
     def active_vfs_folders(self) -> FolderListToCache:
-        out: FolderListToCache = [self.mo2dir]
+        out: FolderListToCache = [FolderToCache(self.mo2dir.folder, [self.mo2dir.folder + 'mods\\'])]
         for mod in self.master_modlist.all_enabled():
-            out.append(FolderToCache(self.mo2dir.folder + 'mods\\' + mod + '\\', self.mo2dir.exdirs))
+            out.append(
+                FolderToCache(normalize_dir_path(self.mo2dir.folder + 'mods\\' + mod + '\\'), self.mo2dir.exdirs))
         return out
 
     def default_download_dirs(self) -> list[str]:

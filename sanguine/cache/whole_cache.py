@@ -1,5 +1,5 @@
 import sanguine.tasks as tasks
-from sanguine.cache.available_files import FileRetriever, AvailableFiles, GithubFolder
+from sanguine.cache.available_files import FileRetriever, AvailableFiles
 from sanguine.cache.folder_cache import FileOnDisk, FolderCache
 from sanguine.common import *
 from sanguine.helpers.project_config import ProjectConfig
@@ -12,9 +12,9 @@ class WholeCache:
     available: AvailableFiles
     _SYNCOWNTASKNAME: str = 'sanguine.wholecache.sync'
 
-    def __init__(self, by: str, projectcfg: ProjectConfig, githubfolders: list[GithubFolder]) -> None:
-        self.available = AvailableFiles(by, projectcfg.cache_dir, projectcfg.tmp_dir, projectcfg.github_dir,
-                                        projectcfg.download_dirs, githubfolders)
+    def __init__(self, by: str, projectcfg: ProjectConfig) -> None:
+        self.available = AvailableFiles(by, projectcfg.cache_dir, projectcfg.tmp_dir, projectcfg.github_root,
+                                        projectcfg.download_dirs, projectcfg.github_folders)
 
         folderstocache: FolderListToCache = projectcfg.active_vfs_folders()
         self.vfscache = FolderCache(projectcfg.cache_dir, 'vfs', folderstocache)
@@ -58,4 +58,5 @@ if __name__ == '__main__':
 
         cfgfname = normalize_file_path('../../../KTA\\KTA.json5')
         cfg = ProjectConfig(cfgfname)
-        pass
+
+        wcache = WholeCache('KTAGirl', cfg)
