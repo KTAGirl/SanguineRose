@@ -1,5 +1,7 @@
 import re
 
+import json5
+
 from sanguine.common import *
 from sanguine.helpers.plugin_handler import load_plugins
 
@@ -132,40 +134,44 @@ class ProjectConfig:
     own_mod_names: list[str]
 
     # TODO: check that sanguine-rose itself, cache_dir, and tmp_dir don't overlap with any of the dirs
-    def __init__(self, jsonconfigfname: str, jsonconfig: dict[str, any]) -> None:
+    def __init__(self, jsonconfigfname: str) -> None:
         self.config_dir = normalize_dir_path(os.path.split(jsonconfigfname)[0])
+        with open_3rdparty_txt_file(jsonconfigfname) as f:
+            jsonconfig = json5.loads(f.read())
 
-        abort_if_not('modmanager' in jsonconfig, "'modmanager' must be present in config")
-        modmanager = jsonconfig['modmanager']
-        mmc = _find_config(modmanager)
-        abort_if_not(mmc is not None, lambda: "config.modmanager must be one of [{}]".format(_all_configs_string()))
+            abort_if_not('modmanager' in jsonconfig, "'modmanager' must be present in config")
+            modmanager = jsonconfig['modmanager']
+            mmc = _find_config(modmanager)
+            abort_if_not(mmc is not None, lambda: "config.modmanager must be one of [{}]".format(_all_configs_string()))
 
-        abort_if_not(mmc.mod_manager_name in jsonconfig,
-                     lambda: "'{}' must be present in config for modmanager={}".format(mmc.mod_manager_name,
-                                                                                       mmc.mod_manager_name))
-        mmc_config = jsonconfig[mmc.mod_manager_name]
-        abort_if_not(isinstance(mmc_config, dict),
-                     lambda: "config.{} must be a dictionary, got {}".format(mmc.mod_manager_name, repr(mmc_config)))
-        mmc.parse_config_section(mmc_config, self.config_dir, jsonconfig)
+            abort_if_not(mmc.mod_manager_name in jsonconfig,
+                         lambda: "'{}' must be present in config for modmanager={}".format(mmc.mod_manager_name,
+                                                                                           mmc.mod_manager_name))
+            mmc_config = jsonconfig[mmc.mod_manager_name]
+            abort_if_not(isinstance(mmc_config, dict),
+                         lambda: "config.{} must be a dictionary, got {}".format(mmc.mod_manager_name,
+                                                                                 repr(mmc_config)))
+            mmc.parse_config_section(mmc_config, self.config_dir, jsonconfig)
 
-        if 'downloads' not in jsonconfig:
-            dls = mmc.default_download_dirs()
-        else:
-            dls = jsonconfig['downloads']
-        if isinstance(dls, str):
-            dls = [dls]
-        abort_if_not(isinstance(dls, list),
-                     lambda: "'downloads' in config must be a string or a list, got " + repr(dls))
-        self.download_dirs = [_config_dir_path(dl, self.config_dir, jsonconfig) for dl in dls]
+            if 'downloads' not in jsonconfig:
+                dls = mmc.default_download_dirs()
+            else:
+                dls = jsonconfig['downloads']
+            if isinstance(dls, str):
+                dls = [dls]
+            abort_if_not(isinstance(dls, list),
+                         lambda: "'downloads' in config must be a string or a list, got " + repr(dls))
+            self.download_dirs = [_config_dir_path(dl, self.config_dir, jsonconfig) for dl in dls]
 
-        self.cache_dir = _config_dir_path(jsonconfig.get('../cache', self.config_dir + '..\\sanguine.cache\\'),
-                                          self.config_dir,
-                                          jsonconfig)
-        self.tmp_dir = _config_dir_path(jsonconfig.get('tmp', self.config_dir + '..\\sanguine.tmp\\'), self.config_dir,
-                                        jsonconfig)
-        self.github_dir = _config_dir_path(jsonconfig.get('github', self.config_dir), self.config_dir, jsonconfig)
+            self.cache_dir = _config_dir_path(jsonconfig.get('../cache', self.config_dir + '..\\sanguine.cache\\'),
+                                              self.config_dir,
+                                              jsonconfig)
+            self.tmp_dir = _config_dir_path(jsonconfig.get('tmp', self.config_dir + '..\\sanguine.tmp\\'),
+                                            self.config_dir,
+                                            jsonconfig)
+            self.github_dir = _config_dir_path(jsonconfig.get('github', self.config_dir), self.config_dir, jsonconfig)
 
-        self.own_mod_names = [normalize_file_name(om) for om in jsonconfig.get('ownmods', [])]
+            self.own_mod_names = [normalize_file_name(om) for om in jsonconfig.get('ownmods', [])]
 
     '''
     def normalize_config_dir_path(self, path: str) -> str:

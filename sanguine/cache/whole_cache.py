@@ -58,10 +58,6 @@ if __name__ == '__main__':
         add_file_logging(ttmppath + 'sanguine.log.html')
 
         check_sanguine_prerequisites()
-        import json5
-
         cfgfname = normalize_file_path('../../../KTA\\KTA.json5')
-        with open_3rdparty_txt_file(cfgfname) as f:
-            jsoncfg = json5.loads(f.read())
-            cfg = ProjectConfig(cfgfname, jsoncfg)
-            pass
+        cfg = ProjectConfig(cfgfname)
+        pass
