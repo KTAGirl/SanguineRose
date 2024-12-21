@@ -1,24 +1,17 @@
-from sanguine.helpers.file_retriever import (FileRetriever, FileRetrieverFromSingleArchive,
-                                             FileRetrieverFromNestedArchives, GithubFileRetriever, ZeroFileRetriever)
+from sanguine.helpers.file_retriever import (FileRetriever, ArchiveFileRetriever,
+                                             GithubFileRetriever, ZeroFileRetriever)
 
 
-def _archive_hash(r: FileRetriever) -> bytes | None:
-    if isinstance(r, FileRetrieverFromSingleArchive):
-        return r.archive_hash
-    if isinstance(r, FileRetrieverFromNestedArchives):
-        return r.single_archive_retrievers[0].archive_hash
-    return None
-
-
-def _filter_with_used(inlist: list[tuple[bytes, list[FileRetriever]]], out: list[tuple[bytes, FileRetriever | None]],
-                      used_archives: dict[bytes, int]) -> list[tuple[bytes, list[FileRetriever]]]:
-    filtered: list[tuple[bytes, list[FileRetriever]]] = []
+def _filter_with_used(inlist: list[tuple[bytes, list[ArchiveFileRetriever]]],
+                      out: list[tuple[bytes, ArchiveFileRetriever | None]],
+                      used_archives: dict[bytes, int]) -> list[tuple[bytes, list[ArchiveFileRetriever]]]:
+    filtered: list[tuple[bytes, list[ArchiveFileRetriever]]] = []
     for x in inlist:
         (h, retrs) = x
         assert len(retrs) >= 2
         done = False
         for r in retrs:
-            arh = _archive_hash(r)
+            arh = r.archive_hash()
             assert arh is not None
             if arh in used_archives:
                 out.append((h, r))
@@ -32,16 +25,16 @@ def _filter_with_used(inlist: list[tuple[bytes, list[FileRetriever]]], out: list
     return filtered
 
 
-def _separate_cluster_step(inlist: list[tuple[bytes, list[FileRetriever]]],
-                           cluster: list[tuple[bytes, list[FileRetriever]]],
-                           cluster_archives: dict[bytes, int]) -> list[tuple[bytes, list[FileRetriever]]]:
-    filtered: list[tuple[bytes, list[FileRetriever]]] = []
+def _separate_cluster_step(inlist: list[tuple[bytes, list[ArchiveFileRetriever]]],
+                           cluster: list[tuple[bytes, list[ArchiveFileRetriever]]],
+                           cluster_archives: dict[bytes, int]) -> list[tuple[bytes, list[ArchiveFileRetriever]]]:
+    filtered: list[tuple[bytes, list[ArchiveFileRetriever]]] = []
     for x in inlist:  # this code is close, but not identical to the one in _filter_with_used()
         (h, retrs) = x
         assert len(retrs) >= 2
         found = False
         for r in retrs:
-            arh = _archive_hash(r)
+            arh = r.archive_hash()
             assert arh is not None
             if arh in cluster_archives:
                 cluster_archives[arh] += 1
@@ -57,13 +50,14 @@ def _separate_cluster_step(inlist: list[tuple[bytes, list[FileRetriever]]],
     return filtered
 
 
-def _separate_cluster(inlist: list[tuple[bytes, list[FileRetriever]]],
-                      cluster: list[tuple[bytes, list[FileRetriever]]],
-                      cluster_archives: dict[bytes, int]) -> list[tuple[bytes, list[FileRetriever]]]:
+def _separate_cluster(inlist: list[tuple[bytes, list[ArchiveFileRetriever]]],
+                      cluster: list[tuple[bytes, list[ArchiveFileRetriever]]],
+                      cluster_archives: dict[bytes, int]) -> list[tuple[bytes, list[ArchiveFileRetriever]]]:
     prev = inlist
     while True:
         oldclusterlen = len(cluster)
-        filtered: list[tuple[bytes, list[FileRetriever]]] = _separate_cluster_step(prev, cluster, cluster_archives)
+        filtered: list[tuple[bytes, list[ArchiveFileRetriever]]] = _separate_cluster_step(prev, cluster,
+                                                                                          cluster_archives)
         assert len(filtered) <= len(prev)
         assert len(prev) - len(filtered) == len(cluster) - oldclusterlen
         if len(filtered) < len(prev):
@@ -85,11 +79,11 @@ def _make_masked_set(cluster_archives: list[bytes], mask: int) -> dict[bytes, in
     return filtered_archives
 
 
-def _covers_set(cluster: list[tuple[bytes, list[FileRetriever]]], filtered_archives: dict[bytes, int]) -> bool:
+def _covers_set(cluster: list[tuple[bytes, list[ArchiveFileRetriever]]], filtered_archives: dict[bytes, int]) -> bool:
     for x in cluster:
         (h, retrs) = x
         for r in retrs:
-            arh = _archive_hash(r)
+            arh = r.archive_hash()
             assert arh is not None
             if arh not in filtered_archives:
                 return False
@@ -104,7 +98,8 @@ def _cost_of_set(filtered_archives: dict[bytes, int], archive_weights: dict[byte
 
 
 def _full_search_retrievers(out: list[tuple[bytes, FileRetriever | None]],
-                            cluster: list[tuple[bytes, list[FileRetriever]]], cluster_archives0: dict[bytes, int],
+                            cluster: list[tuple[bytes, list[ArchiveFileRetriever]]],
+                            cluster_archives0: dict[bytes, int],
                             archive_weights: dict[bytes, int]):
     cluster_archives = [h for h in cluster_archives0.keys()]
     assert len(cluster_archives) <= _MAX_EXPONENT_RETRIEVERS
@@ -123,7 +118,7 @@ def _full_search_retrievers(out: list[tuple[bytes, FileRetriever | None]],
         (h, retrs) = x
         done = False
         for r in retrs:
-            arh = _archive_hash(r)
+            arh = r.archive_hash()
             assert arh is not None
             if arh in bestset:
                 out.append((h, r))
@@ -133,12 +128,12 @@ def _full_search_retrievers(out: list[tuple[bytes, FileRetriever | None]],
         assert done
 
 
-def _number_covered_by_archive(cluster: list[tuple[bytes, list[FileRetriever]]], h0: bytes) -> int:
+def _number_covered_by_archive(cluster: list[tuple[bytes, list[ArchiveFileRetriever]]], h0: bytes) -> int:
     out = 0
     for x in cluster:
         (h, retrs) = x
         for r in retrs:
-            arh = _archive_hash(r)
+            arh = r.archive_hash()
             assert arh is not None
             if arh == h0:
                 out += 1
@@ -151,8 +146,8 @@ def _retriever_key(fr: FileRetriever, archive_weights: dict[bytes, int]) -> str:
         return '0'
     elif isinstance(fr, GithubFileRetriever):
         return '1.' + str(fr.file_hash)
-    elif isinstance(fr, FileRetrieverFromSingleArchive) or isinstance(fr, FileRetrieverFromNestedArchives):
-        arh = _archive_hash(fr)
+    elif isinstance(fr, ArchiveFileRetriever):
+        arh = fr.archive_hash()
         assert arh is not None
         return '2.' + str(archive_weights[arh]) + '.' + str(fr.file_hash)
     else:
@@ -169,7 +164,7 @@ def choose_retrievers(inlist0: list[tuple[bytes, list[FileRetriever]]], archive_
         inlist.append((item[0], sorted(item[1], key=lambda fr: _retriever_key(fr, archive_weights))))
 
     # first pass: choosing unique ones, as well as GitHub ones
-    remaining: list[tuple[bytes, list[FileRetriever]]] = []
+    remaining: list[tuple[bytes, list[ArchiveFileRetriever]]] = []
     used_archives: dict[bytes, int] = {}
     for x in inlist:
         (h, retrs) = x
@@ -177,8 +172,11 @@ def choose_retrievers(inlist0: list[tuple[bytes, list[FileRetriever]]], archive_
             out.append((h, None))
             continue
         elif len(retrs) == 1:
-            out.append((h, retrs[0]))
-            arh = _archive_hash(retrs[0])
+            r0: FileRetriever = retrs[0]
+            out.append((h, r0))
+            arh = None
+            if isinstance(r0, ArchiveFileRetriever):
+                arh = r0.archive_hash()
             if arh is not None:
                 if arh not in used_archives:
                     used_archives[arh] = 1
@@ -199,25 +197,27 @@ def choose_retrievers(inlist0: list[tuple[bytes, list[FileRetriever]]], archive_
         # cannot do much now, placing it to remaining[]
         if __debug__:
             for r in retrs:
-                assert isinstance(r, FileRetrieverFromSingleArchive) or isinstance(r, FileRetrieverFromNestedArchives)
-        remaining.append((h, retrs))
+                assert isinstance(r, ArchiveFileRetriever)
+
+        # noinspection PyTypeChecker
+        #              we just asserted that all members of retrs are ArchiveFileRetriever
+        retrs1: list[ArchiveFileRetriever] = retrs
+        remaining.append((h, retrs1))
 
     # separate into clusters
     remaining = _filter_with_used(remaining, out, used_archives)
-    clusters: list[list[tuple[bytes, list[FileRetriever]]]] = []
+    clusters: list[list[tuple[bytes, list[ArchiveFileRetriever]]]] = []
     clusters_archives: list[dict[bytes, int]] = []
     while len(remaining) > 0:
-        cluster: list[tuple[bytes, list[FileRetriever]]] = [remaining[0]]
+        cluster: list[tuple[bytes, list[ArchiveFileRetriever]]] = [remaining[0]]
         remaining = remaining[1:]
         cluster_archives = {}
         for x in cluster[0]:
             (h, retrs) = x
-            arh = _archive_hash(h)
-            assert arh is not None
-            if arh in cluster_archives:
-                cluster_archives[arh] += 1
+            if h in cluster_archives:
+                cluster_archives[h] += 1
             else:
-                cluster_archives[arh] = 1
+                cluster_archives[h] = 1
 
         oldremaininglen = len(remaining)
         oldclusterlen = len(cluster)

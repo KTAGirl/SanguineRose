@@ -93,7 +93,7 @@ class GithubFileRetriever(FileRetriever):
         return self._full_path()
 
 
-class FileRetrieverFromSingleArchive(FileRetriever):
+class ArchiveFileRetrieverHelper(FileRetriever):
     archive_hash: bytes
     archive_size: int
     file_in_archive: FileInArchive
@@ -108,34 +108,43 @@ class FileRetrieverFromSingleArchive(FileRetriever):
         self.file_in_archive = file_in_archive
 
     def fetch(self, available: "AvailableFiles", targetfpath: str) -> None:
-        assert False # should not be called directly, only via archive aggregation
+        assert False  # should not be called directly, only via archive aggregation
 
     def fetch_for_reading(self, available: "AvailableFiles", tmpdirpath: str) -> str:
-        assert False # should not be called directly, only via aggregation
+        assert False  # should not be called directly, only via aggregation
         # noinspection PyUnreachableCode
         return ''
 
-class FileRetrieverFromNestedArchives(FileRetriever):
-    single_archive_retrievers: list[FileRetrieverFromSingleArchive]
+
+class ArchiveFileRetriever(FileRetriever):
+    single_archive_retrievers: list[ArchiveFileRetrieverHelper]  # from outermost to innermost
 
     # noinspection PyMissingConstructor
     #              _init_from_child() calls super().__init__()
-    def __init__(self, baseinit: FileRetriever._BaseInit,
-                 parent: "FileRetrieverFromSingleArchive|FileRetrieverFromNestedArchives",
-                 child: FileRetrieverFromSingleArchive) -> None:
+    def __init__(self, baseinit: FileRetriever._BaseInit, singles: list[ArchiveFileRetrieverHelper]) -> None:
         FileRetriever._init_from_child(super(), baseinit)
-        if isinstance(parent, FileRetrieverFromSingleArchive):
-            assert parent.file_in_archive.file_hash == child.archive_hash
-            self.single_archive_retrievers = [parent, child]
-        else:
-            assert isinstance(parent, FileRetrieverFromNestedArchives)
-            assert parent.single_archive_retrievers[-1].file_in_archive.file_hash == child.archive_hash
-            self.single_archive_retrievers = parent.single_archive_retrievers + [child]
+        if __debug__:
+            for i in range(len(singles) - 1):
+                assert singles[i].file_hash == singles[i + 1].archive_hash
+        self.single_archive_retrievers = singles
+
+    def constructor_parameter_appending_child(self, child: ArchiveFileRetrieverHelper) -> list[
+        ArchiveFileRetrieverHelper]:
+        assert self.single_archive_retrievers[-1].file_hash == child.archive_hash
+        return self.single_archive_retrievers + [child]
+
+    def constructor_parameter_prepending_parent(self, parent: ArchiveFileRetrieverHelper) -> list[
+        ArchiveFileRetrieverHelper]:
+        assert parent.file_hash == self.single_archive_retrievers[0].archive_hash
+        return [parent] + self.single_archive_retrievers
+
+    def archive_hash(self) -> bytes:
+        return self.single_archive_retrievers[0].archive_hash
 
     def fetch(self, available: "AvailableFiles", targetfpath: str) -> None:
-        assert False # should not be called directly, only via archive aggregation
+        assert False  # should not be called directly, only via archive aggregation
 
     def fetch_for_reading(self, available: "AvailableFiles", tmpdirpath: str) -> str:
-        assert False # should not be called directly, only via archive aggregation
+        assert False  # should not be called directly, only via archive aggregation
         # noinspection PyUnreachableCode
         return ''

@@ -5,7 +5,7 @@ from sanguine.common import *
 from sanguine.gitdata.git_data_file import GitDataParam, GitDataType, GitDataWriteHandler, GitDataReadHandler
 from sanguine.helpers.archives import FileInArchive
 from sanguine.helpers.file_retriever import (FileRetriever, ZeroFileRetriever, GithubFileRetriever,
-                                             FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives)
+                                             ArchiveFileRetriever, ArchiveFileRetrieverHelper)
 
 
 ##### Handlers
@@ -124,82 +124,52 @@ class GitRetrievedGithubFileWriteHandler(GitRetrievedFileWriteHandler):
                           (fr.from_path, fr.github_author, fr.github_project))
 
 
-### for FileRetrieverFromSingleArchive
+### for ArchiveFileRetriever
 
-class GitRetrievedSingleArchiveFileReadHandler(GitRetrievedFileReadHandler):
+type _IntermediateArchives = dict[bytes, ArchiveFileRetrieverHelper]
+
+
+class GitRetrievedArchiveFileReadHandler(GitRetrievedFileReadHandler):
     SPECIFIC_FIELDS: list[GitDataParam] = [
         GitDataParam('i', GitDataType.Path, False),
+        # 'i' refers either to IntermediateArchives, or to downloadable archive
         GitDataParam('a', GitDataType.Hash),
         GitDataParam('x', GitDataType.Int),
     ]
+    intermediate_archives: _IntermediateArchives
 
-    def __init__(self, files: list[tuple[str, FileRetriever]]) -> None:
-        super().__init__(GitRetrievedSingleArchiveFileReadHandler.SPECIFIC_FIELDS, files)
+    def __init__(self, iar: _IntermediateArchives, files: list[tuple[str, FileRetriever]]) -> None:
+        super().__init__(GitRetrievedArchiveFileReadHandler.SPECIFIC_FIELDS, files)
+        self.intermediate_archives = iar
 
     def decompress(self, common_param: tuple[str, int, bytes], specific_param: tuple[str, bytes, int]) -> None:
         (i, a, x) = specific_param
         (h, s) = GitRetrievedFileReadHandler.hash_and_size(common_param)
-        fr = FileRetrieverFromSingleArchive(
+        fr = ArchiveFileRetriever(
             lambda fr2: GitRetrievedFileReadHandler.init_base_file_retriever(fr2, common_param),
-            a, x, FileInArchive(h, s, i))
+            [ArchiveFileRetrieverHelper((h, s), a, x, FileInArchive(h, s, i))])
+        while fr.single_archive_retrievers[0].archive_hash in self.intermediate_archives:
+            fr = ArchiveFileRetriever(
+                lambda fr2: GitRetrievedFileReadHandler.init_base_file_retriever(fr2, common_param),
+                fr.constructor_parameter_prepending_parent(
+                    self.intermediate_archives[fr.single_archive_retrievers[0].archive_hash])
+            )
         self.retrieved_files.append((GitRetrievedFileReadHandler.rel_path(common_param), fr))
 
 
-class GitRetrievedSingleArchiveFileWriteHandler(GitRetrievedFileWriteHandler):
+class GitRetrievedArchiveFileWriteHandler(GitRetrievedFileWriteHandler):
     def legend(self) -> str:
-        return '[ i:intra-archive path, a:archive hash, x:archive size if SingleArchive ]'
+        return '[ i:intra-archive path, a:archive hash, x:archive size if Archive ]'
 
     def is_my_retriever(self, fr: FileRetriever) -> bool:
-        return isinstance(fr, FileRetrieverFromSingleArchive)
+        return isinstance(fr, ArchiveFileRetriever)
 
     def write_line(self, writer: gitdatafile.GitDataListWriter, rel_path: str, fr: FileRetriever) -> None:
-        assert isinstance(fr, FileRetrieverFromSingleArchive)
+        assert isinstance(fr, ArchiveFileRetriever)
+        last = fr.single_archive_retrievers[-1]
         writer.write_line(self,
                           GitRetrievedFileWriteHandler.common_values(rel_path, fr),
-                          (fr.file_in_archive, fr.archive_hash, fr.archive_size))
-
-
-### for FileRetrieverFromNestedArchives; they refer to intermediate_archives
-
-type _IntermediateArchives = dict[bytes, FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives]
-
-
-class GitRetrievedNestedArchiveFileReadHandler(GitRetrievedFileReadHandler):
-    SPECIFIC_FIELDS: list[GitDataParam] = [
-        GitDataParam('j', GitDataType.Path, False),
-        GitDataParam('a', GitDataType.Hash),
-        GitDataParam('x', GitDataType.Int),
-    ]
-    intermediate: _IntermediateArchives
-
-    def __init__(self, intermediate: _IntermediateArchives, files: list[tuple[str, FileRetriever]]) -> None:
-        super().__init__(GitRetrievedNestedArchiveFileReadHandler.SPECIFIC_FIELDS, files)
-        self.intermediate = intermediate
-
-    def decompress(self, common_param: tuple[str, int, bytes], specific_param: tuple[str, bytes, int]) -> None:
-        (j, a, x) = specific_param
-        (h, s) = GitRetrievedFileReadHandler.hash_and_size(common_param)
-        baseinit = lambda fr2: GitRetrievedFileReadHandler.init_base_file_retriever(fr2, common_param)
-        frlast = FileRetrieverFromSingleArchive(baseinit, a, x, FileInArchive(h, s, j))
-        inter = self.intermediate[frlast.archive_hash]  # must be present
-        fr = FileRetrieverFromNestedArchives(baseinit, inter, frlast)
-        self.retrieved_files.append((GitRetrievedFileReadHandler.rel_path(common_param), fr))
-
-
-class GitRetrievedNestedArchiveFileWriteHandler(GitRetrievedFileWriteHandler):
-    def legend(self) -> str:
-        return '[ j:intra-archive path, a:intermediate archive hash, x:intermediate archive size if NestedArchive ]'
-
-    def is_my_retriever(self, fr: FileRetriever) -> bool:
-        return isinstance(fr, FileRetrieverFromNestedArchives)
-
-    def write_line(self, writer: gitdatafile.GitDataListWriter, rel_path: str, fr: FileRetriever) -> None:
-        assert isinstance(fr, FileRetrieverFromNestedArchives)
-        frlast = fr.single_archive_retrievers[-1]
-        writer.write_line(self,
-                          GitRetrievedFileWriteHandler.common_values(rel_path, fr),
-                          (frlast.file_in_archive,
-                           frlast.archive_hash, frlast.archive_size))
+                          (last.file_in_archive, last.archive_hash, last.archive_size))
 
 
 ### all write handlers
@@ -207,8 +177,7 @@ class GitRetrievedNestedArchiveFileWriteHandler(GitRetrievedFileWriteHandler):
 _write_handlers: list[GitRetrievedFileWriteHandler] = [
     GitRetrievedZeroFileWriteHandler(),
     GitRetrievedGithubFileWriteHandler(),
-    GitRetrievedSingleArchiveFileWriteHandler(),
-    GitRetrievedNestedArchiveFileWriteHandler
+    GitRetrievedArchiveFileWriteHandler(),
 ]
 
 
@@ -268,8 +237,7 @@ class GitProjectJson:
         handlers: list[GitRetrievedFileReadHandler] = [
             GitRetrievedZeroFileReadHandler(retrievers),
             GitRetrievedGithubFileReadHandler(retrievers),
-            GitRetrievedSingleArchiveFileReadHandler(retrievers),
-            GitRetrievedNestedArchiveFileReadHandler(intermediate_archives, retrievers)
+            GitRetrievedArchiveFileReadHandler(intermediate_archives, retrievers),
         ]
         da = gitdatafile.GitDataReadList(GitRetrievedFileReadHandler.COMMON_FIELDS, handlers)
         lineno = gitdatafile.read_git_file_list(da, rfile, lineno)

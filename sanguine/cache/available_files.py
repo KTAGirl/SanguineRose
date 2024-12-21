@@ -1,13 +1,13 @@
 import os.path
 
 import sanguine.tasks as tasks
-from sanguine.helpers.file_retriever import (FileRetriever, ZeroFileRetriever, GithubFileRetriever,
-                                             FileRetrieverFromSingleArchive, FileRetrieverFromNestedArchives)
-from sanguine.cache.folder_cache import FolderCache, FileOnDisk
 from sanguine.cache.all_master_git_data import AllMasterGitData
+from sanguine.cache.folder_cache import FolderCache, FileOnDisk
 from sanguine.common import *
 from sanguine.gitdata.file_origin import file_origins_for_file, FileOrigin
 from sanguine.helpers.archives import all_archive_plugins_extensions
+from sanguine.helpers.file_retriever import (FileRetriever, ZeroFileRetriever, GithubFileRetriever,
+                                             ArchiveFileRetriever, ArchiveFileRetrieverHelper)
 from sanguine.helpers.tmp_path import TmpPath
 
 
@@ -87,32 +87,32 @@ class AvailableFiles:
         return archived + github
 
     ### lists of file retrievers
-    def _single_archive_retrievers(self, h: bytes) -> list[FileRetrieverFromSingleArchive]:
+    def _single_archive_retrievers(self, h: bytes) -> list[ArchiveFileRetrieverHelper]:
         found = self._master_data.archived_file_by_hash(h)
         if found is None:
             return []
         assert len(found) > 0
-        return [FileRetrieverFromSingleArchive((h, fi.file_size), ar.archive_hash, ar.archive_size, fi)
+        return [ArchiveFileRetrieverHelper((h, fi.file_size), ar.archive_hash, ar.archive_size, fi)
                 for ar, fi in found]
 
-    def _add_nested_to_retrievers(self, out: list[FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives],
-                                  singles: list[FileRetrieverFromSingleArchive]) -> None:
+    def _add_nested_archives(self, out: list[ArchiveFileRetriever],
+                             singles: list[ArchiveFileRetrieverHelper]) -> None:
         # resolving nested archives
         for r in singles:
-            out.append(r)
+            out.append(ArchiveFileRetriever((r.file_hash, r.file_size), [r]))
             found2 = self._archived_file_retrievers_by_hash(r.archive_hash)
             for r2 in found2:
-                out.append(FileRetrieverFromNestedArchives((r2.file_hash, r2.file_size), r2, r))
+                out.append(
+                    ArchiveFileRetriever((r2.file_hash, r2.file_size), r2.constructor_parameter_appending_child(r)))
 
-    def _archived_file_retrievers_by_hash(self, h: bytes) -> list[
-        FileRetrieverFromSingleArchive | FileRetrieverFromNestedArchives]:  # recursive
+    def _archived_file_retrievers_by_hash(self, h: bytes) -> list[ArchiveFileRetriever]:  # recursive
         singles = self._single_archive_retrievers(h)
         if len(singles) == 0:
             return []
         assert len(singles) > 0
 
         out = []
-        self._add_nested_to_retrievers(out, singles)
+        self._add_nested_archives(out, singles)
         assert len(out) > 0
         return out
 
@@ -143,25 +143,6 @@ class AvailableFiles:
             assert intrapath is not None
 
             out.append(GithubFileRetriever((h, gh.file_size), author, projectname, intrapath))
-
-    '''
-    def _archived_file_retrievers_by_name(self, fname: str) -> list[FileRetriever]:
-        found = self._master_data._archived_files_by_name.get(fname)
-        if not found:
-            return []
-        assert len(found) > 0
-        singles = [
-            FileRetrieverFromSingleArchive(self, (fi.file_hash, fi.file_size), ar.archive_hash, ar.archive_size, fi)
-            for ar, fi in found]
-        out = []
-        self._add_nested_to_retrievers(out, singles)
-        assert len(out) > 0
-        return out
-
-    def file_retrievers_by_name(self, fname: str) -> list[FileRetriever]:
-        # TODO: add retrievers from ownmods
-        return self._archived_file_retrievers_by_name(fname)
-    '''
 
     # private functions
 
