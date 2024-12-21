@@ -1,6 +1,7 @@
 from sanguine.common import *
 from sanguine.helpers.modlist import ModList
-from sanguine.project_config import ModManagerConfig, ModManagerPluginBase, _config_dir_path, _normalize_vfs_dir_path
+from sanguine.helpers.project_config import ModManagerConfig, ModManagerPluginBase, _config_dir_path, \
+    _normalize_vfs_dir_path
 
 
 class Mo2Plugin(ModManagerPluginBase):
@@ -14,7 +15,7 @@ class Mo2Plugin(ModManagerPluginBase):
 class Mo2ProjectConfig(ModManagerConfig):
     mo2dir: FolderToCache | None
     master_profile: str | None
-    generated_profiles: list[str] | None
+    generated_profiles: dict[str, str] | None
     master_modlist: ModList | None
 
     def __init__(self, name: str) -> None:
@@ -50,19 +51,20 @@ class Mo2ProjectConfig(ModManagerConfig):
 
         assert self.master_profile is None
         assert self.generated_profiles is None
-        self.master_profile = fullconfig.get('masterprofile')
+        self.master_profile = section.get('masterprofile')
         abort_if_not(self.master_profile is not None and isinstance(self.master_profile, str),
                      lambda: "'masterprofile' in config must be a string, got " + repr(self.master_profile))
         abort_if_not(os.path.isdir(self.mo2dir.folder + 'profiles\\' + self.master_profile))
 
-        self.generated_profiles = fullconfig.get('generatedprofiles')
-        abort_if_not(self.generated_profiles is not None and isinstance(self.generated_profiles, list),
+        self.generated_profiles = section.get('generatedprofiles')
+        abort_if_not(self.generated_profiles is not None and isinstance(self.generated_profiles, dict),
                      lambda: "'genprofiles' in config must be a list, got " + repr(self.generated_profiles))
-        for gp in self.generated_profiles:
+        for gp in self.generated_profiles.keys():
             abort_if_not(os.path.isdir(self.mo2dir.folder + 'profiles\\' + gp))
 
         assert self.master_modlist is None
-        self.master_modlist = ModList(self.mo2dir.folder + 'profiles\\' + self.master_profile + '\\')
+        self.master_modlist = ModList(
+            normalize_dir_path(self.mo2dir.folder + 'profiles\\' + self.master_profile + '\\'))
 
     def active_vfs_folders(self) -> FolderListToCache:
         out: FolderListToCache = [self.mo2dir]

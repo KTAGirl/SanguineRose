@@ -158,7 +158,7 @@ class ProjectConfig:
                      lambda: "'downloads' in config must be a string or a list, got " + repr(dls))
         self.download_dirs = [_config_dir_path(dl, self.config_dir, jsonconfig) for dl in dls]
 
-        self.cache_dir = _config_dir_path(jsonconfig.get('cache', self.config_dir + '..\\sanguine.cache\\'),
+        self.cache_dir = _config_dir_path(jsonconfig.get('../cache', self.config_dir + '..\\sanguine.cache\\'),
                                           self.config_dir,
                                           jsonconfig)
         self.tmp_dir = _config_dir_path(jsonconfig.get('tmp', self.config_dir + '..\\sanguine.tmp\\'), self.config_dir,

@@ -2,7 +2,7 @@ import sanguine.tasks as tasks
 from sanguine.cache.available_files import FileRetriever, AvailableFiles, GithubFolder
 from sanguine.cache.folder_cache import FileOnDisk, FolderCache
 from sanguine.common import *
-from sanguine.project_config import ProjectConfig
+from sanguine.helpers.project_config import ProjectConfig
 
 
 class WholeCache:
@@ -46,3 +46,22 @@ class WholeCache:
     def file_retrievers_by_name(self, fname: str) -> list[FileRetriever]:  # resolved as fully as feasible
         return self.available.file_retrievers_by_name(fname)
     '''
+
+
+if __name__ == '__main__':
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == 'test':
+        from sanguine.install.install_checks import check_sanguine_prerequisites
+
+        ttmppath = normalize_dir_path('../../../sanguine.tmp\\')
+        add_file_logging(ttmppath + 'sanguine.log.html')
+
+        check_sanguine_prerequisites()
+        import json5
+
+        cfgfname = normalize_file_path('../../../KTA\\KTA.json5')
+        with open_3rdparty_txt_file(cfgfname) as f:
+            jsoncfg = json5.loads(f.read())
+            cfg = ProjectConfig(cfgfname, jsoncfg)
+            pass
