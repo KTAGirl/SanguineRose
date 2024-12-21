@@ -5,6 +5,7 @@ from sanguine.common import *
 from sanguine.gitdata.git_data_file import GitDataParam, GitDataType, GitDataWriteHandler, GitDataReadHandler
 from sanguine.helpers.archives import Archive, FileInArchive
 
+
 # as there are no specific handlers, we don't need to have _GitArchivesWriteHandler,
 #          and can use generic GitWriteHandler for writing
 
@@ -17,8 +18,6 @@ class _GitArchivesReadHandler(GitDataReadHandler):
 
     def decompress(self, common_param: tuple[bytes, str, bytes, int, int, str], specific_param: tuple) -> None:
         assert len(specific_param) == 0
-        # warn(repr(param))
-        # time.sleep(1)
         (h, i, a, x, s, b) = common_param
         found = None
         if len(self.archives) > 0:
