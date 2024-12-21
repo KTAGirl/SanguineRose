@@ -138,6 +138,10 @@ class ArchiveFileRetriever(FileRetriever):
         assert parent.file_hash == self.single_archive_retrievers[0].archive_hash
         return [parent] + self.single_archive_retrievers
 
+    def constructor_parameter_removing_parent(self) -> list[ArchiveFileRetrieverHelper]:
+        assert len(self.single_archive_retrievers) > 1
+        return self.single_archive_retrievers[1:]
+
     def archive_hash(self) -> bytes:
         return self.single_archive_retrievers[0].archive_hash
 
