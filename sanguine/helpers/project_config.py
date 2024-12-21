@@ -138,7 +138,7 @@ def _load_github_folder(dirpath: str) -> GithubFolder:
                     project = prj[:-len('.git')]
         abort_if_not(author is not None and project is not None, 'author or project not found for {}'.format(dirpath))
 
-        return GithubFolder(dirpath, author, project)
+        return GithubFolder(author, project, dirpath)
 
 
 class ProjectConfig:

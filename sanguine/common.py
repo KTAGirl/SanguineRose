@@ -25,6 +25,10 @@ class FolderToCache:
     exdirs: list[str]
 
     def __init__(self, folder: str, exdirs: list[str] = None) -> None:
+        if __debug__:
+            assert is_normalized_dir_path(folder)
+            for x in exdirs:
+                assert is_normalized_dir_path(x)
         self.folder = folder
         self.exdirs = [] if exdirs is None else exdirs
 

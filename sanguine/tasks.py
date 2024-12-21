@@ -891,8 +891,8 @@ class Parallel:
     def __exit__(self, exceptiontype: Type[BaseException] | None, exceptionval: BaseException | None,
                  exceptiontraceback: TracebackType | None):
         if exceptiontype is not None:
-            critical('Parallel: exception {}: {}'.format(exceptiontype, exceptionval))
-            debug('\n'.join(traceback.format_tb(exceptiontraceback)))
+            critical('Parallel: exception {}: {}'.format(str(exceptiontype), repr(exceptionval)))
+            alert('\n'.join(traceback.format_tb(exceptiontraceback)))
 
         if not self.shutting_down:
             self.shutdown()
