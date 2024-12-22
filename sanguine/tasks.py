@@ -598,10 +598,10 @@ class Parallel:
                 critical('Parallel: An exception within child process reported. Shutting down')
 
                 if not self.shutting_down:
-                    self.shutdown()
+                    self.shutdown(True)
                 info('Parallel: shutdown ok')
                 if not self.has_joined:
-                    self.join_all()
+                    self.join_all(True)
 
                 critical(
                     'Parallel: All children terminated, aborting due to an exception in a child process. For the exception itself, see log above.')
@@ -786,7 +786,8 @@ class Parallel:
     def add_task(self, task: Task) -> None:  # to be called from owntask.f()
         assert task.name not in self.all_task_nodes
         added = self._internal_add_task_if(task)
-        assert added  # failure to add is ok only during original building of the tree
+        abort_if_not(added,
+                     lambda: 'tasks: cannot add task {}, are you sure all dependencies are known?'.format(task.name))
 
     def _find_best_process(self) -> int:
         besti = -1
@@ -839,27 +840,32 @@ class Parallel:
             if tn.startswith(tasknameprefix):
                 yield tn[lprefix:], t
 
-    def shutdown(self) -> None:
+    def shutdown(self, force: bool) -> None:
         assert not self.shutting_down
-        for i in range(self.nprocesses):
-            self.inqueues[i].put(None)
+        if force:
+            for i in range(self.nprocesses):
+                self.processes[i].kill()
+        else:
+            for i in range(self.nprocesses):
+                self.inqueues[i].put(None)
         self.logq.put(None)
         self.shutting_down = True
 
-    def join_all(self) -> None:
+    def join_all(self, force: bool) -> None:
         assert self.shutting_down
         assert not self.has_joined
 
-        n = 0
-        while not all(self.procrunningconfirmed):
-            if n == 0:
-                info(
-                    'Parallel: joinAll(): waiting for all processes to confirm start before joining to avoid not started yet join race')
-                n = 1
-            got = self.outq.get()
-            if isinstance(got, _Started):
-                self.procrunningconfirmed[got.proc_num] = True
-                # debug('Parallel: joinAll(): process #{} confirmed as started',got.procnum+1)
+        if not force:
+            n = 0
+            while not all(self.procrunningconfirmed):
+                if n == 0:
+                    info(
+                        'Parallel: joinAll(): waiting for all processes to confirm start before joining to avoid not started yet join race')
+                    n = 1
+                got = self.outq.get()
+                if isinstance(got, _Started):
+                    self.procrunningconfirmed[got.proc_num] = True
+                    # debug('Parallel: joinAll(): process #{} confirmed as started',got.procnum+1)
 
         info('All processes confirmed as started, waiting for joins')
         for i in range(self.nprocesses):
@@ -890,14 +896,16 @@ class Parallel:
 
     def __exit__(self, exceptiontype: Type[BaseException] | None, exceptionval: BaseException | None,
                  exceptiontraceback: TracebackType | None):
+        force = False
         if exceptiontype is not None:
             critical('Parallel: exception {}: {}'.format(str(exceptiontype), repr(exceptionval)))
             alert('\n'.join(traceback.format_tb(exceptiontraceback)))
+            force = True
 
         if not self.shutting_down:
-            self.shutdown()
+            self.shutdown(force)
         if not self.has_joined:
-            self.join_all()
+            self.join_all(force)
 
         names = [name for name in self.publications]
         for name in names:

@@ -33,9 +33,9 @@ def abort_if_not(cond: bool, msg: Callable[[], str] | str | None = None):
         msg1 = 'abort_if_not() failed'
         if msg is not None:
             if callable(msg):
-                msg1 += ':' + msg()
+                msg1 += ': ' + msg()
             elif isinstance(msg, str):
-                msg1 += ':' + msg
+                msg1 += ': ' + msg
             else:
                 assert False
         where = traceback.extract_stack(limit=2)[0]
