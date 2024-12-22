@@ -1,7 +1,7 @@
 from sanguine.common import *
 from sanguine.helpers.modlist import ModList
-from sanguine.helpers.project_config import ModManagerConfig, ModManagerPluginBase, _config_dir_path, \
-    _normalize_vfs_dir_path
+from sanguine.helpers.project_config import (ModManagerConfig, ModManagerPluginBase, config_dir_path,
+                                             normalize_vfs_dir_path)
 
 
 class Mo2Plugin(ModManagerPluginBase):
@@ -27,7 +27,7 @@ class Mo2ProjectConfig(ModManagerConfig):
 
     def parse_config_section(self, section: dict[str, any], configdir: str, fullconfig: dict[str, any]) -> None:
         abort_if_not('mo2dir' in section, "'mo2dir' must be present in config.mo2 for modmanager=mo2")
-        mo2dir = _config_dir_path(section['mo2dir'], configdir, fullconfig)
+        mo2dir = config_dir_path(section['mo2dir'], configdir, fullconfig)
         abort_if_not(isinstance(mo2dir, str), 'config.mo2.mo2dir must be a string')
 
         ignores = section.get('ignores', ['{DEFAULT-MO2-IGNORES}'])
@@ -44,7 +44,7 @@ class Mo2ProjectConfig(ModManagerConfig):
                     'overwrite\\ShaderCache'
                 ]]
             else:
-                ignore_dirs.append(_normalize_vfs_dir_path(ignore, mo2dir))
+                ignore_dirs.append(normalize_vfs_dir_path(ignore, mo2dir))
 
         assert self.mo2dir is None
         self.mo2dir = FolderToCache(mo2dir, ignore_dirs)
@@ -67,10 +67,10 @@ class Mo2ProjectConfig(ModManagerConfig):
             normalize_dir_path(self.mo2dir.folder + 'profiles\\' + self.master_profile + '\\'))
 
     def active_vfs_folders(self) -> FolderListToCache:
-        out: FolderListToCache = [FolderToCache(self.mo2dir.folder, [self.mo2dir.folder + 'mods\\'])]
+        out: FolderListToCache = FolderListToCache([FolderToCache(self.mo2dir.folder, [self.mo2dir.folder + 'mods\\'])])
         for mod in self.master_modlist.all_enabled():
             folder = normalize_dir_path(self.mo2dir.folder + 'mods\\' + mod + '\\')
-            if FolderToCache.is_ok(folder,self.mo2dir.exdirs):
+            if FolderToCache.ok_to_construct(folder, self.mo2dir.exdirs):
                 out.append(
                     FolderToCache(folder, self.mo2dir.exdirs))
         return out

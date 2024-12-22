@@ -25,7 +25,7 @@ class FolderToCache:
     exdirs: list[str]
 
     @staticmethod
-    def is_ok(folder: str, exdirs: list[str]) -> bool:
+    def ok_to_construct(folder: str, exdirs: list[str]) -> bool:
         if __debug__:
             assert is_normalized_dir_path(folder)
             for x in exdirs:
@@ -36,12 +36,60 @@ class FolderToCache:
         return True
 
     def __init__(self, folder: str, exdirs: list[str] = None) -> None:
-        assert FolderToCache.is_ok(folder, exdirs)
+        assert FolderToCache.ok_to_construct(folder, exdirs)
         self.folder = folder
-        self.exdirs = [] if exdirs is None else exdirs
+        self.exdirs = [] if exdirs is None else [x for x in exdirs if x.startswith(self.folder)]
+
+    @staticmethod
+    def filter_ex_dirs(exdirs: list[str], path: str) -> list[str]:
+        return [x for x in exdirs if x.startswith(path)]
+
+    @staticmethod
+    def _is_path_included(path: str, root: str, exdirs: list[str]) -> bool:
+        if not path.startswith(root):
+            return False
+        for x in exdirs:
+            if path.startswith(x):
+                return False
+        return True
+
+    def is_file_path_included(self, fpath: str) -> bool:
+        assert is_normalized_file_path(fpath)
+        return FolderToCache._is_path_included(fpath, self.folder, self.exdirs)
+
+    @staticmethod
+    def static_is_file_path_included(fpath: str, root: str, exdirs: list[str]) -> bool:
+        assert is_normalized_file_path(fpath)
+        return FolderToCache._is_path_included(fpath, root, exdirs)
+
+    '''
+    def is_dir_path_included(self,dpath: str) -> bool:
+        assert is_normalized_dir_path(dpath)
+        return self._is_path_included(dpath)
+    '''
 
 
-type FolderListToCache = list[FolderToCache]
+class FolderListToCache:
+    folders: list[FolderToCache]
+
+    def __init__(self, folders: list[FolderToCache]) -> None:
+        self.folders = folders
+
+    def is_file_path_included(self, fpath: str) -> bool:
+        assert is_normalized_file_path(fpath)
+        for f in self.folders:
+            if f.is_file_path_included(fpath):
+                return True
+        return False
+
+    def append(self, folder: FolderToCache) -> None:
+        self.folders.append(folder)
+
+    def __getitem__(self, item: int) -> FolderToCache:
+        return self.folders[item]
+
+    def __len__(self) -> int:
+        return len(self.folders)
 
 
 def calculate_file_hash(

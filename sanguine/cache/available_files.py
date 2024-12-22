@@ -35,9 +35,10 @@ class AvailableFiles:
 
     def __init__(self, by: str, cachedir: str, tmpdir: str, mastergitdir: str, downloads: list[str],
                  github_folders: list[GithubFolder]) -> None:
-        self._downloads_cache = FolderCache(cachedir, 'downloads', [FolderToCache(d, []) for d in downloads])
+        self._downloads_cache = FolderCache(cachedir, 'downloads',
+                                            FolderListToCache([FolderToCache(d, []) for d in downloads]))
         self._github_cache = FolderCache(cachedir, 'github',
-                                         [FolderToCache(g.local_folder, []) for g in github_folders])
+                                         FolderListToCache([FolderToCache(g.local_folder, []) for g in github_folders]))
         self._github_cache_by_hash = None
         self._github_folders = github_folders
         self._master_data = AllMasterGitData(by, mastergitdir, cachedir, tmpdir, {})

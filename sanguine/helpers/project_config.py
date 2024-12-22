@@ -13,7 +13,7 @@ def _normalize_config_dir_path(path: str, configdir: str) -> str:  # relative to
         return normalize_dir_path(configdir + path)
 
 
-def _config_dir_path(path: str, configdir: str, config: dict[str, any]):
+def config_dir_path(path: str, configdir: str, config: dict[str, any]):
     path = _normalize_config_dir_path(path, configdir)
     path = path.replace('{CONFIG-DIR}', configdir)
     replaced = False
@@ -31,12 +31,12 @@ def _config_dir_path(path: str, configdir: str, config: dict[str, any]):
         replaced = True
 
     if replaced:
-        return _config_dir_path(path, configdir, config)
+        return config_dir_path(path, configdir, config)
     else:
         return path
 
 
-def _normalize_vfs_dir_path(path: str, vfsdir: str) -> str:  # relative to vfs dir
+def normalize_vfs_dir_path(path: str, vfsdir: str) -> str:  # relative to vfs dir
     if os.path.isabs(path):
         out = normalize_dir_path(path)
     else:
@@ -125,7 +125,7 @@ def _all_configs_string() -> str:
 def _load_github_folder(dirpath: str) -> GithubFolder:
     assert is_normalized_dir_path(dirpath)
     abort_if_not(os.path.isfile(dirpath + '.git\\config'), lambda: '{}.git\\config not found'.format(dirpath))
-    pattern = re.compile('\s*url\s*=\s*https://github.com/([^/]*)/([^\n]*)')
+    pattern = re.compile(r'\s*url\s*=\s*https://github.com/([^/]*)/([^\n]*)')
     with open_3rdparty_txt_file(dirpath + '.git\\config') as f:
         author = None
         project = None
@@ -181,14 +181,14 @@ class ProjectConfig:
                 dls = [dls]
             abort_if_not(isinstance(dls, list),
                          lambda: "'downloads' in config must be a string or a list, got " + repr(dls))
-            self.download_dirs = [_config_dir_path(dl, self.config_dir, jsonconfig) for dl in dls]
+            self.download_dirs = [config_dir_path(dl, self.config_dir, jsonconfig) for dl in dls]
 
-            self.cache_dir = _config_dir_path(jsonconfig.get('cache', self.config_dir + '..\\sanguine.cache\\'),
-                                              self.config_dir,
-                                              jsonconfig)
-            self.tmp_dir = _config_dir_path(jsonconfig.get('tmp', self.config_dir + '..\\sanguine.tmp\\'),
-                                            self.config_dir,
-                                            jsonconfig)
+            self.cache_dir = config_dir_path(jsonconfig.get('cache', self.config_dir + '..\\sanguine.cache\\'),
+                                             self.config_dir,
+                                             jsonconfig)
+            self.tmp_dir = config_dir_path(jsonconfig.get('tmp', self.config_dir + '..\\sanguine.tmp\\'),
+                                           self.config_dir,
+                                           jsonconfig)
 
             gh = None
             if 'github' not in jsonconfig:
@@ -201,7 +201,7 @@ class ProjectConfig:
                          lambda: "'gh' in config must be a string or a list, got " + repr(gh))
             self.github_folders = [_load_github_folder(gf) for gf in gh]
             assert 'githubroot' in jsonconfig
-            self.github_root = _config_dir_path(jsonconfig['githubroot'], self.config_dir, jsonconfig)
+            self.github_root = config_dir_path(jsonconfig['githubroot'], self.config_dir, jsonconfig)
 
             self.own_mod_names = [normalize_file_name(om) for om in jsonconfig.get('ownmods', [])]
 

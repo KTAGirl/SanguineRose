@@ -1,9 +1,60 @@
 import os.path
 import stat
 import time
+from bisect import bisect_left
 
 import sanguine.tasks as tasks
 from sanguine.common import *
+
+
+class _FastSearchOverFolderListToCache:
+    _paths: list[tuple[str, bool, int]]
+
+    def __init__(self, src: FolderListToCache) -> None:
+        self._paths = []
+        for f in src.folders:
+            self._paths.append((f.folder, True, -1))
+            for x in f.exdirs:
+                self._paths.append((x, False, -1))
+        self._paths.sort()
+
+        # filling previdx
+        prevdirs: list[int] = []
+        for i in range(len(self._paths)):
+            (p, inc, _) = self._paths[i]
+            if len(prevdirs) == 0:
+                self._paths[i] = (p, inc, -1)
+                prevdirs.append(i)
+            elif p.startswith(self._paths[prevdirs[-1]][0]):
+                self._paths[i] = (p, inc, prevdirs[-1])
+                prevdirs.append(i)
+            else:
+                while True:
+                    if p.startswith(self._paths[prevdirs[-1]][0]):
+                        self._paths[i] = (p, inc, prevdirs[-1])
+                        prevdirs.append(i)
+                        break
+                    prevdirs = prevdirs[:-1]
+                    if len(prevdirs) == 0:
+                        self._paths[i] = (p, inc, -1)
+                        break
+
+    def is_file_path_included(self, fpath: str) -> bool:
+        assert is_normalized_file_path(fpath)
+        k = (fpath, True, -1)
+        idx = bisect_left(self._paths, k)
+        if idx == 0:
+            return False
+        prev = self._paths[idx - 1]
+        if fpath.startswith(prev[0]):
+            return prev[1]
+
+        while True:
+            if prev[2] < 0:
+                return False
+            prev = self._paths[prev[2]]
+            if fpath.startswith(prev[0]):
+                return prev[1]
 
 
 class FileOnDisk:
@@ -103,10 +154,6 @@ class _FolderScanDirOut:
         self.requested_dirs = []
         self.requested_files = []
         self.scan_stats = {}
-
-
-def filter_ex_dirs(exdirs: list[str], fpath) -> list[str]:
-    return [xd for xd in exdirs if xd.startswith(fpath)]
 
 
 # heuristics to enable splitting tasks
@@ -213,8 +260,8 @@ class _ScanStatsNode:
     @staticmethod
     def _append_task(alltasks: list[tuple[str, str, int, list[str]]], root: str, path: str, nf: int, exdirs: list[str],
                      extexdirs: list[str]) -> None:
-        assert len(filter_ex_dirs(exdirs, path)) == len(exdirs)
-        mergedexdirs = exdirs + filter_ex_dirs(extexdirs, path)
+        assert len(FolderToCache.filter_ex_dirs(exdirs, path)) == len(exdirs)
+        mergedexdirs = exdirs + FolderToCache.filter_ex_dirs(extexdirs, path)
         alltasks.append((root, path, nf, mergedexdirs))
 
     def _is_filtered_out(self, exdirs: list[str]) -> bool:
@@ -383,22 +430,6 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         parallel.add_task(reconciletask)
 
     @staticmethod
-    def _file_path_is_ok_simple(path: str, root: str, exdirs: list[str]) -> bool:
-        if not path.startswith(root):
-            return False
-        for exdir in exdirs:
-            if path.startswith(exdir):
-                return False
-        return True
-
-    @staticmethod
-    def _file_path_is_ok(fpath: str, folder_list: FolderListToCache) -> bool:
-        for folderplus in folder_list:
-            if FolderCache._file_path_is_ok_simple(fpath, folderplus.folder, folderplus.exdirs):
-                return True
-        return False
-
-    @staticmethod
     def scan_dir(started: float, sdout: _FolderScanDirOut, stats: _FolderScanStats, root: str, dirpath: str,
                  const_filesbypath: dict[str, FileOnDisk], pubfilesbypath: tasks.SharedPubParam,
                  const_exdirs: list[str], name: str) -> None:  # recursive over dir
@@ -414,7 +445,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 assert not stat.S_ISLNK(fmode)
                 assert is_normalized_file_path(fpath)
 
-                assert FolderCache._file_path_is_ok_simple(fpath, root, const_exdirs)
+                assert FolderToCache.static_is_file_path_included(fpath, root, const_exdirs)
 
                 stats.nscanned += 1
                 nf += 1
@@ -449,7 +480,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                     sdout.requested_dirs.append(newdir)
                 else:
                     FolderCache.scan_dir(started, sdout, stats, root, newdir, const_filesbypath, pubfilesbypath,
-                                         filter_ex_dirs(const_exdirs, newdir), name)
+                                         FolderToCache.filter_ex_dirs(const_exdirs, newdir), name)
             else:
                 critical('FolderCache: {} is neither dir or file, aborting'.format(fpath))
                 abort_if_not(False)
@@ -488,9 +519,13 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         (filesbypath,) = out
         self._files_by_path = {}
         self._filtered_files = []
+        srch = _FastSearchOverFolderListToCache(self._folder_list)
         for p, f in filesbypath.items():
             assert p == f.file_path
-            if FolderCache._file_path_is_ok(p, self._folder_list):
+            # incl = self._folder_list.is_file_path_included(p)
+            incl2 = srch.is_file_path_included(p)
+            # abort_if_not(incl == incl2)
+            if incl2:
                 self._files_by_path[p] = f
             else:
                 self._filtered_files.append(f)
@@ -565,7 +600,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             assert is_normalized_dir_path(fpath)
             taskname = self._scanned_task_name(fpath)
             task = tasks.Task(taskname, _scan_folder_task_func,
-                              (sdout.root, fpath, filter_ex_dirs(exdirs, fpath), self.name),
+                              (sdout.root, fpath, FolderToCache.filter_ex_dirs(exdirs, fpath), self.name),
                               [self._load_own_task_name()],
                               1.0)  # this is an ad-hoc split, we don't want tasks to cache w, and we have no idea
             owntaskname = self._scanned_own_task_name(fpath)
@@ -581,7 +616,8 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
         tfoldercache = FolderCache(normalize_dir_path('..\\..\\sanguine.cache\\'),
                                    'downloads',
-                                   [FolderToCache(normalize_dir_path('..\\..\\..\\mo2\\downloads'), [])])
+                                   FolderListToCache(
+                                       [FolderToCache(normalize_dir_path('..\\..\\..\\mo2\\downloads'), [])]))
         with tasks.Parallel(None) as tparallel:
             tfoldercache.start_tasks(tparallel)
             tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()
