@@ -13,11 +13,6 @@ from sanguine.install._logging import add_logging_handler, log_to_file_only, log
 _proc_num: int = -1  # number of child process
 
 
-# def this_proc_num() -> int:
-#    global _proc_num
-#    return _proc_num
-
-
 class _ChildProcessLogHandler(logging.StreamHandler):
     logq: PQueue
 
@@ -81,10 +76,6 @@ class _PoolOfSharedReturns:
 _pool_of_shared_returns = _PoolOfSharedReturns()
 
 
-# def _log_time() -> float:
-#    return time.perf_counter() - _started
-
-
 class SharedPublication:
     shm: shared_memory.SharedMemory
     closed: bool
@@ -126,7 +117,7 @@ class LambdaReplacement:
 
 class Task:
     name: str
-    f: Callable[[any, ...], any]  # variable # of params depending on len(dependencies)
+    f: Callable[[any, ...], any] | None  # variable # of params depending on len(dependencies)
     param: any
     dependencies: list[str]
     w: float | None
@@ -141,6 +132,11 @@ class Task:
 
 class OwnTask(Task):
     pass
+
+
+class ForcePendingTask(Task):
+    def __init__(self, name: str) -> None:
+        super().__init__(name, lambda: None, None, [])
 
 
 def _run_task(task: Task, depparams: list[any]) -> (Exception | None, any):
@@ -460,7 +456,7 @@ class Parallel:
         islambda = callable(task.f) and task.f.__name__ == '<lambda>'
         # if islambda:
         #    print('lambda in task ' + task.name)
-        assert isinstance(task, OwnTask) or not islambda
+        assert isinstance(task, OwnTask) or isinstance(task, ForcePendingTask) or not islambda
 
         taskparents, patterns = self._dependencies_to_parents(task.dependencies)
         if taskparents is None:
@@ -482,6 +478,8 @@ class Parallel:
         self.all_task_nodes[task.name] = node
 
         assert node.waiting_for_n_deps == 0
+        if isinstance(task, ForcePendingTask):
+            node.waiting_for_n_deps = 1000000  # 1 would do, but 1000000 is much better visible in debug
         for parent in node.parents:
             assert isinstance(parent, _TaskGraphNode)
             parent.append_leaf(node)
@@ -788,6 +786,20 @@ class Parallel:
         added = self._internal_add_task_if(task)
         abort_if_not(added,
                      lambda: 'tasks: cannot add task {}, are you sure all dependencies are known?'.format(task.name))
+
+    def replace_force_pending_task(self, task: Task) -> None:
+        assert task.name in self.all_task_nodes
+        assert task.name in self.pending_task_nodes
+        oldtasknode = self.pending_task_nodes[task.name]
+        assert oldtasknode.state == _TaskGraphNodeState.Pending
+        assert isinstance(oldtasknode.task, ForcePendingTask)
+        children = self.pending_task_nodes[task.name].children
+        del self.pending_task_nodes[task.name]
+        del self.all_task_nodes[task.name]
+        self.add_task(task)
+        assert task.name in self.pending_task_nodes
+        self.pending_task_nodes[task.name].children = children
+        debug('Parallel: replaced force pending task {}, inherited {} children'.format(task.name, len(children)))
 
     def _find_best_process(self) -> int:
         besti = -1
