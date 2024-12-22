@@ -785,7 +785,7 @@ class Parallel:
         assert task.name not in self.all_task_nodes
         added = self._internal_add_task_if(task)
         abort_if_not(added,
-                     lambda: 'tasks: cannot add task {}, are you sure all dependencies are known?'.format(task.name))
+                     lambda: 'Parallel: cannot add task {}, are you sure all dependencies are known?'.format(task.name))
 
     def replace_force_pending_task(self, task: Task) -> None:
         assert task.name in self.all_task_nodes

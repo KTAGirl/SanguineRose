@@ -24,11 +24,19 @@ class FolderToCache:
     folder: str
     exdirs: list[str]
 
-    def __init__(self, folder: str, exdirs: list[str] = None) -> None:
+    @staticmethod
+    def is_ok(folder:str, exdirs:list[str]) -> bool:
         if __debug__:
             assert is_normalized_dir_path(folder)
             for x in exdirs:
                 assert is_normalized_dir_path(x)
+        for x in exdirs:
+            if folder.startswith(x):
+                return False
+        return True
+
+    def __init__(self, folder: str, exdirs: list[str] = None) -> None:
+        assert FolderToCache.is_ok(folder, exdirs)
         self.folder = folder
         self.exdirs = [] if exdirs is None else exdirs
 

@@ -60,6 +60,6 @@ if __name__ == '__main__':
         cfg = ProjectConfig(cfgfname)
 
         wcache = WholeCache('KTAGirl', cfg)
-        with tasks.Parallel(None, dbg_serialize=True) as tparallel:
+        with tasks.Parallel(None, dbg_serialize=False) as tparallel:
             wcache.start_tasks(tparallel)
             tparallel.run([])

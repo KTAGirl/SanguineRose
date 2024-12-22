@@ -335,6 +335,9 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                     return True
         return False
 
+    def _load_own_task_name(self) -> str:
+        return 'sanguine.foldercache.loadown.' + self.name
+
     def _start_tasks(self, parallel: tasks.Parallel) -> None:
 
         # building tree of known scans
@@ -353,7 +356,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         loadtask = tasks.Task(loadtaskname, _load_files_task_func, (self._cache_dir, self.name), [])
         parallel.add_task(loadtask)
 
-        loadowntaskname = 'sanguine.foldercache.loadown.' + self.name
+        loadowntaskname = self._load_own_task_name()
         loadowntask = tasks.OwnTask(loadowntaskname, lambda _, out: self._load_files_own_task_func(out, parallel),
                                     None,
                                     [loadtaskname])
@@ -561,7 +564,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             taskname = self._scanned_task_name(fpath)
             task = tasks.Task(taskname, _scan_folder_task_func,
                               (sdout.root, fpath, filter_ex_dirs(exdirs, fpath), self.name),
-                              [], 1.0)  # this is an ad-hoc split, we don't want tasks to cache w, and we have no idea
+                              [self._load_own_task_name()], 1.0)  # this is an ad-hoc split, we don't want tasks to cache w, and we have no idea
             owntaskname = self._scanned_own_task_name(fpath)
             owntask = tasks.OwnTask(owntaskname,
                                     lambda _, o: self._scan_folder_own_task_func(o, parallel, scannedfiles, stats),
