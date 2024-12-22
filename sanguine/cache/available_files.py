@@ -64,7 +64,7 @@ class AvailableFiles:
         parallel.add_task(startoriginsowntask)
 
         readyowntaskname = AvailableFiles._READYOWNTASKNAME
-        fakereadyowntask = tasks.ForcePendingTask(readyowntaskname)
+        fakereadyowntask = tasks.TaskPlaceholder(readyowntaskname)
         parallel.add_task(fakereadyowntask)
 
     @staticmethod
@@ -184,7 +184,7 @@ class AvailableFiles:
         readyowntask = tasks.OwnTask(readyowntaskname,
                                      lambda _, _1, _2: self._ready_own_task_func(), None,
                                      [gitarchivesdonehashingtaskname, self._github_cache.ready_task_name()])
-        parallel.replace_force_pending_task(readyowntask)
+        parallel.replace_task_placeholder(readyowntask)
 
     def _ready_own_task_func(self) -> None:
         assert self._github_cache_by_hash is None

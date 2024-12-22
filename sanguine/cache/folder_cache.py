@@ -70,10 +70,9 @@ def _write_all_scan_stats(dirpath: str, name: str, all_scan_stats: dict[str, dic
         pickle.dump(all_scan_stats, wf)
 
     fpath2 = dirpath + 'foldercache.' + name + '.scan-stats.json'
-    srt = sorted(all_scan_stats.items())
     with open_3rdparty_txt_file_w(fpath2) as wf2:
         # noinspection PyTypeChecker
-        json.dump(srt, wf2, indent=2)
+        json.dump(all_scan_stats, wf2, indent=2)
 
 
 class _FolderScanStats:
@@ -237,9 +236,8 @@ class _ScanStatsNode:
             rootstatnode._filter_tree(exdirs)
         return rootstatnode
 
-    def fill_tasks(self, alltasks: list[tuple[str, str, int, list[str]]], root: str, extexdirs: list[str]) -> tuple[int,
-    list[
-        str]] | None:  # recursive
+    def fill_tasks(self, alltasks: list[tuple[str, str, int, list[str]]], root: str,
+                   extexdirs: list[str]) -> tuple[int,list[str]] | None:  # recursive
         nf = self.own_nf
         chex = []
         chexmerged = []

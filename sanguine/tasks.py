@@ -135,7 +135,7 @@ class OwnTask(Task):
     pass
 
 
-class ForcePendingTask(Task):
+class TaskPlaceholder(Task):
     def __init__(self, name: str) -> None:
         super().__init__(name, lambda: None, None, [])
 
@@ -460,7 +460,7 @@ class Parallel:
         islambda = callable(task.f) and task.f.__name__ == '<lambda>'
         # if islambda:
         #    print('lambda in task ' + task.name)
-        assert isinstance(task, OwnTask) or isinstance(task, ForcePendingTask) or not islambda
+        assert isinstance(task, OwnTask) or isinstance(task, TaskPlaceholder) or not islambda
 
         taskparents, patterns = self._dependencies_to_parents(task.dependencies)
         if taskparents is None:
@@ -482,7 +482,7 @@ class Parallel:
         self.all_task_nodes[task.name] = node
 
         assert node.waiting_for_n_deps == 0
-        if isinstance(task, ForcePendingTask):
+        if isinstance(task, TaskPlaceholder):
             node.waiting_for_n_deps = 1000000  # 1 would do, but 1000000 is much better visible in debug
         for parent in node.parents:
             assert isinstance(parent, _TaskGraphNode)
@@ -698,7 +698,7 @@ class Parallel:
         while len(self.ready_task_nodes) > 0 and total_time < 0.1:  # heuristics: <0.1s is not worth jerking around
             assert len(self.ready_task_nodes) == len(self.ready_task_nodes_heap)
             node = heapq.heappop(self.ready_task_nodes_heap)
-            assert not isinstance(node.task, OwnTask) and not isinstance(node.task, ForcePendingTask)
+            assert not isinstance(node.task, OwnTask) and not isinstance(node.task, TaskPlaceholder)
             i += 1
             taskplus = [node.task]
             assert len(node.task.dependencies) == len(node.parents)
@@ -814,19 +814,20 @@ class Parallel:
         abort_if_not(added,
                      lambda: 'Parallel: cannot add task {}, are you sure all dependencies are known?'.format(task.name))
 
-    def replace_force_pending_task(self, task: Task) -> None:
+    def replace_task_placeholder(self, task: Task) -> None:
         assert task.name in self.all_task_nodes
         assert task.name in self.pending_task_nodes
         oldtasknode = self.pending_task_nodes[task.name]
         assert oldtasknode.state == _TaskGraphNodeState.Pending
-        assert isinstance(oldtasknode.task, ForcePendingTask)
+        assert isinstance(oldtasknode.task, TaskPlaceholder)
         children = self.pending_task_nodes[task.name].children
         del self.pending_task_nodes[task.name]
         del self.all_task_nodes[task.name]
         self.add_task(task)
         assert task.name in self.pending_task_nodes
+        assert len(self.pending_task_nodes[task.name].children) == 0
         self.pending_task_nodes[task.name].children = children
-        debug('Parallel: replaced force pending task {}, inherited {} children'.format(task.name, len(children)))
+        debug('Parallel: replaced task placeholder {}, inherited {} children'.format(task.name, len(children)))
 
     def _find_best_process(self) -> int:
         besti = -1
