@@ -1,5 +1,6 @@
 # mini-micro <s>skirt</s>, sorry, lib for data-driven parallel processing
 
+import heapq
 import logging
 import time
 from enum import IntEnum
@@ -306,29 +307,21 @@ class _TaskGraphNode:
         self.state = _TaskGraphNodeState.Pending
         self.waiting_for_n_deps = 0
 
-    def mark_as_done_and_handle_children(self, pending: dict[str, "_TaskGraphNode"],
-                                         ready: dict[str, tuple["_TaskGraphNode", float]],
-                                         ready_own: dict[str, tuple["_TaskGraphNode", float]]) -> None:
+    def mark_as_done_and_handle_children(self) -> list["_TaskGraphNode"]:
         assert self.state == _TaskGraphNodeState.Ready or self.state == _TaskGraphNodeState.Running
         self.state = _TaskGraphNodeState.Done
+        out = []
         for ch in self.children:
             assert ch.state == _TaskGraphNodeState.Pending
             assert ch.waiting_for_n_deps > 0
             ch.waiting_for_n_deps -= 1
             if ch.waiting_for_n_deps == 0:
-                ch.state = _TaskGraphNodeState.Ready
-                assert ch.task.name not in ready
-                assert ch.task.name not in ready_own
-                assert ch.task.name in pending
-                debug('Parallel: task {} is ready'.format(ch.task.name))
-                del pending[ch.task.name]
-                if isinstance(ch.task, OwnTask):
-                    ready_own[ch.task.name] = (ch, ch.total_weight())
-                else:
-                    ready[ch.task.name] = (ch, ch.total_weight())
+                out.append(ch)
             else:
                 debug('Parallel: task {} has {} remaining dependencies to become ready'.format(
                     ch.task.name, ch.waiting_for_n_deps))
+
+        return out
 
     def append_leaf(self, leaf: "_TaskGraphNode") -> None:
         self.children.append(leaf)
@@ -344,6 +337,13 @@ class _TaskGraphNode:
 
     def total_weight(self) -> float:
         return self.own_weight + self.max_leaf_weight
+
+    # comparisons for heapq to work
+    def __lt__(self, b: "_TaskGraphNode") -> bool:
+        return self.total_weight() < b.total_weight()
+
+    def __eq__(self, b: "_TaskGraphNode") -> bool:
+        return self.total_weight() == b.total_weight()
 
 
 class Parallel:
@@ -366,8 +366,10 @@ class Parallel:
     publications: dict[str, shared_memory.SharedMemory]
     all_task_nodes: dict[str, _TaskGraphNode]  # name->node
     pending_task_nodes: dict[str, _TaskGraphNode]  # name->node
-    ready_task_nodes: dict[str, tuple[_TaskGraphNode, float]]  # name->node
-    ready_own_task_nodes: dict[str, tuple[_TaskGraphNode, float]]  # name->node
+    ready_task_nodes: dict[str, _TaskGraphNode]  # name->node
+    ready_task_nodes_heap: list[_TaskGraphNode]
+    ready_own_task_nodes: dict[str, _TaskGraphNode]  # name->node
+    ready_own_task_nodes_heap: list[_TaskGraphNode]
     running_task_nodes: dict[str, tuple[int, float, _TaskGraphNode]]  # name->(procnum,started,node)
     done_task_nodes: dict[str, tuple[_TaskGraphNode, any]]  # name->(node,out)
     pending_patterns: list[tuple[str, _TaskGraphNode]]  # pattern, node
@@ -405,7 +407,9 @@ class Parallel:
         self.all_task_nodes = {}
         self.pending_task_nodes = {}
         self.ready_task_nodes = {}
+        self.ready_task_nodes_heap = []
         self.ready_own_task_nodes = {}
+        self.ready_own_task_nodes_heap = []
         self.running_task_nodes = {}  # name->(procnum,started,node)
         self.done_task_nodes = {}  # name->(node,out)
         self.pending_patterns = []
@@ -505,9 +509,11 @@ class Parallel:
         if node.waiting_for_n_deps == 0:
             node.state = _TaskGraphNodeState.Ready
             if isinstance(node.task, OwnTask):
-                self.ready_own_task_nodes[task.name] = (node, node.total_weight())
+                self.ready_own_task_nodes[task.name] = node
+                heapq.heappush(self.ready_own_task_nodes_heap, node)
             else:
-                self.ready_task_nodes[task.name] = (node, node.total_weight())
+                self.ready_task_nodes[task.name] = node
+                heapq.heappush(self.ready_task_nodes_heap, node)
         else:
             self.pending_task_nodes[task.name] = node
 
@@ -547,6 +553,7 @@ class Parallel:
 
     def _run_all_own_tasks(self, owntaskstats: dict[str, tuple[int, float, float]]) -> float:
         town = 0.
+        assert len(self.ready_own_task_nodes) == len(self.ready_own_task_nodes_heap)
         while len(self.ready_own_task_nodes) > 0:
             towntasks = self._run_own_task(
                 owntaskstats)  # ATTENTION: own tasks may call add_task() or add_tasks() within
@@ -634,6 +641,21 @@ class Parallel:
         for key, val in owntaskstats.items():
             info('  {}: {}, took {:.2f}/{:.2f}s'.format(key, val[0], val[1], val[2]))
 
+    def _node_is_ready(self, ch: _TaskGraphNode) -> None:
+        assert ch.state == _TaskGraphNodeState.Pending
+        assert ch.task.name not in self.ready_task_nodes
+        assert ch.task.name not in self.ready_own_task_nodes
+        assert ch.task.name in self.pending_task_nodes
+        debug('Parallel: task {} is ready'.format(ch.task.name))
+        ch.state = _TaskGraphNodeState.Ready
+        del self.pending_task_nodes[ch.task.name]
+        if isinstance(ch.task, OwnTask):
+            self.ready_own_task_nodes[ch.task.name] = ch
+            heapq.heappush(self.ready_own_task_nodes_heap, ch)
+        else:
+            self.ready_task_nodes[ch.task.name] = ch
+            heapq.heappush(self.ready_task_nodes_heap, ch)
+
     def _process_out_tasks(self, procnum: int, tasks: list[tuple[str, tuple, any]], strwait: str | None) -> None:
         for taskname, times, out in tasks:
             assert taskname in self.running_task_nodes
@@ -655,11 +677,16 @@ class Parallel:
             self._update_weight(taskname, taskt)
             del self.running_task_nodes[taskname]
             assert taskname not in self.done_task_nodes
-            node.mark_as_done_and_handle_children(self.pending_task_nodes, self.ready_task_nodes,
-                                                  self.ready_own_task_nodes)
+            rdy = node.mark_as_done_and_handle_children()
+            for ch in rdy:
+                self._node_is_ready(ch)
             self.done_task_nodes[taskname] = (node, out)
 
     def _schedule_best_tasks(self) -> bool:  # may schedule multiple tasks as one meta-task
+        assert len(self.ready_task_nodes) == len(self.ready_task_nodes_heap)
+        if len(self.ready_task_nodes) == 0:
+            return False
+
         pidx = self._find_best_process()
         if pidx < 0:
             return False
@@ -667,12 +694,11 @@ class Parallel:
         total_time = 0.
         tasksstr = '['
         t0 = time.perf_counter()
-        candidates = sorted([tpl for tpl in self.ready_task_nodes.values() if not isinstance(tpl[0].task, OwnTask)],
-                            key=lambda tpl: -tpl[1])
         i = 0
-        while i < len(candidates) and total_time < 0.1:  # heuristics: <0.1s is not worth jerking around
-            node = candidates[i][0]
-            assert not isinstance(node.task, OwnTask)
+        while len(self.ready_task_nodes) > 0 and total_time < 0.1:  # heuristics: <0.1s is not worth jerking around
+            assert len(self.ready_task_nodes) == len(self.ready_task_nodes_heap)
+            node = heapq.heappop(self.ready_task_nodes_heap)
+            assert not isinstance(node.task, OwnTask) and not isinstance(node.task, ForcePendingTask)
             i += 1
             taskplus = [node.task]
             assert len(node.task.dependencies) == len(node.parents)
@@ -724,11 +750,10 @@ class Parallel:
     def _run_own_task(self, owntaskstats: dict[str, tuple[int, float, float]]) -> float:
         assert len(self.ready_own_task_nodes) > 0
         towntask = 0.
-        best = min(self.ready_own_task_nodes.values(), key=lambda tpl: -tpl[1])
+        ot = heapq.heappop(self.ready_own_task_nodes_heap)
 
-        ot = best[0]
         assert isinstance(ot.task, OwnTask)
-        # print('task: '+ot.task.name)
+        # debug('own task: '+ot.task.name)
         params = []
         assert len(ot.parents) == len(ot.task.dependencies)
         for p in ot.parents:
@@ -771,7 +796,9 @@ class Parallel:
         assert ot.state == _TaskGraphNodeState.Ready
         assert ot.task.name in self.ready_own_task_nodes
         del self.ready_own_task_nodes[ot.task.name]
-        ot.mark_as_done_and_handle_children(self.pending_task_nodes, self.ready_task_nodes, self.ready_own_task_nodes)
+        rdy = ot.mark_as_done_and_handle_children()
+        for ch in rdy:
+            self._node_is_ready(ch)
         ot.state = _TaskGraphNodeState.Done
         self.done_task_nodes[ot.task.name] = (ot, out)
 
@@ -892,6 +919,7 @@ class Parallel:
         del self.publications[name]
 
     def _stats(self) -> None:
+        assert len(self.ready_task_nodes) == len(self.ready_task_nodes_heap)
         info('Parallel: {} tasks, including {} pending, {}/{} ready, {} running, {} done'.format(
             len(self.all_task_nodes), len(self.pending_task_nodes), len(self.ready_task_nodes),
             len(self.ready_own_task_nodes), len(self.running_task_nodes), len(self.done_task_nodes))
