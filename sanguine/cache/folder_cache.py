@@ -181,6 +181,8 @@ class _ScanStatsNode:
         self.path = path
         self.own_nf = nf
         self.children = []
+        if parent is not None:
+            parent.children.append(self)
 
     @staticmethod
     def _read_tree_from_stats(scan_stats: dict[str, int] | None) -> "_ScanStatsNode":
@@ -200,12 +202,11 @@ class _ScanStatsNode:
             else:
                 ok = False
                 while curstatnode.parent is not None:
-                    if fpath.startswith(curstatnode.parent.path):
+                    curstatnode = curstatnode.parent
+                    if fpath.startswith(curstatnode.path):
                         curstatnode = _ScanStatsNode(curstatnode, fpath, nf)
                         ok = True
                         break  # while
-                    else:
-                        curstatnode = curstatnode.parent
                 assert ok
         return rootstatnode
 
@@ -232,12 +233,12 @@ class _ScanStatsNode:
             rootstatnode = _ScanStatsNode(None, rootfolder, 10000)  # a LOT
         else:
             rootstatnode = _ScanStatsNode._read_tree_from_stats(scan_stats)
-            assert rootstatnode.path == rootfolder
+            assert rootstatnode.path.startswith(rootfolder)
             rootstatnode._filter_tree(exdirs)
         return rootstatnode
 
     def fill_tasks(self, alltasks: list[tuple[str, str, int, list[str]]], root: str,
-                   extexdirs: list[str]) -> tuple[int,list[str]] | None:  # recursive
+                   extexdirs: list[str]) -> tuple[int, list[str]] | None:  # recursive
         nf = self.own_nf
         chex = []
         chexmerged = []
@@ -483,6 +484,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
     def _load_files_own_task_func(self, out: tuple[dict[str, FileOnDisk]], parallel: tasks.Parallel) -> \
             tuple[tasks.SharedPubParam]:
+        debug('FolderCache.{}: started processing loading files'.format(self.name))
         (filesbypath,) = out
         self._files_by_path = {}
         self._filtered_files = []
@@ -493,8 +495,10 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             else:
                 self._filtered_files.append(f)
 
+        debug('FolderCache.{}: almost processed loading files, preparing SharedPublication'.format(self.name))
         self.pub_files_by_path = tasks.SharedPublication(parallel, self._files_by_path)
         pubparam = tasks.make_shared_publication_param(self.pub_files_by_path)
+        debug('FolderCache.{}: done processing loading files'.format(self.name))
         return (pubparam,)
 
     def _own_calc_hash_task_func(self, out: tuple[FileOnDisk], scannedfiles: dict[str, FileOnDisk]) -> None:
@@ -562,7 +566,8 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             taskname = self._scanned_task_name(fpath)
             task = tasks.Task(taskname, _scan_folder_task_func,
                               (sdout.root, fpath, filter_ex_dirs(exdirs, fpath), self.name),
-                              [self._load_own_task_name()], 1.0)  # this is an ad-hoc split, we don't want tasks to cache w, and we have no idea
+                              [self._load_own_task_name()],
+                              1.0)  # this is an ad-hoc split, we don't want tasks to cache w, and we have no idea
             owntaskname = self._scanned_own_task_name(fpath)
             owntask = tasks.OwnTask(owntaskname,
                                     lambda _, o: self._scan_folder_own_task_func(o, parallel, scannedfiles, stats),

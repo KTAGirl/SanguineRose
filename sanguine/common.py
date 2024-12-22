@@ -25,7 +25,7 @@ class FolderToCache:
     exdirs: list[str]
 
     @staticmethod
-    def is_ok(folder:str, exdirs:list[str]) -> bool:
+    def is_ok(folder: str, exdirs: list[str]) -> bool:
         if __debug__:
             assert is_normalized_dir_path(folder)
             for x in exdirs:
