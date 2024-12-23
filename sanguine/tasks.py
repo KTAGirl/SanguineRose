@@ -346,6 +346,9 @@ class _TaskGraphNode:
         return self.total_weight() == b.total_weight()
 
 
+type TaskStatsOfInterest = list[str]
+
+
 class Parallel:
     outq: PQueue
     logq: PQueue
@@ -374,8 +377,11 @@ class Parallel:
     done_task_nodes: dict[str, tuple[_TaskGraphNode, any]]  # name->(node,out)
     pending_patterns: list[tuple[str, _TaskGraphNode]]  # pattern, node
     dbg_serialize: bool
+    task_stats: list[list[str | int | float]]  # [(prefix,n,cpu,elapsed)]
+    own_task_stats: list[list[str | int | float]]
 
-    def __init__(self, jsonfname: str | None, nproc: int = 0, dbg_serialize: bool = False) -> None:
+    def __init__(self, jsonfname: str | None, nproc: int = 0, dbg_serialize: bool = False,
+                 taskstatsofinterest: TaskStatsOfInterest = None) -> None:
         # dbg_serialize allows debugging non-own Tasks
         global _proc_num
         assert _proc_num == -1
@@ -413,6 +419,11 @@ class Parallel:
         self.running_task_nodes = {}  # name->(procnum,started,node)
         self.done_task_nodes = {}  # name->(node,out)
         self.pending_patterns = []
+
+        if taskstatsofinterest is None:
+            taskstatsofinterest = []
+        self.task_stats = [[prefix, 0, 0., 0.] for prefix in taskstatsofinterest]
+        self.own_task_stats = [[prefix, 0, 0., 0.] for prefix in taskstatsofinterest]
 
     def __enter__(self) -> "Parallel":
         self.processes = []
@@ -551,12 +562,11 @@ class Parallel:
                          + taskstr + '\n')
                 abort_if_not(False)
 
-    def _run_all_own_tasks(self, owntaskstats: dict[str, tuple[int, float, float]]) -> float:
+    def _run_all_own_tasks(self) -> float:
         town = 0.
         assert len(self.ready_own_task_nodes) == len(self.ready_own_task_nodes_heap)
         while len(self.ready_own_task_nodes) > 0:
-            towntasks = self._run_own_task(
-                owntaskstats)  # ATTENTION: own tasks may call add_task() or add_tasks() within
+            towntasks = self._run_own_task()  # ATTENTION: own tasks may call add_task() or add_tasks() within
             town += towntasks
         return town
 
@@ -570,10 +580,9 @@ class Parallel:
         maintwait = 0.
         maintown = 0.
         maintschedule = 0.
-        owntaskstats: dict[str, tuple[int, float, float]] = {}
 
         # we need to try running own tasks before main loop - otherwise we can get stuck in an endless loop of self._schedule_best_tasks()
-        maintown += self._run_all_own_tasks(owntaskstats)
+        maintown += self._run_all_own_tasks()
 
         # main loop
         while True:
@@ -583,7 +592,7 @@ class Parallel:
                 pass
             maintschedule += (time.perf_counter() - sch0)
 
-            maintown += self._run_all_own_tasks(owntaskstats)
+            maintown += self._run_all_own_tasks()
 
             sch0 = time.perf_counter()
             while self._schedule_best_tasks():  # tasks may have been added by _run_own_tasks(), need to check again
@@ -633,13 +642,18 @@ class Parallel:
                 break
 
         maintelapsed = time.perf_counter() - maintstarted
+        info('Parallel: breakdown per non-own task type of interest:')
+        for item in self.task_stats:
+            if item[1] != 0:
+                info('  {}*: {}, took {:.2f}/{:.2f}s'.format(item[0], item[1], item[2], item[3]))
         info(
             'Parallel/main process: waited+owntasks+scheduler+unaccounted=elapsed {:.2f}+{:.2f}+{:.2f}+{:.2f}={:.2f}s, {:.1f}% load'.format(
                 maintwait, maintown, maintschedule, maintelapsed - maintwait - maintown - maintschedule,
                 maintelapsed, 100 * (1. - maintwait / maintelapsed)))
-        info("Parallel: breakdown per task type (task name before '.'):")
-        for key, val in owntaskstats.items():
-            info('  {}: {}, took {:.2f}/{:.2f}s'.format(key, val[0], val[1], val[2]))
+        info('Parallel: breakdown per own task type of interest:')
+        for item in self.own_task_stats:
+            if item[1] != 0:
+                info('  {}*: {}, took {:.2f}/{:.2f}s'.format(item[0], item[1], item[2], item[3]))
 
     def _node_is_ready(self, ch: _TaskGraphNode) -> None:
         assert ch.state == _TaskGraphNodeState.Pending
@@ -672,6 +686,7 @@ class Parallel:
                 info(
                     'Parallel: received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
                         taskname, procnum + 1, dt, taskt, cput))
+            self._update_task_stats(False, taskname, cpu=cput, elapsed=taskt)
 
             strwait = None
             self._update_weight(taskname, taskt)
@@ -747,7 +762,25 @@ class Parallel:
         else:
             self.inqueues[pidx].put((None, name))
 
-    def _run_own_task(self, owntaskstats: dict[str, tuple[int, float, float]]) -> float:
+    def _update_task_stats(self, isown: bool, name: str, cpu: float, elapsed: float) -> None:
+        if isown:
+            for st in self.own_task_stats:
+                assert isinstance(st, list)
+                if name.startswith(st[0]):
+                    st[1] += 1
+                    st[2] += cpu
+                    st[3] += elapsed
+                    break
+        else:
+            for st in self.task_stats:
+                assert isinstance(st, list)
+                if name.startswith(st[0]):
+                    st[1] += 1
+                    st[2] += cpu
+                    st[3] += elapsed
+                    break
+
+    def _run_own_task(self) -> float:
         assert len(self.ready_own_task_nodes) > 0
         towntask = 0.
         ot = heapq.heappop(self.ready_own_task_nodes_heap)
@@ -785,12 +818,7 @@ class Parallel:
             ot.task.name, cpu, elapsed))
         towntask += elapsed
 
-        lastdot = ot.task.name.rfind('.')
-        assert lastdot >= 0
-        keystr = ot.task.name[:lastdot]
-        oldstat = owntaskstats.get(keystr, (0, 0., 0.))
-        owntaskstats[keystr] = (oldstat[0] + 1, oldstat[1] + cpu, oldstat[2] + elapsed)
-
+        self._update_task_stats(True, ot.task.name, cpu, elapsed)
         self._update_weight(ot.task.name, elapsed)
 
         assert ot.state == _TaskGraphNodeState.Ready

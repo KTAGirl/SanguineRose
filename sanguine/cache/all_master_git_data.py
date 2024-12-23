@@ -181,8 +181,8 @@ class AllMasterGitData:
     _ar_is_ready: int  # 0 - not ready, 1 - partially ready, 2 - fully ready
     _fo_is_ready: bool
 
-    _LOADAROWNTASKNAME = 'sanguine.mastergit.loadarown'
-    _LOADFOOWNTASKNAME = 'sanguine.mastergit.loadfoown'
+    _LOADAROWNTASKNAME = 'sanguine.mastergit.ownloadar'
+    _LOADFOOWNTASKNAME = 'sanguine.mastergit.ownloadfo'
 
     def __init__(self, new_hashes_by: str, mastergitdir: str, cachedir: str, tmpdir: str,
                  cache_data: dict[str, any]) -> None:
@@ -284,7 +284,7 @@ class AllMasterGitData:
         hashingtask = tasks.Task(hashingtaskname, _archive_hashing_task_func,
                                  (self._new_hashes_by, arpath, arhash, arsize, tmp_dir), [])
         parallel.add_task(hashingtask)
-        hashingowntaskname = 'sanguine.mastergit.hashown.' + arpath
+        hashingowntaskname = 'sanguine.mastergit.ownhash.' + arpath
         hashingowntask = tasks.OwnTask(hashingowntaskname,
                                        lambda _, out: self._archive_hashing_own_task_func(out), None,
                                        [hashingtaskname])
@@ -329,3 +329,11 @@ class AllMasterGitData:
     def archive_by_hash(self, arh: bytes, partialok: bool = False) -> Archive | None:
         assert (self._ar_is_ready >= 1) if partialok else (self._ar_is_ready >= 2)
         return self._archives_by_hash.get(arh)
+
+    def stats_of_interest(self) -> list[str]:
+        return ['sanguine.mastergit.savear', 'sanguine.mastergit.loadar',
+                'sanguine.mastergit.loadfo', 'sanguine.mastergit.savefo',
+                'sanguine.mastergit.ownloadar', 'sanguine.mastergit.ownloadfo',
+                'sanguine.mastergit.hash.', 'sanguine.mastergit.ownhash.'
+                                            'sanguine.mastergit.donehashing',
+                'sanguine.mastergit.']

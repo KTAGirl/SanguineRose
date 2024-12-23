@@ -30,7 +30,7 @@ class AvailableFiles:
     _downloads_cache: FolderCache
     _master_data: AllMasterGitData
     _github_folders: list[GithubFolder]
-    _READYOWNTASKNAME = 'sanguine.available.readyown'
+    _READYOWNTASKNAME = 'sanguine.available.ownready'
     _is_ready: bool
 
     def __init__(self, by: str, cachedir: str, tmpdir: str, mastergitdir: str, downloads: list[str],
@@ -51,14 +51,14 @@ class AvailableFiles:
         self._github_cache.start_tasks(parallel)
         self._master_data.start_tasks(parallel)
 
-        starthashingowntaskname = 'sanguine.available.starthashing'
+        starthashingowntaskname = 'sanguine.available.ownstarthashing'
         starthashingowntask = tasks.OwnTask(starthashingowntaskname,
                                             lambda _, _1, _2: self._start_hashing_own_task_func(parallel), None,
                                             [self._downloads_cache.ready_task_name(),
                                              AllMasterGitData.ready_to_start_hashing_task_name()])
         parallel.add_task(starthashingowntask)
 
-        startoriginsowntaskname = 'sanguine.available.startfileorigins'
+        startoriginsowntaskname = 'sanguine.available.ownstartfileorigins'
         startoriginsowntask = tasks.OwnTask(startoriginsowntaskname,
                                             lambda _, _1: self._start_origins_own_task_func(parallel), None,
                                             [self._downloads_cache.ready_task_name()])
@@ -194,6 +194,11 @@ class AvailableFiles:
             add_to_dict_of_lists(self._github_cache_by_hash, f.file_hash, f)
         self._is_ready = True
 
+    def stats_of_interest(self) -> list[str]:
+        return (self._downloads_cache.stats_of_interest() + self._github_cache.stats_of_interest()
+                + self._master_data.stats_of_interest()
+                + ['sanguine.available.own', 'sanguine.available.fileorigins', 'sanguine.available.'])
+
 
 if __name__ == '__main__':
     import sys
@@ -212,7 +217,8 @@ if __name__ == '__main__':
                                         [normalize_dir_path('../../../../MO2/downloads')],
                                         [GithubFolder('KTAGirl', 'KTA',
                                                       normalize_dir_path('../../../KTA\\'))])
-            with tasks.Parallel(None, dbg_serialize=False) as tparallel:
+            with tasks.Parallel(None, dbg_serialize=False,
+                                taskstatsofinterest=tavailable.stats_of_interest()) as tparallel:
                 tavailable.start_tasks(tparallel)
                 tparallel.run([])  # all necessary tasks were already added in acache.start_tasks()
 

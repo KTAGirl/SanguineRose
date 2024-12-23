@@ -382,7 +382,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         return False
 
     def _load_own_task_name(self) -> str:
-        return 'sanguine.foldercache.loadown.' + self.name
+        return 'sanguine.foldercache.' + self.name + '.ownload'
 
     def _start_tasks(self, parallel: tasks.Parallel) -> None:
 
@@ -398,7 +398,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         scannedfiles = {}
         stats = _FolderScanStats()
 
-        loadtaskname = 'sanguine.foldercache.load.' + self.name
+        loadtaskname = 'sanguine.foldercache.' + self.name + '.load'
         loadtask = tasks.Task(loadtaskname, _load_files_task_func, (self._cache_dir, self.name), [])
         parallel.add_task(loadtask)
 
@@ -490,26 +490,34 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
     # Task Names
     def _scanned_task_name(self, dirpath: str) -> str:
         assert is_normalized_dir_path(dirpath)
-        return 'sanguine.foldercache.' + self.name + '.' + dirpath
+        return 'sanguine.foldercache.' + self.name + '.scan.' + dirpath
 
     def _scanned_own_task_name(self, dirpath: str) -> str:
         assert is_normalized_dir_path(dirpath)
-        return 'sanguine.foldercache.own.' + self.name + '.' + dirpath
+        return 'sanguine.foldercache.' + self.name + '.ownscan.' + dirpath
 
     def _reconcile_own_task_name(self) -> str:
-        return 'sanguine.foldercache.reconcile.' + self.name
+        return 'sanguine.foldercache.' + self.name + '.reconcile'
 
     def _hashing_task_name(self, fpath: str) -> str:
         assert is_normalized_file_path(fpath)
-        return 'sanguine.foldercache.hash.' + self.name + '.' + fpath
+        return 'sanguine.foldercache.' + self.name + '.hash.' + fpath
 
     def _hashing_own_task_name(self, fpath: str) -> str:
         assert is_normalized_file_path(fpath)
-        return 'sanguine.foldercache.hash.own.' + self.name + '.' + fpath
+        return 'sanguine.foldercache.' + self.name + '.ownhash.' + fpath
 
     def _hashing_own_wildcard_task_name(self, dirpath: str) -> str:
         assert is_normalized_dir_path(dirpath)
         return 'sanguine.foldercache.hash.own.' + self.name + '.' + dirpath + '*'
+
+    def stats_of_interest(self) -> list[str]:
+        return ['sanguine.foldercache.' + self.name + '.scan.', 'sanguine.foldercache.' + self.name + '.ownscan.',
+                'sanguine.foldercache.' + self.name + '.hash.', 'sanguine.foldercache.' + self.name + '.ownhash.',
+                'sanguine.foldercache.' + self.name + '.reconcile',
+                'sanguine.foldercache.' + self.name + '.load', 'sanguine.foldercache.' + self.name + '.ownload',
+                'sanguine.foldercache.' + self.name + '.save',
+                'sanguine.foldercache.' + self.name]
 
     ### Own Task Funcs
 
@@ -558,7 +566,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 ndel += 1
         info('FolderCache reconcile: {} files were deleted'.format(ndel))
 
-        savetaskname = 'sanguine.foldercache.save.' + self.name
+        savetaskname = 'sanguine.foldercache.' + self.name + '.save'
         savetask = tasks.Task(savetaskname, _save_files_task_func,
                               (self._cache_dir, self.name, self._files_by_path,
                                self._filtered_files, self._all_scan_stats),
