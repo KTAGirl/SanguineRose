@@ -628,6 +628,7 @@ class Parallel:
         assert len(self.pending_task_nodes)
         mltimer = _MainLoopTimer('other')
         maintown = 0.
+        maintexttasks = 0.
 
         # we need to try running own tasks before main loop - otherwise we can get stuck in an endless loop of self._schedule_best_tasks()
         mltimer.stage('own-tasks')
@@ -638,8 +639,11 @@ class Parallel:
         while True:
             # place items in process queues, until each has 2 tasks, or until there are no tasks
             mltimer.stage('scheduler')
-            while self._schedule_best_tasks():
-                pass
+            while True:
+                ok, dt = self._schedule_best_tasks()
+                maintexttasks += dt
+                if not ok:
+                    break
 
             mltimer.stage('own-tasks')
             ran, dtown = self._run_all_own_tasks()
@@ -647,8 +651,11 @@ class Parallel:
 
             if ran:
                 mltimer.stage('scheduler')
-                while self._schedule_best_tasks():  # tasks may have been added by _run_own_tasks(), need to check again
-                    pass
+                while True:
+                    ok, dt = self._schedule_best_tasks()
+                    maintexttasks += dt
+                    if not ok:
+                        break
 
             mltimer.stage('printing-stats')
             self._stats()
@@ -693,7 +700,7 @@ class Parallel:
             assert self.processesload[procnum] > 0
             self.processesload[procnum] -= 1
 
-            self._process_out_tasks(procnum, tasks, strwait, msgwarn)
+            maintexttasks += self._process_out_tasks(procnum, tasks, strwait, msgwarn)
 
             mltimer.stage('printing-stats')
             self._stats()
@@ -705,13 +712,17 @@ class Parallel:
 
         mltimer.end()
 
-        info('Parallel: breakdown per non-own task type of interest:')
+        elapsed = mltimer.elapsed()
+        nonmaintaskload = maintexttasks / elapsed * 100.
+        info_or_perf_warn(nonmaintaskload < 100.,
+                          'Parallel: child processes load {:.2f}s ({:.1f}% of one core, {:.1f}% of {} cores)'.format(
+                              maintexttasks, nonmaintaskload, nonmaintaskload / self.nprocesses, self.nprocesses))
+        info('Parallel: breakdown per child task type of interest:')
         for item in sorted(self.task_stats, key=lambda t: -t[3]):
             if item[1] != 0:
                 info('-> {}*: {}, took {:.2f}/{:.2f}s'.format(item[0], item[1], item[2], item[3]))
 
         mltimer.log_timer_stats()
-        elapsed = mltimer.elapsed()
         waiting = mltimer.stats['waiting']
         mainload = (elapsed - waiting) / elapsed * 100.
         info_or_perf_warn(mainload > 50., 'Parallel: main process load {:.1f}%'.format(mainload))
@@ -740,7 +751,8 @@ class Parallel:
             heapq.heappush(self.ready_task_nodes_heap, ch)
 
     def _process_out_tasks(self, procnum: int, tasks: list[tuple[str, tuple, any]], strwait: str | None,
-                           msgwarn: bool) -> None:
+                           msgwarn: bool) -> float:
+        outt = 0.
         for taskname, times, out in tasks:
             assert taskname in self.running_task_nodes
             (expectedprocnum, started, node) = self.running_task_nodes[taskname]
@@ -757,6 +769,7 @@ class Parallel:
                     'Parallel: received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
                         taskname, procnum + 1, dt, taskt, cput))
             self._update_task_stats(False, taskname, cpu=cput, elapsed=taskt)
+            outt += taskt
 
             strwait = None
             msgwarn = False
@@ -768,19 +781,22 @@ class Parallel:
                 self._node_is_ready(ch)
             self.done_task_nodes[taskname] = (node, out)
 
-    def _schedule_best_tasks(self) -> bool:  # may schedule multiple tasks as one meta-task
+        return outt
+
+    def _schedule_best_tasks(self) -> tuple[bool, float]:  # may schedule multiple tasks as one meta-task
         assert len(self.ready_task_nodes) == len(self.ready_task_nodes_heap)
         if len(self.ready_task_nodes) == 0:
-            return False
+            return False, 0.
 
         pidx = self._find_best_process()
         if pidx < 0:
-            return False
+            return False, 0.
         taskpluses = []
         total_time = 0.
         tasksstr = '['
         t0 = time.perf_counter()
         i = 0
+        tout = 0.
         while len(self.ready_task_nodes) > 0 and total_time < 0.1:  # heuristics: <0.1s is not worth jerking around
             assert len(self.ready_task_nodes) == len(self.ready_task_nodes_heap)
             node = heapq.heappop(self.ready_task_nodes_heap)
@@ -808,14 +824,14 @@ class Parallel:
 
         tasksstr += ']'
         if len(taskpluses) == 0:
-            return False
+            return False, 0.
 
         if self.dbg_serialize:
             ex, out = _process_nonown_tasks(taskpluses, None)
             if ex is not None:
                 raise ex
-            self._process_out_tasks(pidx, out, None, False)
-            return True
+            tout += self._process_out_tasks(pidx, out, None, False)
+            return True, tout
 
         msg = (taskpluses, None)
         self.inqueues[pidx].put(msg)
@@ -823,7 +839,7 @@ class Parallel:
         if __debug__:  # pickle.dumps is expensive by itself
             debug('Parallel: request size: {}'.format(len(pickle.dumps(msg))))
         self.processesload[pidx] += 1
-        return True
+        return True, tout
 
     def _notify_sender_shm_done(self, pidx: int, name: str) -> None:
         if pidx < 0:
