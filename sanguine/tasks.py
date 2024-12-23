@@ -729,7 +729,9 @@ class Parallel:
 
         owntasks = mltimer.stats['own-tasks']
         if owntasks - maintown > 0.01:
-            info('Parallel: own tasks overhead {:.2f}s'.format(owntasks - maintown))
+            pct = (owntasks - maintown) / owntasks * 100.
+            info_or_perf_warn(pct > 1.,
+                              'Parallel: own tasks overhead {:.2f}s ({:.1f}%)'.format(owntasks - maintown, pct))
         info('Parallel: breakdown per own task type of interest:')
         for item in sorted(self.own_task_stats, key=lambda t: -t[3]):
             if item[1] != 0:

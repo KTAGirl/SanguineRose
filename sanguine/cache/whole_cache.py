@@ -47,6 +47,9 @@ class WholeCache:
         return self.available.file_retrievers_by_name(fname)
     '''
 
+    def stats_of_interest(self) -> list[str]:
+        return self.available.stats_of_interest() + self.vfscache.stats_of_interest()
+
 
 if __name__ == '__main__':
     import sys
@@ -60,6 +63,6 @@ if __name__ == '__main__':
         cfg = ProjectConfig(cfgfname)
 
         wcache = WholeCache('KTAGirl', cfg)
-        with tasks.Parallel(None, dbg_serialize=False) as tparallel:
+        with tasks.Parallel(None, taskstatsofinterest=wcache.stats_of_interest(), dbg_serialize=False) as tparallel:
             wcache.start_tasks(tparallel)
             tparallel.run([])
