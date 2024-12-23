@@ -10,6 +10,8 @@ def _sanguine_patch_record(record: logging.LogRecord) -> None:
         record.sanguine_prefix = ''
 
 
+_PERFWARN_LEVEL_NUM = 25
+
 _FORMAT: str = '[%(levelname)s@%(sanguine_when).2f]:%(sanguine_prefix)s %(message)s (%(filename)s:%(lineno)d)'
 
 
@@ -17,6 +19,7 @@ class _SanguineFormatter(logging.Formatter):
     FORMATS: dict[int, str] = {
         logging.DEBUG: '\x1b[90m' + _FORMAT + '\x1b[0m',
         logging.INFO: '\x1b[32m' + _FORMAT + '\x1b[0m',
+        _PERFWARN_LEVEL_NUM: '\x1b[34m' + _FORMAT + '\x1b[0m',
         logging.WARNING: '\x1b[33m' + _FORMAT + '\x1b[0m',
         logging.ERROR: '\x1b[93m' + _FORMAT + '\x1b[0m',  # alert()
         logging.CRITICAL: '\x1b[91;1m' + _FORMAT + '\x1b[0m'
@@ -33,6 +36,7 @@ class _SanguineHtmlFileFormatter(logging.Formatter):
     FORMATS: dict[int, str] = {
         logging.DEBUG: '<div class="debug">' + _FORMAT + '</div>',
         logging.INFO: '<div class="info">' + _FORMAT + '</div>',
+        _PERFWARN_LEVEL_NUM: '<div class="perf_warn">' + _FORMAT + '</div>',
         logging.WARNING: '<div class="warn">' + _FORMAT + '</div>',
         logging.ERROR: '<div class="alert">' + _FORMAT + '</div>',
         logging.CRITICAL: '<div class="critical">' + _FORMAT + '</div>',
@@ -45,6 +49,17 @@ class _SanguineHtmlFileFormatter(logging.Formatter):
         _sanguine_patch_record(record)
         return formatter.format(record)
 
+
+logging.addLevelName(_PERFWARN_LEVEL_NUM, "PERFWARN")
+
+
+def _perfwarn(self, message, *args, **kws):
+    if self.isEnabledFor(_PERFWARN_LEVEL_NUM):
+        # Yes, logger takes its '*args' as 'args'.
+        self._log(_PERFWARN_LEVEL_NUM, message, args, **kws)
+
+
+logging.Logger.perf_warn = _perfwarn
 
 logging.addLevelName(logging.ERROR, 'ALERT')
 _logger = logging.getLogger()
@@ -67,11 +82,12 @@ class _HtmlFileHandler(logging.handlers.RotatingFileHandler):
         bodystyle = 'body{ background-color:black; white-space:nowrap; font-size:1.2em; font-family:monospace; }\n'
         debugstyle = '.debug{color:#666666;}\n'
         infostyle = '.info{color:#008000;}\n'
+        perfwarnstyle = '.perf_warn{color:#0492c2;}\n'
         warnstyle = '.warn{color:#a28a08;}\n'
         alertstyle = '.alert{color:#e5bf00; font-weight:600;}\n'
         criticalstyle = '.critical{color:#ff0000; font-weight:600;}\n'
         self.stream.write(
-            '<html><head><style>\n' + bodystyle + debugstyle + infostyle + warnstyle + alertstyle + criticalstyle + '</style></head>\n' +
+            '<html><head><style>\n' + bodystyle + debugstyle + infostyle + perfwarnstyle + warnstyle + alertstyle + criticalstyle + '</style></head>\n' +
             '<body>\n')
         self.stream.write('<div class="info">[STARTING LOGGING]: {}</div>\n'.format(time.asctime()))
 
@@ -117,6 +133,12 @@ def info(msg: str) -> None:
     _logger.info(msg, stacklevel=2)
 
 
+def perf_warn(msg: str) -> None:
+    global _logger
+    # noinspection PyUnresolvedReferences
+    _logger.perf_warn(msg, stacklevel=2)
+
+
 def warn(msg: str) -> None:
     global _logger
     _logger.warning(msg, stacklevel=2)
@@ -130,3 +152,10 @@ def alert(msg: str) -> None:
 def critical(msg: str) -> None:
     global _logger
     _logger.critical(msg, stacklevel=2)
+
+
+def info_or_perf_warn(pwarn: bool, msg: str) -> None:
+    if pwarn:
+        perf_warn(msg)
+    else:
+        info(msg)

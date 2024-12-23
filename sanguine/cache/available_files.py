@@ -208,6 +208,7 @@ if __name__ == '__main__':
         add_file_logging(ttmppath + 'sanguine.log.html')
 
         check_sanguine_prerequisites()
+        perf_warn('Test performance warning')
 
         with TmpPath(ttmppath) as ttmpdir:
             tavailable = AvailableFiles('KTAGirl',

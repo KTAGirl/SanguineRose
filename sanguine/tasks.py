@@ -684,14 +684,16 @@ class Parallel:
                 continue  # while True
 
             strwait = '{:.2f}s'.format(dwait)
+            msgwarn = False
             if dwait < 0.005:
                 strwait += '[MAIN THREAD SERIALIZATION]'
+                msgwarn = True
 
             (procnum, tasks) = got
             assert self.processesload[procnum] > 0
             self.processesload[procnum] -= 1
 
-            self._process_out_tasks(procnum, tasks, strwait)
+            self._process_out_tasks(procnum, tasks, strwait, msgwarn)
 
             mltimer.stage('printing-stats')
             self._stats()
@@ -712,12 +714,7 @@ class Parallel:
         elapsed = mltimer.elapsed()
         waiting = mltimer.stats['waiting']
         mainload = (elapsed - waiting) / elapsed * 100.
-        if mainload < 50.:
-            info('Parallel: main process load {:.1f}%'.format(mainload))
-        elif mainload < 75.:
-            warn('Parallel: main process load {:.1f}%'.format(mainload))
-        else:
-            alert('Parallel: main process load {:.1f}%'.format(mainload))
+        info_or_perf_warn(mainload > 50., 'Parallel: main process load {:.1f}%'.format(mainload))
 
         owntasks = mltimer.stats['own-tasks']
         if owntasks - maintown > 0.01:
@@ -742,7 +739,8 @@ class Parallel:
             self.ready_task_nodes[ch.task.name] = ch
             heapq.heappush(self.ready_task_nodes_heap, ch)
 
-    def _process_out_tasks(self, procnum: int, tasks: list[tuple[str, tuple, any]], strwait: str | None) -> None:
+    def _process_out_tasks(self, procnum: int, tasks: list[tuple[str, tuple, any]], strwait: str | None,
+                           msgwarn: bool) -> None:
         for taskname, times, out in tasks:
             assert taskname in self.running_task_nodes
             (expectedprocnum, started, node) = self.running_task_nodes[taskname]
@@ -751,9 +749,9 @@ class Parallel:
             assert procnum == expectedprocnum
             dt = time.perf_counter() - started
             if strwait is not None:
-                info(
-                    'Parallel: after waiting for {}, received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
-                        strwait, taskname, procnum + 1, dt, taskt, cput))
+                info_or_perf_warn(msgwarn,
+                                  'Parallel: after waiting for {}, received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
+                                      strwait, taskname, procnum + 1, dt, taskt, cput))
             else:
                 info(
                     'Parallel: received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
@@ -761,6 +759,7 @@ class Parallel:
             self._update_task_stats(False, taskname, cpu=cput, elapsed=taskt)
 
             strwait = None
+            msgwarn = False
             self._update_weight(taskname, taskt)
             del self.running_task_nodes[taskname]
             assert taskname not in self.done_task_nodes
@@ -815,7 +814,7 @@ class Parallel:
             ex, out = _process_nonown_tasks(taskpluses, None)
             if ex is not None:
                 raise ex
-            self._process_out_tasks(pidx, out, None)
+            self._process_out_tasks(pidx, out, None, False)
             return True
 
         msg = (taskpluses, None)
