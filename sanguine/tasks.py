@@ -511,7 +511,7 @@ class Parallel:
             p = Process(target=_proc_func, args=(i, inq, self.outq, self.logq))
             self.processes.append(p)
             p.start()
-            self.unbusyprocesses.append(i)
+            self.unbusyprocesses.insert(0, i)
             self.procrunningconfirmed.append(False)
         self.shutting_down = False
         self.has_joined = False
@@ -728,7 +728,7 @@ class Parallel:
 
             (procnum, tasks) = got
             assert procnum not in self.unbusyprocesses
-            self.unbusyprocesses.insert(0, procnum)
+            self.unbusyprocesses.append(procnum)
 
             maintexttasks += self._process_out_tasks(procnum, tasks, strwait, msgwarn)
 
