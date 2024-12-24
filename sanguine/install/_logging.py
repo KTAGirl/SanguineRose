@@ -1,6 +1,7 @@
 import logging
 import logging.handlers
 import time
+from collections.abc import Callable
 
 
 def _sanguine_patch_record(record: logging.LogRecord) -> None:
@@ -106,11 +107,28 @@ def add_logging_handler(handler: logging.StreamHandler) -> None:
     _logger.addHandler(handler)
 
 
-def log_to_file_only(record: logging.LogRecord) -> None:
-    global _logger_file_handler
+_logging_hook: Callable[[logging.LogRecord], None] | None = None
+
+
+def set_logging_hook(newhook: Callable[[logging.LogRecord], None] | None) -> Callable[[logging.LogRecord], None] | None:
+    global _logging_hook
+    oldhook = _logging_hook
+    _logging_hook = newhook
+    return oldhook
+
+
+def log_record(record: logging.LogRecord) -> None:
+    global _console_handler, _logger_file_handler
+    _console_handler.emit(record)
     if _logger_file_handler is None:
         return
     _logger_file_handler.emit(record)
+
+
+def _make_log_record(level, msg: str) -> logging.LogRecord:
+    global _logger
+    fn, lno, func, sinfo = _logger.findCaller(False, stacklevel=3)
+    return _logger.makeRecord(_logger.name, level, fn, lno, msg, (), None, func, None, sinfo)
 
 
 def logging_started() -> float:
@@ -118,11 +136,12 @@ def logging_started() -> float:
     return _started
 
 
-# def logging_format_when(dt:float) -> str:
-#    return '{:.2f}'.format(dt)
-
 def debug(msg: str) -> None:
     if not __debug__:
+        return
+    global _logging_hook
+    if _logging_hook is not None:
+        _logging_hook(_make_log_record(logging.DEBUG, msg))
         return
     global _logger
     _logger.debug(msg, stacklevel=2)
@@ -130,26 +149,46 @@ def debug(msg: str) -> None:
 
 def info(msg: str) -> None:
     global _logger
+    global _logging_hook
+    if _logging_hook is not None:
+        _logging_hook(_make_log_record(logging.INFO, msg))
+        return
     _logger.info(msg, stacklevel=2)
 
 
 def perf_warn(msg: str) -> None:
     global _logger
+    global _logging_hook
+    if _logging_hook is not None:
+        _logging_hook(_make_log_record(_PERFWARN_LEVEL_NUM, msg))
+        return
     # noinspection PyUnresolvedReferences
     _logger.perf_warn(msg, stacklevel=2)
 
 
 def warn(msg: str) -> None:
+    global _logging_hook
+    if _logging_hook is not None:
+        _logging_hook(_make_log_record(logging.WARN, msg))
+        return
     global _logger
     _logger.warning(msg, stacklevel=2)
 
 
 def alert(msg: str) -> None:
+    global _logging_hook
+    if _logging_hook is not None:
+        _logging_hook(_make_log_record(logging.ERROR, msg))
+        return
     global _logger
     _logger.error(msg, stacklevel=2)
 
 
 def critical(msg: str) -> None:
+    global _logging_hook
+    if _logging_hook is not None:
+        _logging_hook(_make_log_record(logging.CRITICAL, msg))
+        return
     global _logger
     _logger.critical(msg, stacklevel=2)
 

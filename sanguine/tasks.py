@@ -9,7 +9,7 @@ from threading import Thread  # only for logging!
 
 from sanguine.common import *
 # noinspection PyProtectedMember
-from sanguine.install._logging import add_logging_handler, log_to_file_only, logging_started
+from sanguine.install._logging import add_logging_handler, set_logging_hook, logging_started, log_record
 
 _proc_num: int = -1  # number of child process
 
@@ -197,15 +197,28 @@ def from_publication(sharedparam: SharedPubParam, should_cache=True) -> any:
     return out
 
 
-def _log_proc_func(loqq: PQueue) -> None:
+_log_elapsed: float | None = None
+_log_waited: float = 0.
+
+
+def _log_proc_func(logq: PQueue) -> None:
+    log_started = time.perf_counter()
+    log_waited = 0.
     while True:
-        record = loqq.get()
+        wt0 = time.perf_counter()
+        record = logq.get()
+        log_waited += time.perf_counter() - wt0
         if record is None:
+            global _log_elapsed
+            global _log_waited
+            _log_elapsed = time.perf_counter() - log_started
+            _log_waited = log_waited
             break
         (procnum, t, rec) = record
         rec.sanguine_when = t - logging_started()
-        rec.sanguine_prefix = 'Process #{}: '.format(procnum + 1)
-        log_to_file_only(rec)
+        if procnum >= 0:
+            rec.sanguine_prefix = 'Process #{}: '.format(procnum + 1)
+        log_record(rec)
 
 
 class _Started:
@@ -401,7 +414,7 @@ class Parallel:
     outq: PQueue
     logq: PQueue
     processes: list[Process]
-    processesload: list[int]  # we'll aim to have it at 1; improvements to keep pressure are possible,
+    unbusyprocesses: list[int]  # procidx of non-busy processes
     inqueues: list[PQueue]
     procrunningconfirmed: list[bool]  # otherwise join() on a not running yet process may hang
     logthread: Thread
@@ -425,6 +438,7 @@ class Parallel:
     done_task_nodes: dict[str, tuple[_TaskGraphNode, any]]  # name->(node,out)
     pending_patterns: list[tuple[str, _TaskGraphNode]]  # pattern, node
     dbg_serialize: bool
+    old_logging_hook: Callable[[logging.LogRecord], None] | None
     task_stats_srch: FastSearchOverPartialStrings
     task_stats_data: dict[str, tuple[int, float, float]]
     own_task_stats_data: dict[str, tuple[int, float, float]]
@@ -478,10 +492,12 @@ class Parallel:
         self.own_task_stats_data = {}
         self.task_stats_unaccounted = (0, 0., 0.)
         self.own_task_stats_unaccounted = (0, 0., 0.)
+        self.old_logging_hook = None
 
     def __enter__(self) -> "Parallel":
+        self.old_logging_hook = set_logging_hook(lambda rec: self.logq.put((-1, time.perf_counter(), rec)))
         self.processes = []
-        self.processesload = []  # we'll aim to have it at 1; improvements to keep pressure are possible,
+        self.unbusyprocesses = []  # we'll aim to have it at 1; improvements to keep pressure are possible,
         # but not as keeping simplistic processesload[i] == 2 (it disbalances end of processing way too much)
         self.inqueues = []
         self.procrunningconfirmed = []  # otherwise join() on a not running yet process may hang
@@ -495,11 +511,11 @@ class Parallel:
             p = Process(target=_proc_func, args=(i, inq, self.outq, self.logq))
             self.processes.append(p)
             p.start()
-            self.processesload.append(0)
+            self.unbusyprocesses.append(i)
             self.procrunningconfirmed.append(False)
         self.shutting_down = False
         self.has_joined = False
-        assert len(self.processesload) == len(self.processes)
+        assert len(self.unbusyprocesses) == len(self.processes)
         assert len(self.inqueues) == len(self.processes)
         return self
 
@@ -711,8 +727,8 @@ class Parallel:
                 msgwarn = True
 
             (procnum, tasks) = got
-            assert self.processesload[procnum] > 0
-            self.processesload[procnum] -= 1
+            assert procnum not in self.unbusyprocesses
+            self.unbusyprocesses.insert(0, procnum)
 
             maintexttasks += self._process_out_tasks(procnum, tasks, strwait, msgwarn)
 
@@ -727,16 +743,16 @@ class Parallel:
         mltimer.end()
 
         elapsed = mltimer.elapsed()
-        nonmaintaskload = maintexttasks / elapsed * 100.
-        info_or_perf_warn(nonmaintaskload < 100.,
+        nonmainpct = maintexttasks / elapsed * 100.
+        info_or_perf_warn(nonmainpct < 100.,
                           'Parallel: child processes load {:.2f}s ({:.1f}% of one core, {:.1f}% of {} cores)'.format(
-                              maintexttasks, nonmaintaskload, nonmaintaskload / self.nprocesses, self.nprocesses))
+                              maintexttasks, nonmainpct, nonmainpct / self.nprocesses, self.nprocesses))
         info('Parallel: breakdown per child task type of interest:')
         Parallel._log_stats_data(self.task_stats_data.items(), self.task_stats_unaccounted)
         mltimer.log_timer_stats()
         waiting = mltimer.stats['waiting']
-        mainload = (elapsed - waiting) / elapsed * 100.
-        info_or_perf_warn(mainload > 50., 'Parallel: main process load {:.1f}%'.format(mainload))
+        mainpct = (elapsed - waiting) / elapsed * 100.
+        info_or_perf_warn(mainpct > 50., 'Parallel: main process load {:.1f}%'.format(mainpct))
 
         owntasks = mltimer.stats['own-tasks']
         if owntasks - maintown > 0.01:
@@ -846,10 +862,10 @@ class Parallel:
 
         msg = (taskpluses, None)
         self.inqueues[pidx].put(msg)
+        # self.logq.put((-1,time.perf_counter(),make_log_record(logging.INFO, 'Parallel: assigned tasks {} to process #{}'.format(tasksstr, pidx + 1))))
         info('Parallel: assigned tasks {} to process #{}'.format(tasksstr, pidx + 1))
         if __debug__:  # pickle.dumps is expensive by itself
             debug('Parallel: request size: {}'.format(len(pickle.dumps(msg))))
-        self.processesload[pidx] += 1
         return True, tout
 
     def _notify_sender_shm_done(self, pidx: int, name: str) -> None:
@@ -965,16 +981,9 @@ class Parallel:
         debug('Parallel: replaced task placeholder {}, inherited {} children'.format(task.name, len(children)))
 
     def _find_best_process(self) -> int:
-        besti = -1
-        for i in range(len(self.processesload)):
-            pl = self.processesload[i]
-            if pl == 0:  # cannot be better
-                return i
-            # if pl > 1:
-            #    continue
-            # if besti < 0 or self.processesload[besti] > pl:
-            #    besti = i
-        return besti
+        if len(self.unbusyprocesses) == 0:
+            return -1
+        return self.unbusyprocesses.pop()
 
     def received_shared_return(self, sharedparam: SharedReturnParam) -> any:
         (name, sender) = sharedparam
@@ -1072,6 +1081,8 @@ class Parallel:
 
     def __exit__(self, exceptiontype: Type[BaseException] | None, exceptionval: BaseException | None,
                  exceptiontraceback: TracebackType | None):
+        set_logging_hook(self.old_logging_hook)
+
         force = False
         if exceptiontype is not None:
             critical('Parallel: exception {}: {}'.format(str(exceptiontype), repr(exceptionval)))
@@ -1082,6 +1093,14 @@ class Parallel:
             self.shutdown(force)
         if not self.has_joined:
             self.join_all(force)
+
+        global _log_elapsed, _log_waited
+
+        if _log_elapsed is not None:
+            logpct = (_log_elapsed - _log_waited) / _log_elapsed * 100.
+            info_or_perf_warn(logpct > 50., 'Parallel: logging thread load {:.1f}%'.format(logpct))
+        else:
+            warn('Parallel: logging thread did not finish properly?')
 
         names = [name for name in self.publications]
         for name in names:

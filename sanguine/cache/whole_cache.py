@@ -67,3 +67,5 @@ if __name__ == '__main__':
         with tasks.Parallel(None, taskstatsofinterest=wcache.stats_of_interest(), dbg_serialize=False) as tparallel:
             wcache.start_tasks(tparallel)
             tparallel.run([])
+
+        info('whole_cache.py test finished ok')
