@@ -48,7 +48,8 @@ class WholeCache:
     '''
 
     def stats_of_interest(self) -> list[str]:
-        return self.available.stats_of_interest() + self.vfscache.stats_of_interest()
+        return (self.available.stats_of_interest() + self.vfscache.stats_of_interest()
+                + ['sanguine.wholecache.'])
 
 
 if __name__ == '__main__':

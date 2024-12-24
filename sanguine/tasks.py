@@ -425,8 +425,11 @@ class Parallel:
     done_task_nodes: dict[str, tuple[_TaskGraphNode, any]]  # name->(node,out)
     pending_patterns: list[tuple[str, _TaskGraphNode]]  # pattern, node
     dbg_serialize: bool
-    task_stats: list[list[str | int | float]]  # [(prefix,n,cpu,elapsed)]
-    own_task_stats: list[list[str | int | float]]
+    task_stats_srch: FastSearchOverPartialStrings
+    task_stats_data: dict[str, tuple[int, float, float]]
+    own_task_stats_data: dict[str, tuple[int, float, float]]
+    task_stats_unaccounted: tuple[int, float, float]
+    own_task_stats_unaccounted: tuple[int, float, float]
 
     def __init__(self, jsonfname: str | None, nproc: int = 0, dbg_serialize: bool = False,
                  taskstatsofinterest: TaskStatsOfInterest = None) -> None:
@@ -470,8 +473,11 @@ class Parallel:
 
         if taskstatsofinterest is None:
             taskstatsofinterest = []
-        self.task_stats = [[prefix, 0, 0., 0.] for prefix in taskstatsofinterest]
-        self.own_task_stats = [[prefix, 0, 0., 0.] for prefix in taskstatsofinterest]
+        self.task_stats_srch = FastSearchOverPartialStrings([(prefix, 1) for prefix in taskstatsofinterest])
+        self.task_stats_data = {}
+        self.own_task_stats_data = {}
+        self.task_stats_unaccounted = (0, 0., 0.)
+        self.own_task_stats_unaccounted = (0, 0., 0.)
 
     def __enter__(self) -> "Parallel":
         self.processes = []
@@ -620,6 +626,14 @@ class Parallel:
             ran = True
         return ran, town
 
+    @staticmethod
+    def _log_stats_data(items, unaccounted: tuple[int, float, float]) -> None:
+        for item in sorted(items, key=lambda t: -t[1][2]):
+            if item[1][0] != 0:
+                info('-> {}*: {}, took {:.2f}/{:.2f}s'.format(item[0], item[1][0], item[1][1], item[1][2]))
+        if unaccounted[0]:
+            warn('-> _unaccounted: {}, took {:.2f}/{:.2f}s'.format(unaccounted[0], unaccounted[1], unaccounted[2]))
+
     def run(self, tasks: list[Task]) -> None:
         # building task graph
         self.add_tasks(tasks)
@@ -718,10 +732,7 @@ class Parallel:
                           'Parallel: child processes load {:.2f}s ({:.1f}% of one core, {:.1f}% of {} cores)'.format(
                               maintexttasks, nonmaintaskload, nonmaintaskload / self.nprocesses, self.nprocesses))
         info('Parallel: breakdown per child task type of interest:')
-        for item in sorted(self.task_stats, key=lambda t: -t[3]):
-            if item[1] != 0:
-                info('-> {}*: {}, took {:.2f}/{:.2f}s'.format(item[0], item[1], item[2], item[3]))
-
+        Parallel._log_stats_data(self.task_stats_data.items(), self.task_stats_unaccounted)
         mltimer.log_timer_stats()
         waiting = mltimer.stats['waiting']
         mainload = (elapsed - waiting) / elapsed * 100.
@@ -733,9 +744,7 @@ class Parallel:
             info_or_perf_warn(pct > 1.,
                               'Parallel: own tasks overhead {:.2f}s ({:.1f}%)'.format(owntasks - maintown, pct))
         info('Parallel: breakdown per own task type of interest:')
-        for item in sorted(self.own_task_stats, key=lambda t: -t[3]):
-            if item[1] != 0:
-                info('-> {}*: {}, took {:.2f}/{:.2f}s'.format(item[0], item[1], item[2], item[3]))
+        Parallel._log_stats_data(self.own_task_stats_data.items(), self.own_task_stats_unaccounted)
 
     def _node_is_ready(self, ch: _TaskGraphNode) -> None:
         assert ch.state == _TaskGraphNodeState.Pending
@@ -851,23 +860,33 @@ class Parallel:
         else:
             self.inqueues[pidx].put((None, name))
 
-    def _update_task_stats(self, isown: bool, name: str, cpu: float, elapsed: float) -> None:
-        if isown:
-            for st in self.own_task_stats:
-                assert isinstance(st, list)
-                if name.startswith(st[0]):
-                    st[1] += 1
-                    st[2] += cpu
-                    st[3] += elapsed
-                    break
+    @staticmethod
+    def _update_task_stats_internal(some_task_stats_data, srch: tuple[str, tuple[int, float, float]], cpu,
+                                    elapsed) -> None:
+        (key, val) = srch
+        found = some_task_stats_data.get(key)
+        if found is None:
+            some_task_stats_data[key] = (1, cpu, elapsed)
         else:
-            for st in self.task_stats:
-                assert isinstance(st, list)
-                if name.startswith(st[0]):
-                    st[1] += 1
-                    st[2] += cpu
-                    st[3] += elapsed
-                    break
+            some_task_stats_data[key] = (found[0] + 1, found[1] + cpu, found[2] + elapsed)
+
+    def _update_task_stats(self, isown: bool, name: str, cpu: float, elapsed: float) -> None:
+        srch = self.task_stats_srch.find_val_for_str(name)
+
+        if isown:
+            if srch is None:
+                self.own_task_stats_unaccounted = (self.own_task_stats_unaccounted[0] + 1,
+                                                   self.own_task_stats_unaccounted[1] + cpu,
+                                                   self.own_task_stats_unaccounted[2] + elapsed)
+                return
+            Parallel._update_task_stats_internal(self.own_task_stats_data, srch, cpu, elapsed)
+        else:
+            if srch is None:
+                self.task_stats_unaccounted = (self.task_stats_unaccounted[0] + 1,
+                                               self.task_stats_unaccounted[1] + cpu,
+                                               self.task_stats_unaccounted[2] + elapsed)
+                return
+            Parallel._update_task_stats_internal(self.task_stats_data, srch, cpu, elapsed)
 
     def _run_own_task(self) -> float:
         assert len(self.ready_own_task_nodes) > 0

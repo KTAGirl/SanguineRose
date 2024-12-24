@@ -1,60 +1,29 @@
 import os.path
 import stat
 import time
-from bisect import bisect_left
 
 import sanguine.tasks as tasks
 from sanguine.common import *
 
 
 class _FastSearchOverFolderListToCache:
-    _paths: list[tuple[str, bool, int]]
+    _srch: FastSearchOverPartialStrings
 
     def __init__(self, src: FolderListToCache) -> None:
-        self._paths = []
+        initlst = []
         for f in src.folders:
-            self._paths.append((f.folder, True, -1))
+            initlst.append((f.folder, True))
             for x in f.exdirs:
-                self._paths.append((x, False, -1))
-        self._paths.sort()
-
-        # filling previdx
-        prevdirs: list[int] = []
-        for i in range(len(self._paths)):
-            (p, inc, _) = self._paths[i]
-            if len(prevdirs) == 0:
-                self._paths[i] = (p, inc, -1)
-                prevdirs.append(i)
-            elif p.startswith(self._paths[prevdirs[-1]][0]):
-                self._paths[i] = (p, inc, prevdirs[-1])
-                prevdirs.append(i)
-            else:
-                while True:
-                    if p.startswith(self._paths[prevdirs[-1]][0]):
-                        self._paths[i] = (p, inc, prevdirs[-1])
-                        prevdirs.append(i)
-                        break
-                    prevdirs = prevdirs[:-1]
-                    if len(prevdirs) == 0:
-                        self._paths[i] = (p, inc, -1)
-                        break
+                assert x.startswith(f.folder)
+                initlst.append((x, False))
+        self.srch = FastSearchOverPartialStrings(initlst)
 
     def is_file_path_included(self, fpath: str) -> bool:
         assert is_normalized_file_path(fpath)
-        k = (fpath, True, -1)
-        idx = bisect_left(self._paths, k)
-        if idx == 0:
+        found = self.srch.find_val_for_str(fpath)
+        if found is None:
             return False
-        prev = self._paths[idx - 1]
-        if fpath.startswith(prev[0]):
-            return prev[1]
-
-        while True:
-            if prev[2] < 0:
-                return False
-            prev = self._paths[prev[2]]
-            if fpath.startswith(prev[0]):
-                return prev[1]
+        return found[1]
 
 
 class FileOnDisk:

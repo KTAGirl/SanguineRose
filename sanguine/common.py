@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import pickle
+from bisect import bisect_right
 from stat import S_ISREG, S_ISLNK
 
 from sanguine.install.install_common import *
@@ -150,6 +151,53 @@ def add_to_dict_of_lists(dicttolook: dict[any, list[any]], key: any, val: any) -
         dicttolook[key] = [val]
     else:
         dicttolook[key].append(val)
+
+
+class FastSearchOverPartialStrings:
+    _strings: list[tuple[str, int, any]]
+
+    def __init__(self, src: list[tuple[str, any]]) -> None:
+        self._strings = []
+        for s in src:
+            self._strings.append((s[0], -1, s[1]))
+        self._strings.sort(key=lambda x2: x2[0])
+
+        # filling previdx
+        prevrefs: list[int] = []
+        for i in range(len(self._strings)):
+            (p, _, val) = self._strings[i]
+            if len(prevrefs) == 0:
+                self._strings[i] = (p, -1, val)
+                prevrefs.append(i)
+            elif p.startswith(self._strings[prevrefs[-1]][0]):
+                self._strings[i] = (p, prevrefs[-1], val)
+                prevrefs.append(i)
+            else:
+                while True:
+                    if p.startswith(self._strings[prevrefs[-1]][0]):
+                        self._strings[i] = (p, prevrefs[-1], val)
+                        prevrefs.append(i)
+                        break
+                    prevrefs = prevrefs[:-1]
+                    if len(prevrefs) == 0:
+                        self._strings[i] = (p, -1, val)
+                        break
+
+    def find_val_for_str(self, s: str) -> tuple[str, any] | None:
+        # k = (s, -1, None)
+        idx = bisect_right(self._strings, s, key=lambda x2: x2[0])
+        if idx == 0:
+            return None
+        prev = self._strings[idx - 1]
+        if s.startswith(prev[0]):
+            return prev[0], prev[2]
+
+        while True:
+            if prev[1] < 0:
+                return None
+            prev = self._strings[prev[1]]
+            if s.startswith(prev[0]):
+                return prev[0], prev[2]
 
 
 ### JSON-related
