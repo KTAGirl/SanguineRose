@@ -9,7 +9,8 @@ from threading import Thread  # only for logging!
 
 from sanguine.common import *
 # noinspection PyProtectedMember
-from sanguine.install._logging import add_logging_handler, set_logging_hook, logging_started, log_record
+from sanguine.install._logging import (add_logging_handler, set_logging_hook,
+                                       log_record, log_record_skip_console, make_log_record, log_level_name)
 
 _proc_num: int = -1  # number of child process
 
@@ -200,14 +201,79 @@ def from_publication(sharedparam: SharedPubParam, should_cache=True) -> any:
 _log_elapsed: float | None = None
 _log_waited: float = 0.
 
+_CONSOLE_LOG_QUEUE_THRESHOLD: int = 100
+_FILE_LOG_QUEUE_THRESHOLD: int = 1000
+_FILE_LOG_SKIPPING_UP_TO_LEVEL: int = logging.INFO
+
+
+def _patch_log_rec(rec: logging.LogRecord, procnum: int, t: float) -> None:
+    rec.sanguine_when = t
+    if procnum >= 0:
+        rec.sanguine_prefix = 'Process #{}: '.format(procnum + 1)
+
+
+def _read_log_rec(logq: PQueue) -> tuple[float, logging.LogRecord]:
+    wt0 = time.perf_counter()
+    record = logq.get()
+    return time.perf_counter() - wt0, record
+
 
 def _log_proc_func(logq: PQueue) -> None:
     log_started = time.perf_counter()
     log_waited = 0.
     while True:
-        wt0 = time.perf_counter()
-        record = logq.get()
-        log_waited += time.perf_counter() - wt0
+        qsize = logq.qsize()
+
+        if qsize > _FILE_LOG_QUEUE_THRESHOLD:
+            skipped = {}
+            for i in range(_FILE_LOG_QUEUE_THRESHOLD):
+                wt, record = _read_log_rec(logq)
+                assert record is not None
+                log_waited += wt
+                (procnum, t, rec) = record
+                assert isinstance(rec, logging.LogRecord)
+                levelno = rec.levelno
+                if levelno <= _FILE_LOG_SKIPPING_UP_TO_LEVEL:
+                    if levelno in skipped:
+                        skipped[levelno] += 1
+                    else:
+                        skipped[levelno] = 1
+                else:
+                    _patch_log_rec(rec, procnum, t)
+                    log_record(rec)
+
+            for levelno in skipped:
+                rec = make_log_record(levelno,
+                                      'tasks.log: logging thread overloaded, skipped {} [{}] entries, which are lost forever'.format(
+                                          skipped[levelno], log_level_name(levelno)))
+                log_record(rec)
+            continue
+
+        if qsize > _CONSOLE_LOG_QUEUE_THRESHOLD:
+            skipped = {}
+            for i in range(_CONSOLE_LOG_QUEUE_THRESHOLD):
+                wt, record = _read_log_rec(logq)
+                assert record is not None
+                log_waited += wt
+                (procnum, t, rec) = record
+                assert isinstance(rec, logging.LogRecord)
+                levelno = rec.levelno
+                if levelno in skipped:
+                    skipped[levelno] += 1
+                else:
+                    skipped[levelno] = 1
+                _patch_log_rec(rec, procnum, t)
+                log_record_skip_console(rec)
+
+            for levelno in skipped:
+                rec = make_log_record(levelno,
+                                      'tasks.log: logging thread overloaded, skipped {} [{}] entries in console, see log file for full details'.format(
+                                          skipped[levelno], log_level_name(levelno)))
+                log_record(rec)
+            continue
+
+        wt, record = _read_log_rec(logq)
+        log_waited += wt
         if record is None:
             global _log_elapsed
             global _log_waited
@@ -215,9 +281,7 @@ def _log_proc_func(logq: PQueue) -> None:
             _log_waited = log_waited
             break
         (procnum, t, rec) = record
-        rec.sanguine_when = t - logging_started()
-        if procnum >= 0:
-            rec.sanguine_prefix = 'Process #{}: '.format(procnum + 1)
+        _patch_log_rec(rec, procnum, t)
         log_record(rec)
 
 

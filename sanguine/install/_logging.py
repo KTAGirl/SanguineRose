@@ -6,14 +6,34 @@ from collections.abc import Callable
 
 def _sanguine_patch_record(record: logging.LogRecord) -> None:
     if not hasattr(record, 'sanguine_when'):
-        record.sanguine_when = time.perf_counter() - _started
+        record.sanguine_when = time.perf_counter()
     if not hasattr(record, 'sanguine_prefix'):
         record.sanguine_prefix = ''
+    record.sanguine_from_start = record.sanguine_when - logging_started()
 
 
 _PERFWARN_LEVEL_NUM = 25
 
-_FORMAT: str = '[%(levelname)s@%(sanguine_when).2f]:%(sanguine_prefix)s %(message)s (%(filename)s:%(lineno)d)'
+
+def log_level_name(levelno: int) -> str:
+    match levelno:
+        case logging.DEBUG:
+            return 'DEBUG'
+        case logging.INFO:
+            return 'INFO'
+        case 25:  # _PERFWARN_LEVEL_NUM, no idea why PyCharm complains if I put its name here
+            return 'PERFWARN'
+        case logging.WARNING:
+            return 'WARNING'
+        case logging.ERROR:
+            return 'ALERT'
+        case logging.CRITICAL:
+            return 'CRITICAL'
+        case _:
+            return 'LEVEL={}'.format(levelno)
+
+
+_FORMAT: str = '[%(levelname)s@%(sanguine_from_start).2f]:%(sanguine_prefix)s %(message)s (%(filename)s:%(lineno)d)'
 
 
 class _SanguineFormatter(logging.Formatter):
@@ -125,9 +145,22 @@ def log_record(record: logging.LogRecord) -> None:
     _logger_file_handler.emit(record)
 
 
+def log_record_skip_console(record: logging.LogRecord) -> None:
+    global _logger_file_handler
+    if _logger_file_handler is None:
+        return
+    _logger_file_handler.emit(record)
+
+
 def _make_log_record(level, msg: str) -> logging.LogRecord:
     global _logger
     fn, lno, func, sinfo = _logger.findCaller(False, stacklevel=3)
+    return _logger.makeRecord(_logger.name, level, fn, lno, msg, (), None, func, None, sinfo)
+
+
+def make_log_record(level, msg: str) -> logging.LogRecord:  # different stacklevel than _make_log_record
+    global _logger
+    fn, lno, func, sinfo = _logger.findCaller(False, stacklevel=2)
     return _logger.makeRecord(_logger.name, level, fn, lno, msg, (), None, func, None, sinfo)
 
 
