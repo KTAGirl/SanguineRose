@@ -478,7 +478,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
     def _hashing_own_wildcard_task_name(self, dirpath: str) -> str:
         assert is_normalized_dir_path(dirpath)
-        return 'sanguine.foldercache.hash.own.' + self.name + '.' + dirpath + '*'
+        return 'sanguine.foldercache.' + self.name + '.ownhash.' + dirpath + '*'
 
     def stats_of_interest(self) -> list[str]:
         return ['sanguine.foldercache.' + self.name + '.scan.', 'sanguine.foldercache.' + self.name + '.ownscan.',
