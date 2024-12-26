@@ -2,12 +2,13 @@ import heapq
 import logging
 import time
 from enum import IntEnum
-from multiprocessing import SimpleQueue as PQueue, Process, shared_memory, Semaphore
+from multiprocessing import Queue as PQueue, SimpleQueue, Process, shared_memory
 from threading import Thread  # only for logging!
 
 from sanguine.install.install_logging import (add_logging_handler, set_logging_hook)
 from sanguine.tasks._tasks_common import *
-from sanguine.tasks._tasks_logging import _ChildProcessLogHandler, _LoggingQueue, create_logging_thread, log_waited, log_elapsed, EndOfRegularLog
+from sanguine.tasks._tasks_logging import _ChildProcessLogHandler, create_logging_thread, log_waited, \
+    log_elapsed, EndOfRegularLog
 from sanguine.tasks._tasks_shared import _pool_of_shared_returns, SharedReturnParam
 
 
@@ -92,7 +93,7 @@ def _proc_func(proc_num: int, inq: PQueue, outq: PQueue, logq) -> None:
         if ex is not None:
             outq.put(ex)
     except Exception as e:
-        print('Exception!:'+traceback.format_exc())
+        # print('Exception!:'+traceback.format_exc())
         critical('_proc_func() internal exception: {}'.format(repr(e)))
         warn(traceback.format_exc())
         outq.put(e)
@@ -216,8 +217,8 @@ class _MainLoopTimer:
 
 class Parallel:
     outq: PQueue
-    logq: _LoggingQueue
-    out_logq: PQueue
+    logq: SimpleQueue
+    out_logq: SimpleQueue
     processes: list[Process]
     unbusyprocesses: list[int]  # procidx of non-busy processes
     inqueues: list[PQueue]
@@ -306,9 +307,9 @@ class Parallel:
         self.inqueues = []
         self.procrunningconfirmed = []  # otherwise join() on a not running yet process may hang
         self.outq = PQueue()
-        self.logq = PQueue()
-        self.out_logq = PQueue()
-        self.logthread = create_logging_thread(self.logq,self.out_logq)
+        self.logq = SimpleQueue()
+        self.out_logq = SimpleQueue()
+        self.logthread = create_logging_thread(self.logq, self.out_logq)
         self.logthread.start()
         for i in range(self.nprocesses):
             inq = PQueue()
@@ -839,7 +840,7 @@ class Parallel:
             for i in range(self.nprocesses):
                 self.inqueues[i].put(None)
         # self.logq.put(None) - moved to join_all() to prevent processes hanging because of unread log messages
-        print('Parallel: shutting down')
+        # print('Parallel: shutting down')
         self.logq.put(EndOfRegularLog())
         self.shutting_down = True
 
@@ -887,10 +888,13 @@ class Parallel:
             set_logging_hook(self.old_logging_hook)
             self.old_logging_hook = False
             # debug() should go after set_logging_hook()
-            debug('Parallel: after waiting for {:.2f} for log thread to process its queue, setting logging hook back to {}'.format(dteol,repr(self.old_logging_hook)))
+            info_or_perf_warn(dteol > 0.05,
+                              'Parallel: after waiting for {:.2f}s for log thread to process its queue, setting logging hook back to {}'.format(
+                                  dteol, repr(self.old_logging_hook)))
         else:
-            debug('Parallel: took {:.2f}s to wait for log thread to process its queue'.format(dteol))
-        print('synced with log thread')
+            info_or_perf_warn(dteol > 0.05,
+                              'Parallel: took {:.2f}s to wait for log thread to process its queue'.format(dteol))
+        # print('synced with log thread')
 
         info('All processes confirmed as started, waiting for joins')
         for i in range(self.nprocesses):
@@ -917,7 +921,8 @@ class Parallel:
                 'Parallel: pending tasks (up to 10 first): {}'.format(repr([t for t in self.pending_task_nodes][:10])))
             debug('Parallel: ready tasks (up to 10 first): {}'.format(repr([t for t in self.ready_task_nodes][:10])))
             debug('Parallel: ready own tasks: {}'.format(repr([t for t in self.ready_own_task_nodes])))
-            debug('Parallel: running tasks (up to 10 first): {}'.format(repr([t for t in self.running_task_nodes][:10])))
+            debug(
+                'Parallel: running tasks (up to 10 first): {}'.format(repr([t for t in self.running_task_nodes][:10])))
         assert (len(self.all_task_nodes) == len(self.pending_task_nodes)
                 + len(self.ready_task_nodes) + len(self.ready_own_task_nodes)
                 + len(self.running_task_nodes) + len(self.done_task_nodes))
