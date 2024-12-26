@@ -1,5 +1,5 @@
 import logging
-import logging.handlers
+# import logging.handlers
 import time
 from collections.abc import Callable
 
@@ -97,9 +97,9 @@ _logger_file_handler: logging.StreamHandler | None = None
 _started: float = time.perf_counter()
 
 
-class _HtmlFileHandler(logging.handlers.RotatingFileHandler):
+class _HtmlFileHandler(logging.FileHandler):
     def __init__(self, fpath) -> None:
-        super().__init__(fpath, 'w', encoding='utf-8', backupCount=5)
+        super().__init__(fpath, 'w', encoding='utf-8')
         bodystyle = 'body{ background-color:black; white-space:nowrap; font-size:1.2em; font-family:monospace; }\n'
         debugstyle = '.debug{color:#666666;}\n'
         infostyle = '.info{color:#008000;}\n'

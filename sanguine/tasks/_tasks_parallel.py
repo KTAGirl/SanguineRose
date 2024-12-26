@@ -2,12 +2,12 @@ import heapq
 import logging
 import time
 from enum import IntEnum
-from multiprocessing import Queue as PQueue, Process, shared_memory
+from multiprocessing import SimpleQueue as PQueue, Process, shared_memory, Semaphore
 from threading import Thread  # only for logging!
 
 from sanguine.install.install_logging import (add_logging_handler, set_logging_hook)
 from sanguine.tasks._tasks_common import *
-from sanguine.tasks._tasks_logging import _ChildProcessLogHandler, create_logging_thread, log_waited, log_elapsed
+from sanguine.tasks._tasks_logging import _ChildProcessLogHandler, _LoggingQueue, create_logging_thread, log_waited, log_elapsed, EndOfRegularLog
 from sanguine.tasks._tasks_shared import _pool_of_shared_returns, SharedReturnParam
 
 
@@ -58,7 +58,7 @@ def _process_nonown_tasks(tasks: list[list], dwait: float | None) -> tuple[Excep
     return None, outtasks
 
 
-def _proc_func(proc_num: int, inq: PQueue, outq: PQueue, logq: PQueue) -> None:
+def _proc_func(proc_num: int, inq: PQueue, outq: PQueue, logq) -> None:
     try:
         assert current_proc_num() == -1
         set_current_proc_num(proc_num)
@@ -92,6 +92,7 @@ def _proc_func(proc_num: int, inq: PQueue, outq: PQueue, logq: PQueue) -> None:
         if ex is not None:
             outq.put(ex)
     except Exception as e:
+        print('Exception!:'+traceback.format_exc())
         critical('_proc_func() internal exception: {}'.format(repr(e)))
         warn(traceback.format_exc())
         outq.put(e)
@@ -215,7 +216,8 @@ class _MainLoopTimer:
 
 class Parallel:
     outq: PQueue
-    logq: PQueue
+    logq: _LoggingQueue
+    out_logq: PQueue
     processes: list[Process]
     unbusyprocesses: list[int]  # procidx of non-busy processes
     inqueues: list[PQueue]
@@ -305,7 +307,8 @@ class Parallel:
         self.procrunningconfirmed = []  # otherwise join() on a not running yet process may hang
         self.outq = PQueue()
         self.logq = PQueue()
-        self.logthread = create_logging_thread(self.logq)
+        self.out_logq = PQueue()
+        self.logthread = create_logging_thread(self.logq,self.out_logq)
         self.logthread.start()
         for i in range(self.nprocesses):
             inq = PQueue()
@@ -591,11 +594,11 @@ class Parallel:
             dt = time.perf_counter() - started
             if strwait is not None:
                 info_or_perf_warn(msgwarn,
-                                  'Parallel: after waiting for {}, received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
+                                  'Parallel: after waiting for {}, received results of task {} from process #{}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
                                       strwait, taskname, procnum + 1, dt, taskt, cput))
             else:
                 info(
-                    'Parallel: received results of task {} from process {}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
+                    'Parallel: received results of task {} from process #{}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
                         taskname, procnum + 1, dt, taskt, cput))
             self._update_task_stats(False, taskname, cpu=cput, elapsed=taskt)
             outt += taskt
@@ -836,12 +839,13 @@ class Parallel:
             for i in range(self.nprocesses):
                 self.inqueues[i].put(None)
         # self.logq.put(None) - moved to join_all() to prevent processes hanging because of unread log messages
+        print('Parallel: shutting down')
+        self.logq.put(EndOfRegularLog())
         self.shutting_down = True
 
     def join_all(self, force: bool) -> None:
         assert self.shutting_down
         assert not self.has_joined
-        assert self.old_logging_hook is False
 
         # read late log messages from logq; if we don't read them, processes may not terminate
         # while True:
@@ -875,6 +879,19 @@ class Parallel:
                     self.procrunningconfirmed[got.proc_num] = True
                     # debug('Parallel: joinAll(): process #{} confirmed as started',got.procnum+1)
 
+        teol0 = time.perf_counter()
+        endoflog = self.out_logq.get()
+        assert endoflog is None
+        dteol = time.perf_counter() - teol0
+        if self.old_logging_hook is not False:
+            set_logging_hook(self.old_logging_hook)
+            self.old_logging_hook = False
+            # debug() should go after set_logging_hook()
+            debug('Parallel: after waiting for {:.2f} for log thread to process its queue, setting logging hook back to {}'.format(dteol,repr(self.old_logging_hook)))
+        else:
+            debug('Parallel: took {:.2f}s to wait for log thread to process its queue'.format(dteol))
+        print('synced with log thread')
+
         info('All processes confirmed as started, waiting for joins')
         for i in range(self.nprocesses):
             self.processes[i].join()
@@ -900,18 +917,13 @@ class Parallel:
                 'Parallel: pending tasks (up to 10 first): {}'.format(repr([t for t in self.pending_task_nodes][:10])))
             debug('Parallel: ready tasks (up to 10 first): {}'.format(repr([t for t in self.ready_task_nodes][:10])))
             debug('Parallel: ready own tasks: {}'.format(repr([t for t in self.ready_own_task_nodes])))
-            debug('Parallel: running tasks: {}'.format(repr([t for t in self.running_task_nodes])))
+            debug('Parallel: running tasks (up to 10 first): {}'.format(repr([t for t in self.running_task_nodes][:10])))
         assert (len(self.all_task_nodes) == len(self.pending_task_nodes)
                 + len(self.ready_task_nodes) + len(self.ready_own_task_nodes)
                 + len(self.running_task_nodes) + len(self.done_task_nodes))
 
     def __exit__(self, exceptiontype: Type[BaseException] | None, exceptionval: BaseException | None,
                  exceptiontraceback: TracebackType | None):
-        if self.old_logging_hook is not False:
-            debug('Parallel: setting logging hook back to {}'.format(repr(self.old_logging_hook)))
-            set_logging_hook(self.old_logging_hook)
-            self.old_logging_hook = False
-
         force = False
         if exceptiontype is not None:
             critical('Parallel: exception {}: {}'.format(str(exceptiontype), repr(exceptionval)))
