@@ -636,6 +636,7 @@ class Parallel:
                                   OwnTask) else 1.0  # 1 sec for non-owning tasks, and assuming that own tasks are shorter by default (they should be)
             w = self.estimated_time(task.name, w)
         node = _TaskGraphNode(task, taskparents, w, explicitw)
+        assert task.name not in self.all_task_nodes
         self.all_task_nodes[task.name] = node
 
         assert node.waiting_for_n_deps == 0

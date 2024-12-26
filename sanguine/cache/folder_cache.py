@@ -391,11 +391,11 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
             parallel.add_tasks([task, owntask])
 
-        scanningdeps = [self._scanned_own_task_name(folderplus.folder) + '*' for folderplus in self._folder_list]
-        hashingdeps = [self._hashing_own_wildcard_task_name(folderplus.folder) for folderplus in self._folder_list]
+        scanningdeps = self._scanned_own_wildcard_task_name()
+        hashingdeps = self._hashing_own_wildcard_task_name()
         reconciletask = tasks.OwnTask(self._reconcile_own_task_name(),
                                       lambda _: self._own_reconcile_task_func(parallel, scannedfiles),
-                                      None, scanningdeps + hashingdeps)
+                                      None, [scanningdeps] + [hashingdeps])
         parallel.add_task(reconciletask)
 
     @staticmethod
@@ -465,6 +465,9 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         assert is_normalized_dir_path(dirpath)
         return 'sanguine.foldercache.' + self.name + '.ownscan.' + dirpath
 
+    def _scanned_own_wildcard_task_name(self) -> str:
+        return 'sanguine.foldercache.' + self.name + '.ownscan.' + '*'
+
     def _reconcile_own_task_name(self) -> str:
         return 'sanguine.foldercache.' + self.name + '.reconcile'
 
@@ -476,9 +479,8 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         assert is_normalized_file_path(fpath)
         return 'sanguine.foldercache.' + self.name + '.ownhash.' + fpath
 
-    def _hashing_own_wildcard_task_name(self, dirpath: str) -> str:
-        assert is_normalized_dir_path(dirpath)
-        return 'sanguine.foldercache.' + self.name + '.ownhash.' + dirpath + '*'
+    def _hashing_own_wildcard_task_name(self) -> str:
+        return 'sanguine.foldercache.' + self.name + '.ownhash.' + '*'
 
     def stats_of_interest(self) -> list[str]:
         return ['sanguine.foldercache.' + self.name + '.scan.', 'sanguine.foldercache.' + self.name + '.ownscan.',
