@@ -9,7 +9,7 @@ from sanguine.install._install_checks import (REQUIRED_PIP_MODULES, info, warn, 
                                               check_sanguine_prerequisites)
 
 
-# for install_helpers we cannot use any files with non-guaranteed dependencies, so we:
+# for _install_helpers we cannot use any files with non-guaranteed dependencies, so we:
 #                     1. may use only those Python modules installed by default, and
 #                     2. may use only those sanguine modules which are specifically designated as install-friendly
 

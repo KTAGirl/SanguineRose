@@ -1,145 +1,14 @@
-# mini-micro <s>skirt</s>, sorry, lib for data-driven parallel processing
-
 import heapq
 import logging
 import time
 from enum import IntEnum
-from multiprocessing import Process, Queue as PQueue, shared_memory
-#from queue import Empty as QueueEmpty
+from multiprocessing import Queue as PQueue, Process, shared_memory
 from threading import Thread  # only for logging!
 
-from sanguine.common import *
-# noinspection PyProtectedMember
-from sanguine.install._logging import (add_logging_handler, set_logging_hook,
-                                       log_record, log_record_skip_console, make_log_record, log_level_name)
-
-_proc_num: int = -1  # number of child process
-
-
-class _ChildProcessLogHandler(logging.StreamHandler):
-    logq: PQueue
-
-    def __init__(self, logq: PQueue) -> None:
-        super().__init__()
-        self.logq = logq
-
-    def emit(self, record: logging.LogRecord) -> None:
-        global _proc_num
-        self.logq.put((_proc_num, time.perf_counter(), record))
-
-
-class SharedReturn:
-    shm: shared_memory.SharedMemory
-    closed: bool
-
-    def __init__(self, item: any):
-        data = pickle.dumps(item)
-        self.shm = shared_memory.SharedMemory(create=True, size=len(data))
-        shared = self.shm.buf
-        shared[:] = data
-        _pool_of_shared_returns.register(self)
-        self.closed = False
-
-    def name(self) -> str:
-        return self.shm.name
-
-    def close(self) -> None:
-        if not self.closed:
-            self.shm.close()
-            self.closed = True
-
-    def __del__(self) -> None:
-        self.close()
-
-
-class _PoolOfSharedReturns:
-    shareds: dict[str, SharedReturn]
-
-    def __init__(self) -> None:
-        self.shareds = {}
-
-    def register(self, shared: SharedReturn) -> None:
-        self.shareds[shared.name()] = shared
-
-    def done_with(self, name: str) -> None:
-        shared = self.shareds[name]
-        shared.close()
-        del self.shareds[name]
-
-    def cleanup(self) -> None:
-        for name in self.shareds:
-            shared = self.shareds[name]
-            shared.close()
-        self.shareds = {}
-
-    def __del__(self) -> None:
-        self.cleanup()
-
-
-_pool_of_shared_returns = _PoolOfSharedReturns()
-
-
-class SharedPublication:
-    shm: shared_memory.SharedMemory
-    closed: bool
-
-    def __init__(self, parallel: "Parallel", item: any):
-        data = pickle.dumps(item)
-        self.shm = shared_memory.SharedMemory(create=True, size=len(data))
-        shared = self.shm.buf
-        shared[:] = data
-        name = self.shm.name
-        debug('SharedPublication: {}'.format(name))
-        assert name not in parallel.publications
-        parallel.publications[name] = self.shm
-        self.closed = False
-
-    def name(self) -> str:
-        return self.shm.name
-
-    def close(self) -> None:
-        if not self.closed:
-            self.shm.close()
-            self.closed = True
-
-    def __del__(self) -> None:
-        self.close()
-
-
-class LambdaReplacement:
-    f: Callable[[any, any], any]
-    capture: any
-
-    def __init__(self, f: Callable[[any, any], any], capture: any) -> None:
-        self.f = f
-        self.capture = capture
-
-    def call(self, param: any) -> any:
-        return self.f(self.capture, param)
-
-
-class Task:
-    name: str
-    f: Callable[[any, ...], any] | None  # variable # of params depending on len(dependencies)
-    param: any
-    dependencies: list[str]
-    w: float | None
-
-    def __init__(self, name: str, f: Callable, param: any, dependencies: list[str], w: float | None = None) -> None:
-        self.name = name
-        self.f = f
-        self.param = param
-        self.dependencies = dependencies
-        self.w: float = w
-
-
-class OwnTask(Task):
-    pass
-
-
-class TaskPlaceholder(Task):
-    def __init__(self, name: str) -> None:
-        super().__init__(name, lambda: None, None, [])
+from sanguine.install.install_logging import (add_logging_handler, set_logging_hook)
+from sanguine.tasks._tasks_common import *
+from sanguine.tasks._tasks_logging import _ChildProcessLogHandler, create_logging_thread, log_waited, log_elapsed
+from sanguine.tasks._tasks_shared import _pool_of_shared_returns, SharedReturnParam
 
 
 def _run_task(task: Task, depparams: list[any]) -> (Exception | None, any):
@@ -162,144 +31,6 @@ def _run_task(task: Task, depparams: list[any]) -> (Exception | None, any):
         critical('Parallel: exception in task {}: {}'.format(task.name, e))
         warn(traceback.format_exc())
         return e, None
-
-
-type SharedReturnParam = tuple[str, int]
-
-
-def make_shared_return_param(shared: SharedReturn) -> SharedReturnParam:
-    # assert _proc_num>=0
-    global _proc_num
-    return shared.name(), _proc_num
-
-
-# def log_process_prefix() -> str:
-#    global _proc_num
-#    return 'Process #{}: '.format(_proc_num + 1)
-
-
-type SharedPubParam = str
-
-
-def make_shared_publication_param(shared: SharedPublication) -> str:
-    return shared.name()
-
-
-_cache_of_published: dict[str, any] = {}  # per-process cache of published data
-
-
-def from_publication(sharedparam: SharedPubParam, should_cache=True) -> any:
-    found = _cache_of_published.get(sharedparam)
-    if found is not None:
-        return found
-    shm = shared_memory.SharedMemory(sharedparam)
-    out = pickle.loads(shm.buf)
-    if should_cache:
-        _cache_of_published[sharedparam] = out
-    return out
-
-
-_log_elapsed: float | None = None
-_log_waited: float = 0.
-
-_CONSOLE_LOG_QUEUE_THRESHOLD: int = 100
-_FILE_LOG_QUEUE_THRESHOLD: int = 1000
-_FILE_LOG_SKIPPING_UP_TO_LEVEL: int = logging.INFO
-
-
-def _patch_log_rec(rec: logging.LogRecord, procnum: int, t: float) -> None:
-    rec.sanguine_when = t
-    if procnum >= 0:
-        rec.sanguine_prefix = 'Process #{}: '.format(procnum + 1)
-
-
-def _read_log_rec(logq: PQueue) -> tuple[float, logging.LogRecord]:
-    wt0 = time.perf_counter()
-    record = logq.get()
-    return time.perf_counter() - wt0, record
-
-def _end_of_log(log_started:float,log_waited:float) -> None:
-    global _log_elapsed
-    global _log_waited
-    _log_elapsed = time.perf_counter() - log_started
-    _log_waited = log_waited
-
-
-def _log_proc_func(logq: PQueue) -> None:
-    log_started = time.perf_counter()
-    log_waited = 0.
-    while True:
-        qsize = logq.qsize()
-
-        if qsize > _FILE_LOG_QUEUE_THRESHOLD:
-            skipped = {}
-            for i in range(_FILE_LOG_QUEUE_THRESHOLD):
-                wt, record = _read_log_rec(logq)
-                log_waited += wt
-                if record is None:
-                    _end_of_log(log_started, log_waited)
-                    return
-                (procnum, t, rec) = record
-                assert isinstance(rec, logging.LogRecord)
-                levelno = rec.levelno
-                if levelno <= _FILE_LOG_SKIPPING_UP_TO_LEVEL:
-                    if levelno in skipped:
-                        skipped[levelno] += 1
-                    else:
-                        skipped[levelno] = 1
-                else:
-                    _patch_log_rec(rec, procnum, t)
-                    log_record(rec)
-
-            for levelno in skipped:
-                rec = make_log_record(levelno,
-                                      'tasks.log: logging thread overloaded, skipped {} [{}] entries, which are lost forever'.format(
-                                          skipped[levelno], log_level_name(levelno)))
-                log_record(rec)
-            continue
-
-        if qsize > _CONSOLE_LOG_QUEUE_THRESHOLD:
-            skipped = {}
-            for i in range(_CONSOLE_LOG_QUEUE_THRESHOLD):
-                wt, record = _read_log_rec(logq)
-                if record is None:
-                    _end_of_log(log_started, log_waited)
-                    return
-                log_waited += wt
-                (procnum, t, rec) = record
-                assert isinstance(rec, logging.LogRecord)
-                levelno = rec.levelno
-                if levelno in skipped:
-                    skipped[levelno] += 1
-                else:
-                    skipped[levelno] = 1
-                _patch_log_rec(rec, procnum, t)
-                log_record_skip_console(rec)
-
-            for levelno in skipped:
-                rec = make_log_record(levelno,
-                                      'tasks.log: logging thread overloaded, skipped {} [{}] entries in console, see log file for full details'.format(
-                                          skipped[levelno], log_level_name(levelno)))
-                log_record(rec)
-            continue
-
-        wt, record = _read_log_rec(logq)
-        log_waited += wt
-        if record is None:
-            _end_of_log(log_started, log_waited)
-            return
-        (procnum, t, rec) = record
-        _patch_log_rec(rec, procnum, t)
-        log_record(rec)
-
-
-class _Started:
-    def __init__(self, proc_num: int) -> None:
-        self.proc_num = proc_num
-
-#class _Finished:
-#    def __init__(self, proc_num: int) -> None:
-#        self.proc_num = proc_num
 
 
 def _process_nonown_tasks(tasks: list[list], dwait: float | None) -> tuple[Exception | None, any]:
@@ -329,14 +60,13 @@ def _process_nonown_tasks(tasks: list[list], dwait: float | None) -> tuple[Excep
 
 def _proc_func(proc_num: int, inq: PQueue, outq: PQueue, logq: PQueue) -> None:
     try:
-        global _proc_num
-        assert _proc_num == -1
-        _proc_num = proc_num
+        assert current_proc_num() == -1
+        set_current_proc_num(proc_num)
 
         add_logging_handler(_ChildProcessLogHandler(logq))
 
         debug('Process started')
-        outq.put(_Started(_proc_num))
+        outq.put(ProcessStarted(proc_num))
         ex = None
         while True:
             waitt0 = time.perf_counter()
@@ -362,7 +92,7 @@ def _proc_func(proc_num: int, inq: PQueue, outq: PQueue, logq: PQueue) -> None:
         if ex is not None:
             outq.put(ex)
     except Exception as e:
-        critical('_proc_func() internal exception: {}'.format(e))
+        critical('_proc_func() internal exception: {}'.format(repr(e)))
         warn(traceback.format_exc())
         outq.put(e)
     _pool_of_shared_returns.cleanup()
@@ -433,9 +163,6 @@ class _TaskGraphNode:
 
     def __eq__(self, b: "_TaskGraphNode") -> bool:
         return self.total_weight() == b.total_weight()
-
-
-type TaskStatsOfInterest = list[str]
 
 
 class _MainLoopTimer:
@@ -524,8 +251,7 @@ class Parallel:
     def __init__(self, jsonfname: str | None, nproc: int = 0, dbg_serialize: bool = False,
                  taskstatsofinterest: TaskStatsOfInterest = None) -> None:
         # dbg_serialize allows debugging non-own Tasks
-        global _proc_num
-        assert _proc_num == -1
+        assert current_proc_num() == -1
 
         assert nproc >= 0
         if nproc:
@@ -579,7 +305,7 @@ class Parallel:
         self.procrunningconfirmed = []  # otherwise join() on a not running yet process may hang
         self.outq = PQueue()
         self.logq = PQueue()
-        self.logthread = Thread(target=_log_proc_func, args=(self.logq,))
+        self.logthread = create_logging_thread(self.logq)
         self.logthread.start()
         for i in range(self.nprocesses):
             inq = PQueue()
@@ -610,8 +336,7 @@ class Parallel:
         return taskparents, patterns
 
     def _internal_add_task_if(self, task: Task) -> bool:
-        global _proc_num
-        assert _proc_num == -1
+        assert current_proc_num() == -1
 
         assert task.name not in self.all_task_nodes
         islambda = callable(task.f) and task.f.__name__ == '<lambda>'
@@ -793,7 +518,7 @@ class Parallel:
                 # noinspection PyProtectedMember, PyUnresolvedReferences
                 os._exit(1)  # if using sys.exit(), confusing logging will occur
 
-            if isinstance(got, _Started):
+            if isinstance(got, ProcessStarted):
                 self.procrunningconfirmed[got.proc_num] = True
                 continue  # while True
 
@@ -1119,7 +844,7 @@ class Parallel:
         assert self.old_logging_hook is False
 
         # read late log messages from logq; if we don't read them, processes may not terminate
-        #while True:
+        # while True:
         #   try:
         #        record = self.logq.get(False)
         #        (procnum, t, rec) = record
@@ -1129,7 +854,7 @@ class Parallel:
         #    except QueueEmpty:
         #        break
 
-        #for i in range(len(self.inqueues)):
+        # for i in range(len(self.inqueues)):
         #    j = 0
         #    while not self.inqueues[i].empty():
         #        self.inqueues[i].get()
@@ -1146,7 +871,7 @@ class Parallel:
                         'Parallel: joinAll(): waiting for all processes to confirm start before joining to avoid not started yet join race')
                     n = 1
                 got = self.outq.get()
-                if isinstance(got, _Started):
+                if isinstance(got, ProcessStarted):
                     self.procrunningconfirmed[got.proc_num] = True
                     # debug('Parallel: joinAll(): process #{} confirmed as started',got.procnum+1)
 
@@ -1155,7 +880,7 @@ class Parallel:
             self.processes[i].join()
             debug('Process #{} joined'.format(i + 1))
 
-        self.logq.put(None) # moved here to prevent processes hanging because of unread log messages
+        self.logq.put(None)  # moved here to prevent processes hanging because of unread log messages
         self.logthread.join()
         self.has_joined = True
 
@@ -1198,10 +923,8 @@ class Parallel:
         if not self.has_joined:
             self.join_all(force)
 
-        global _log_elapsed, _log_waited
-
-        if _log_elapsed is not None:
-            logpct = (_log_elapsed - _log_waited) / _log_elapsed * 100.
+        if log_elapsed() is not None:
+            logpct = (log_elapsed() - log_waited()) / log_elapsed() * 100.
             info_or_perf_warn(logpct > 50., 'Parallel: logging thread load {:.1f}%'.format(logpct))
         else:
             warn('Parallel: logging thread did not finish properly?')

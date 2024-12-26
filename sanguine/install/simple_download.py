@@ -3,7 +3,7 @@ import re
 import tempfile
 import urllib.request
 
-# simple_download is used by install_helpers, which means that we cannot use any files with non-guaranteed dependencies, so we:
+# simple_download is used by _install_helpers, which means that we cannot use any files with non-guaranteed dependencies, so we:
 #                 1. may use only those Python modules installed by default, and
 #                 2. may use only those sanguine modules which are specifically designated as install-friendly
 

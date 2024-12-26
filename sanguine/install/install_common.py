@@ -15,8 +15,8 @@ from types import TracebackType
 Type = typing.Type
 
 # noinspection PyUnresolvedReferences, PyProtectedMember
-from sanguine.install._logging import (debug, info, perf_warn, warn, alert, critical, info_or_perf_warn,
-                                       add_file_logging)
+from sanguine.install.install_logging import (debug, info, perf_warn, warn, alert, critical, info_or_perf_warn,
+                                              add_file_logging)
 # noinspection PyUnresolvedReferences, PyProtectedMember
 from sanguine.install._install_checks import check_sanguine_prerequisites
 
