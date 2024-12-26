@@ -5,6 +5,7 @@ import logging
 import time
 from enum import IntEnum
 from multiprocessing import Process, Queue as PQueue, shared_memory
+#from queue import Empty as QueueEmpty
 from threading import Thread  # only for logging!
 
 from sanguine.common import *
@@ -217,6 +218,12 @@ def _read_log_rec(logq: PQueue) -> tuple[float, logging.LogRecord]:
     record = logq.get()
     return time.perf_counter() - wt0, record
 
+def _end_of_log(log_started:float,log_waited:float) -> None:
+    global _log_elapsed
+    global _log_waited
+    _log_elapsed = time.perf_counter() - log_started
+    _log_waited = log_waited
+
 
 def _log_proc_func(logq: PQueue) -> None:
     log_started = time.perf_counter()
@@ -228,8 +235,10 @@ def _log_proc_func(logq: PQueue) -> None:
             skipped = {}
             for i in range(_FILE_LOG_QUEUE_THRESHOLD):
                 wt, record = _read_log_rec(logq)
-                assert record is not None
                 log_waited += wt
+                if record is None:
+                    _end_of_log(log_started, log_waited)
+                    return
                 (procnum, t, rec) = record
                 assert isinstance(rec, logging.LogRecord)
                 levelno = rec.levelno
@@ -253,7 +262,9 @@ def _log_proc_func(logq: PQueue) -> None:
             skipped = {}
             for i in range(_CONSOLE_LOG_QUEUE_THRESHOLD):
                 wt, record = _read_log_rec(logq)
-                assert record is not None
+                if record is None:
+                    _end_of_log(log_started, log_waited)
+                    return
                 log_waited += wt
                 (procnum, t, rec) = record
                 assert isinstance(rec, logging.LogRecord)
@@ -275,11 +286,8 @@ def _log_proc_func(logq: PQueue) -> None:
         wt, record = _read_log_rec(logq)
         log_waited += wt
         if record is None:
-            global _log_elapsed
-            global _log_waited
-            _log_elapsed = time.perf_counter() - log_started
-            _log_waited = log_waited
-            break
+            _end_of_log(log_started, log_waited)
+            return
         (procnum, t, rec) = record
         _patch_log_rec(rec, procnum, t)
         log_record(rec)
@@ -288,6 +296,10 @@ def _log_proc_func(logq: PQueue) -> None:
 class _Started:
     def __init__(self, proc_num: int) -> None:
         self.proc_num = proc_num
+
+#class _Finished:
+#    def __init__(self, proc_num: int) -> None:
+#        self.proc_num = proc_num
 
 
 def _process_nonown_tasks(tasks: list[list], dwait: float | None) -> tuple[Exception | None, any]:
@@ -502,7 +514,7 @@ class Parallel:
     done_task_nodes: dict[str, tuple[_TaskGraphNode, any]]  # name->(node,out)
     pending_patterns: list[tuple[str, _TaskGraphNode]]  # pattern, node
     dbg_serialize: bool
-    old_logging_hook: Callable[[logging.LogRecord], None] | None
+    old_logging_hook: Callable[[logging.LogRecord], None] | None | bool
     task_stats_srch: FastSearchOverPartialStrings
     task_stats_data: dict[str, tuple[int, float, float]]
     own_task_stats_data: dict[str, tuple[int, float, float]]
@@ -556,7 +568,7 @@ class Parallel:
         self.own_task_stats_data = {}
         self.task_stats_unaccounted = (0, 0., 0.)
         self.own_task_stats_unaccounted = (0, 0., 0.)
-        self.old_logging_hook = None
+        self.old_logging_hook = False
 
     def __enter__(self) -> "Parallel":
         self.old_logging_hook = set_logging_hook(lambda rec: self.logq.put((-1, time.perf_counter(), rec)))
@@ -1090,18 +1102,40 @@ class Parallel:
 
     def shutdown(self, force: bool) -> None:
         assert not self.shutting_down
+
         if force:
             for i in range(self.nprocesses):
                 self.processes[i].kill()
         else:
             for i in range(self.nprocesses):
                 self.inqueues[i].put(None)
-        self.logq.put(None)
+        # self.logq.put(None) - moved to join_all() to prevent processes hanging because of unread log messages
         self.shutting_down = True
 
     def join_all(self, force: bool) -> None:
         assert self.shutting_down
         assert not self.has_joined
+        assert self.old_logging_hook is False
+
+        # read late log messages from logq; if we don't read them, processes may not terminate
+        #while True:
+        #   try:
+        #        record = self.logq.get(False)
+        #        (procnum, t, rec) = record
+        #        assert isinstance(rec, logging.LogRecord)
+        #        _patch_log_rec(rec, procnum, t)
+        #        log_record(rec)
+        #    except QueueEmpty:
+        #        break
+
+        #for i in range(len(self.inqueues)):
+        #    j = 0
+        #    while not self.inqueues[i].empty():
+        #        self.inqueues[i].get()
+        #        j += 1
+        #    if j != 0:
+        #        alert('{} unread messages from process #{}, skipped'.format(j,i+1))
+        #
 
         if not force:
             n = 0
@@ -1119,6 +1153,8 @@ class Parallel:
         for i in range(self.nprocesses):
             self.processes[i].join()
             debug('Process #{} joined'.format(i + 1))
+
+        self.logq.put(None) # moved here to prevent processes hanging because of unread log messages
         self.logthread.join()
         self.has_joined = True
 
@@ -1145,7 +1181,10 @@ class Parallel:
 
     def __exit__(self, exceptiontype: Type[BaseException] | None, exceptionval: BaseException | None,
                  exceptiontraceback: TracebackType | None):
-        set_logging_hook(self.old_logging_hook)
+        if self.old_logging_hook is not False:
+            debug('Parallel: setting logging hook back to {}'.format(repr(self.old_logging_hook)))
+            set_logging_hook(self.old_logging_hook)
+            self.old_logging_hook = False
 
         force = False
         if exceptiontype is not None:
