@@ -146,12 +146,24 @@ def _hashing_file_time_estimate(fsize: int) -> float:
 
 ### Tasks
 
-def _load_files_task_func(param: tuple[str, str]) -> tuple[dict[str, FileOnDisk]]:
-    (cachedir, name) = param
+def _load_files_task_func(param: tuple[str, str,FolderListToCache]) -> tuple[dict[str, FileOnDisk],list[FileOnDisk]]:
+    (cachedir, name,folder_list) = param
     # filesbypath = {}
     filesbypath = _read_dict_of_files(cachedir, name)
+    files_by_path = {}
+    filtered_files = []
+    srch = _FastSearchOverFolderListToCache(folder_list)
+    for p, f in filesbypath.items():
+        assert p == f.file_path
+        # incl = self._folder_list.is_file_path_included(p)
+        incl2 = srch.is_file_path_included(p)
+        # abort_if_not(incl == incl2)
+        if incl2:
+            files_by_path[p] = f
+        else:
+            filtered_files.append(f)
 
-    return (filesbypath,)
+    return files_by_path,filtered_files
 
 
 def _scan_folder_task_func(
@@ -368,7 +380,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         stats = _FolderScanStats()
 
         loadtaskname = 'sanguine.foldercache.' + self.name + '.load'
-        loadtask = tasks.Task(loadtaskname, _load_files_task_func, (self._cache_dir, self.name), [])
+        loadtask = tasks.Task(loadtaskname, _load_files_task_func, (self._cache_dir, self.name,self._folder_list), [])
         parallel.add_task(loadtask)
 
         loadowntaskname = self._load_own_task_name()
@@ -492,24 +504,16 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
     ### Own Task Funcs
 
-    def _load_files_own_task_func(self, out: tuple[dict[str, FileOnDisk]], parallel: tasks.Parallel) -> \
+    def _load_files_own_task_func(self, out: tuple[dict[str, FileOnDisk],list[FileOnDisk]], parallel: tasks.Parallel) -> \
             tuple[tasks.SharedPubParam]:
         assert (self._state & 0x1) == 0
         self._state |= 0x1
         debug('FolderCache.{}: started processing loading files'.format(self.name))
-        (filesbypath,) = out
-        self._files_by_path = {}
-        self._filtered_files = []
-        srch = _FastSearchOverFolderListToCache(self._folder_list)
-        for p, f in filesbypath.items():
-            assert p == f.file_path
-            # incl = self._folder_list.is_file_path_included(p)
-            incl2 = srch.is_file_path_included(p)
-            # abort_if_not(incl == incl2)
-            if incl2:
-                self._files_by_path[p] = f
-            else:
-                self._filtered_files.append(f)
+        (filesbypath,filteredfiles) = out
+        assert self._files_by_path is None
+        assert self._filtered_files == []
+        self._files_by_path = filesbypath
+        self._filtered_files = filteredfiles
 
         debug('FolderCache.{}: almost processed loading files, preparing SharedPublication'.format(self.name))
         self.pub_files_by_path = tasks.SharedPublication(parallel, self._files_by_path)
