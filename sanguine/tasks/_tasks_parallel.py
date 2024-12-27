@@ -7,8 +7,8 @@ from threading import Thread  # only for logging!
 
 from sanguine.install.install_logging import (add_logging_handler, set_logging_hook)
 from sanguine.tasks._tasks_common import *
-from sanguine.tasks._tasks_logging import _ChildProcessLogHandler, create_logging_thread, log_waited, \
-    log_elapsed, EndOfRegularLog
+from sanguine.tasks._tasks_logging import (_ChildProcessLogHandler, create_logging_thread,
+                                           log_waited, log_elapsed, EndOfRegularLog, StopSkipping)
 from sanguine.tasks._tasks_shared import _pool_of_shared_returns, SharedReturnParam
 
 
@@ -547,6 +547,7 @@ class Parallel:
                 break
 
         mltimer.end()
+        self.logq.put(StopSkipping())
 
         elapsed = mltimer.elapsed()
         nonmainpct = maintexttasks / elapsed * 100.

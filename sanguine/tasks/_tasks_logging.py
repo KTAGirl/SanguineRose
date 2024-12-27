@@ -37,6 +37,8 @@ def log_waited() -> float:
     global _log_waited
     return _log_waited
 
+class StopSkipping:
+    pass
 
 class EndOfRegularLog:
     pass
@@ -95,6 +97,8 @@ class _LoggingThreadState:
             self._state = 1
             self._log_outq.put(None)
             return False
+        if isinstance(record, StopSkipping):
+            return True
         assert isinstance(record, tuple)
 
         (procnum, t, rec) = record
@@ -122,6 +126,7 @@ def _log_skipped(skipped: dict[int, int]) -> None:
 def _logging_thread_func(logq: SimpleQueue, outlogq: SimpleQueue) -> None:
     assert current_proc_num() == -1
     lstate = _LoggingThreadState(outlogq)
+    stopskipping = False
     while True:
         assert current_proc_num() == -1
 
@@ -151,12 +156,15 @@ def _logging_thread_func(logq: SimpleQueue, outlogq: SimpleQueue) -> None:
         '''
 
         skipped: dict[int, int] = {}
-        while lstate.is_overloaded(_CONSOLE_LOG_QUEUE_THRESHOLD):
+        while lstate.is_overloaded(_CONSOLE_LOG_QUEUE_THRESHOLD) and not stopskipping:
             record = lstate.read_log_rec(logq)
             if record is None:
                 _log_skipped(skipped)
                 return
             if record is False:
+                continue
+            if record is True:
+                stopskipping = True
                 continue
             (procnum, t, rec) = record
             levelno = rec.levelno
@@ -172,6 +180,9 @@ def _logging_thread_func(logq: SimpleQueue, outlogq: SimpleQueue) -> None:
         if record is None:
             return
         if record is False:
+            continue
+        if record is True:
+            stopskipping = True
             continue
         (procnum, t, rec) = record
         log_record(rec)
