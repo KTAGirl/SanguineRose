@@ -476,7 +476,7 @@ class Parallel:
             # place items in process queues, until each has 2 tasks, or until there are no tasks
             mltimer.stage('scheduler')
             while True:
-                ok, dt = self._schedule_best_tasks()
+                ok, dt = self._schedule_best_tasks(mltimer)
                 maintexttasks += dt
                 if not ok:
                     break
@@ -488,7 +488,7 @@ class Parallel:
             if ran:
                 mltimer.stage('scheduler')
                 while True:
-                    ok, dt = self._schedule_best_tasks()
+                    ok, dt = self._schedule_best_tasks(mltimer)
                     maintexttasks += dt
                     if not ok:
                         break
@@ -617,7 +617,8 @@ class Parallel:
 
         return outt
 
-    def _schedule_best_tasks(self) -> tuple[bool, float]:  # may schedule multiple tasks as one meta-task
+    def _schedule_best_tasks(self, mltimer: _MainLoopTimer) -> tuple[
+        bool, float]:  # may schedule multiple tasks as one meta-task
         assert len(self.ready_task_nodes) == len(self.ready_task_nodes_heap)
         if len(self.ready_task_nodes) == 0:
             return False, 0.
@@ -668,11 +669,15 @@ class Parallel:
             return True, tout
 
         msg = (taskpluses, None)
+        mltimer.stage('scheduler.queue-put')
         self.inqueues[pidx].put(msg)
+        mltimer.stage('scheduler')
         # self.logq.put((-1,time.perf_counter(),make_log_record(logging.INFO, 'Parallel: assigned tasks {} to process #{}'.format(tasksstr, pidx + 1))))
+        mltimer.stage('scheduler.logging')
         info('Parallel: assigned tasks {} to process #{}'.format(tasksstr, pidx + 1))
         if __debug__:  # pickle.dumps is expensive by itself
             debug('Parallel: request size: {}'.format(len(pickle.dumps(msg))))
+        mltimer.stage('scheduler')
         return True, tout
 
     def _notify_sender_shm_done(self, pidx: int, name: str) -> None:
