@@ -621,7 +621,7 @@ class Parallel:
         if len(self.ready_task_nodes) == 0:
             return False, 0.
 
-        pidx = self._find_best_process()
+        pidx = self._find_best_process() if not self.dbg_serialize else 0
         if pidx < 0:
             return False, 0.
         taskpluses = []

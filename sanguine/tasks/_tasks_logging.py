@@ -111,6 +111,14 @@ class _LoggingThreadState:
         return self._last_n_without_wait >= threshold
 
 
+def _log_skipped(skipped: dict[int, int]) -> None:
+    for levelno in skipped:
+        rec = make_log_record(levelno,
+                              'tasks.log: logging thread overloaded, skipped {} [{}] entries in console, see log file for full details'.format(
+                                  skipped[levelno], log_level_name(levelno)))
+        log_record(rec)
+
+
 def _logging_thread_func(logq: SimpleQueue, outlogq: SimpleQueue) -> None:
     assert current_proc_num() == -1
     lstate = _LoggingThreadState(outlogq)
@@ -142,10 +150,11 @@ def _logging_thread_func(logq: SimpleQueue, outlogq: SimpleQueue) -> None:
             log_record(rec)
         '''
 
-        skipped = {}
+        skipped: dict[int, int] = {}
         while lstate.is_overloaded(_CONSOLE_LOG_QUEUE_THRESHOLD):
             record = lstate.read_log_rec(logq)
             if record is None:
+                _log_skipped(skipped)
                 return
             if record is False:
                 continue
@@ -157,11 +166,7 @@ def _logging_thread_func(logq: SimpleQueue, outlogq: SimpleQueue) -> None:
                 skipped[levelno] = 1
             log_record_skip_console(rec)
 
-        for levelno in skipped:
-            rec = make_log_record(levelno,
-                                  'tasks.log: logging thread overloaded, skipped {} [{}] entries in console, see log file for full details'.format(
-                                      skipped[levelno], log_level_name(levelno)))
-            log_record(rec)
+        _log_skipped(skipped)
 
         record = lstate.read_log_rec(logq)
         if record is None:

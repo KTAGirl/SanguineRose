@@ -8,13 +8,22 @@ from sanguine.helpers.project_config import ProjectConfig
 class WholeCache:
     # WholeCache, once ready_task_name() is reached, contains whole information about the folders, and available files
     #             all the information is in-memory, so it can work incredibly fast
+    cache_data_fname: str
+    cache_data: dict[str, any]
     vfscache: FolderCache
     available: AvailableFiles
     _SYNCOWNTASKNAME: str = 'sanguine.wholecache.sync'
 
     def __init__(self, by: str, projectcfg: ProjectConfig) -> None:
+        self.cache_data_fname = projectcfg.cache_dir + 'wholecache.cachedata.json'
+        try:
+            with open(self.cache_data_fname, 'r') as f:
+                self.cache_data = json.load(f)
+        except Exception as e:
+            warn('WholeCache: cannot load cachedata from {}: {}'.format(self.cache_data_fname, e))
+            self.cache_data = {}
         self.available = AvailableFiles(by, projectcfg.cache_dir, projectcfg.tmp_dir, projectcfg.github_root,
-                                        projectcfg.download_dirs, projectcfg.github_folders)
+                                        projectcfg.download_dirs, projectcfg.github_folders, self.cache_data)
 
         folderstocache: FolderListToCache = projectcfg.active_vfs_folders()
         self.vfscache = FolderCache(projectcfg.cache_dir, 'vfs', folderstocache)
@@ -51,6 +60,11 @@ class WholeCache:
         return (self.available.stats_of_interest() + self.vfscache.stats_of_interest()
                 + ['sanguine.wholecache.'])
 
+    def done(self) -> None:
+        with open(self.cache_data_fname, 'w') as f:
+            # noinspection PyTypeChecker
+            json.dump(self.cache_data, f, indent=4)
+
 
 if __name__ == '__main__':
     import sys
@@ -67,5 +81,6 @@ if __name__ == '__main__':
         with tasks.Parallel(None, taskstatsofinterest=wcache.stats_of_interest(), dbg_serialize=False) as tparallel:
             wcache.start_tasks(tparallel)
             tparallel.run([])
+        wcache.done()
 
         info('whole_cache.py test finished ok')

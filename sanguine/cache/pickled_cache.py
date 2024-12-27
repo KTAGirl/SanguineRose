@@ -21,7 +21,7 @@ def pickled_cache(cachedir: str, cachedata: dict[str, any], prefix: str, origfil
         for i in range(len(readpaths)):
             rd = readpaths[i]
             of = (origfiles[i], os.path.getmtime(origfiles[i]))
-            assert isinstance(rd, tuple)
+            assert isinstance(rd, list)
             assert is_normalized_file_path(rd[0])
             assert is_normalized_file_path(of[0])
 
