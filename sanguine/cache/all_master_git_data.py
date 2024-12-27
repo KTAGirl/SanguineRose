@@ -97,10 +97,30 @@ def _write_git_file_origins(mastergitdir: str, forigins: dict[bytes, list[FileOr
 
 ### AllMasterGitData Tasks
 
-def _load_archives_task_func(param: tuple[str, str, dict[str, any]]) -> tuple[list[Archive], dict[str, any]]:
+def _append_archive(archives_by_hash, archived_files_by_hash, archived_files_by_name, ar: Archive) -> None:
+    # warn(str(len(ar.files)))
+    assert ar.archive_hash not in archives_by_hash
+    archives_by_hash[ar.archive_hash] = ar
+    for fi in ar.files:
+        if fi.file_hash not in archived_files_by_hash:
+            archived_files_by_hash[fi.file_hash] = []
+        archived_files_by_hash[fi.file_hash].append((ar, fi))
+
+        fname = os.path.split(fi.intra_path)[1]
+        if fname not in archived_files_by_name:
+            archived_files_by_name[fname] = []
+        archived_files_by_name[fname].append((ar, fi))
+
+
+def _load_archives_task_func(param: tuple[str, str, dict[str, any]]) -> tuple[dict, dict, dict, dict[str, any]]:
     (mastergitdir, cachedir, cachedata) = param
     (archives, cacheoverrides) = _read_cached_git_archives(mastergitdir, cachedir, cachedata)
-    return archives, cacheoverrides
+    archives_by_hash = {}
+    archived_files_by_hash = {}
+    archived_files_by_name = {}
+    for ar in archives:
+        _append_archive(archives_by_hash, archived_files_by_hash, archived_files_by_name, ar)
+    return archives_by_hash, archived_files_by_hash, archived_files_by_name, cacheoverrides
 
 
 def _archive_hashing_task_func(param: tuple[str, str, bytes, int, str]) -> tuple[list[Archive]]:
@@ -201,29 +221,13 @@ class AllMasterGitData:
         self._ar_is_ready = 0
         self._fo_is_ready = False
 
-    def _append_archive(self, ar: Archive) -> None:
-        # warn(str(len(ar.files)))
-        assert ar.archive_hash not in self._archives_by_hash
-        self._archives_by_hash[ar.archive_hash] = ar
-        for fi in ar.files:
-            if fi.file_hash not in self._archived_files_by_hash:
-                self._archived_files_by_hash[fi.file_hash] = []
-            self._archived_files_by_hash[fi.file_hash].append((ar, fi))
-
-            fname = os.path.split(fi.intra_path)[1]
-            if fname not in self._archived_files_by_name:
-                self._archived_files_by_name[fname] = []
-            self._archived_files_by_name[fname].append((ar, fi))
-
-    def _load_archives_own_task_func(self, out: tuple[list[Archive], dict[str, any]]) -> None:
-        (archives, cacheoverrides) = out
+    def _load_archives_own_task_func(self, out: tuple[dict, dict, dict, dict[str, any]]) -> None:
+        (archives_by_hash, archived_files_by_hash, archived_files_by_name, cacheoverrides) = out
         assert self._archives_by_hash is None
         assert self._archived_files_by_hash is None
-        self._archives_by_hash = {}
-        self._archived_files_by_hash = {}
-        self._archived_files_by_name = {}
-        for ar in archives:
-            self._append_archive(ar)
+        self._archives_by_hash = archives_by_hash
+        self._archived_files_by_hash = archived_files_by_hash
+        self._archived_files_by_name = archived_files_by_name
         self._cache_data |= cacheoverrides
         assert self._ar_is_ready == 0
         self._ar_is_ready = 1
@@ -231,7 +235,7 @@ class AllMasterGitData:
     def _archive_hashing_own_task_func(self, out: tuple[list[Archive]]):
         (archives,) = out
         for ar in archives:
-            self._append_archive(ar)
+            _append_archive(self._archives_by_hash, self._archived_files_by_hash, self._archived_files_by_name, ar)
         self._dirty_ar = True
 
     def _done_hashing_own_task_func(self, parallel: tasks.Parallel) -> None:
