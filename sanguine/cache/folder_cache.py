@@ -300,6 +300,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
     _files_by_path: dict[str, FileOnDisk] | None
     _filtered_files: list[FileOnDisk]
     _all_scan_stats: dict[str, dict[str, int]]  # rootfolder -> {fpath -> nfiles}
+    _new_all_scan_stats: dict[str, dict[str, int]] | None
     _state: int  # bitmask: 0x1 - load completed, 0x2 - reconcile completed
 
     def __init__(self, cachedir: str, name: str, folder_list: FolderListToCache) -> None:
@@ -310,6 +311,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         self._files_by_path = None
         self._filtered_files = []
         self._all_scan_stats = _read_all_scan_stats(cachedir, name)
+        self._new_all_scan_stats = {}
         self._state = 0
 
     def start_tasks(self, parallel: tasks.Parallel) -> None:
@@ -366,7 +368,6 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         return 'sanguine.foldercache.' + self.name + '.ownload'
 
     def _start_tasks(self, parallel: tasks.Parallel) -> None:
-
         # building tree of known scans
         allscantasks: list[tuple[str, str, int, list[str]]] = []  # [(root,path,nf,exdirs)]
 
@@ -570,6 +571,9 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 ndel += 1
         info('FolderCache reconcile: {} files were deleted'.format(ndel))
 
+        self._all_scan_stats = self._new_all_scan_stats
+        self._new_all_scan_stats = None
+
         savetaskname = 'sanguine.foldercache.' + self.name + '.save'
         savetask = tasks.Task(savetaskname, _save_files_task_func,
                               (self._cache_dir, self.name, self._files_by_path,
@@ -592,12 +596,12 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         stats.add(gotstats)
         assert len(scannedfiles.keys() & sdout.scanned_files.keys()) == 0
         scannedfiles |= sdout.scanned_files
-        # if sdout.root in foldercache.all_scan_stats:
-        #    assert len(foldercache.all_scan_stats[sdout.root].keys() & sdout.scan_stats.keys()) == 0
-        #    foldercache.all_scan_stats[sdout.root] |= sdout.scan_stats
-        # else:
-        #    foldercache.all_scan_stats[sdout.root] = sdout.scan_stats
-        self._all_scan_stats[sdout.root] = sdout.scan_stats  # always overwriting scan_stats
+        if sdout.root in self._new_all_scan_stats:
+            assert len(self._new_all_scan_stats[sdout.root].keys() & sdout.scan_stats.keys()) == 0
+            self._new_all_scan_stats[sdout.root] |= sdout.scan_stats
+        else:
+            self._new_all_scan_stats[sdout.root] = sdout.scan_stats
+        # self._all_scan_stats[sdout.root] = sdout.scan_stats  # always overwriting scan_stats
 
         for f in sdout.requested_files:
             (fpath, tstamp, fsize) = f
