@@ -547,7 +547,8 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         return tasks.TaskDataDependencies(
             ['sanguine.foldercache.' + self.name + '._files_by_path'],
             [],
-            ['sanguine.foldercache.' + self.name + '.reconciled()'])
+            ['sanguine.foldercache.' + self.name + '.reconciled()',
+             'sanguine.foldercache.' + self.name + '.ready()'])
 
     def _own_reconcile_task_func(self, parallel: tasks.Parallel,
                                  scannedfiles: dict[str, FileOnDisk]) -> None:

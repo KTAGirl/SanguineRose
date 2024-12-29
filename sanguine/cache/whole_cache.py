@@ -38,6 +38,13 @@ class WholeCache:
                                      self.available.ready_task_name()])
         parallel.add_task(syncowntask)
 
+    def _sync_owntask_datadeps(self) -> tasks.TaskDataDependencies:
+        return tasks.TaskDataDependencies(
+            ['sanguine.available.ready()',
+             'sanguine.foldercache.vfs.ready()'],
+            [],
+            ['sanguine.wholecache.ready()'])
+
     def _start_sync_own_task_func(self) -> None:
         pass  # do nothing, this task is necessary only to synchronize
 
