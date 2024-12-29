@@ -55,13 +55,15 @@ class AvailableFiles:
         starthashingowntask = tasks.OwnTask(starthashingowntaskname,
                                             lambda _, _1, _2: self._start_hashing_own_task_func(parallel), None,
                                             [self._downloads_cache.ready_task_name(),
-                                             AllMasterGitData.ready_to_start_hashing_task_name()])
+                                             AllMasterGitData.ready_to_start_hashing_task_name()],
+                                            datadeps=self._starthashing_owntask_datadeps())
         parallel.add_task(starthashingowntask)
 
         startoriginsowntaskname = 'sanguine.available.ownstartfileorigins'
         startoriginsowntask = tasks.OwnTask(startoriginsowntaskname,
                                             lambda _, _1: self._start_origins_own_task_func(parallel), None,
-                                            [self._downloads_cache.ready_task_name()])
+                                            [self._downloads_cache.ready_task_name()],
+                                            datadeps=self._startorigins_owntask_datadeps())
         parallel.add_task(startoriginsowntask)
 
         readyowntaskname = AvailableFiles._READYOWNTASKNAME
@@ -140,6 +142,13 @@ class AvailableFiles:
 
     # private functions
 
+    def _starthashing_owntask_datadeps(self) -> tasks.TaskDataDependencies:
+        return tasks.TaskDataDependencies(
+            ['sanguine.foldercache.downloads._files_by_path',
+             'sanguine.mastergit._archives_by_hash'],
+            [],
+            ['sanguine.available.start_hashing()'])
+
     def _start_hashing_own_task_func(self, parallel: tasks.Parallel) -> None:
         for ar in self._downloads_cache.all_files():
             ext = os.path.splitext(ar.file_path)[1]
@@ -151,6 +160,12 @@ class AvailableFiles:
                     self._master_data.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
                 else:
                     warn('Available: file with unknown extension {}, ignored'.format(ar.file_path))
+
+    def _startorigins_owntask_datadeps(self) -> tasks.TaskDataDependencies:
+        return tasks.TaskDataDependencies(
+            ['sanguine.foldercache.downloads._files_by_path'],
+            [],
+            ['sanguine.available.start_origins()'])
 
     def _start_origins_own_task_func(self, parallel: tasks.Parallel) -> None:
         filtered_downloads: list[tuple[bytes, str]] = []
@@ -169,8 +184,17 @@ class AvailableFiles:
         originsowntask = tasks.OwnTask(startoriginsowntaskname,
                                        lambda _, out, _1: self._file_origins_own_task_func(parallel, out), None,
                                        [originstaskname,
-                                        AllMasterGitData.ready_to_start_adding_file_origins_task_name()])
+                                        AllMasterGitData.ready_to_start_adding_file_origins_task_name()],
+                                       datadeps=self._fileorigins_owntask_datadeps())
         parallel.add_task(originsowntask)
+
+    def _fileorigins_owntask_datadeps(self) -> tasks.TaskDataDependencies:
+        return tasks.TaskDataDependencies(
+            ['sanguine.mastergit._file_origins_by_hash',
+             'sanguine.mastergit._archives_by_hash',
+             'sanguine.available.start_origins()'],
+            [],
+            ['sanguine.available.file_origins()'])
 
     def _file_origins_own_task_func(self, parallel: tasks.Parallel,
                                     out: tuple[list[tuple[bytes, list[FileOrigin]]]]) -> None:
@@ -186,6 +210,12 @@ class AvailableFiles:
                                      lambda _, _1, _2: self._ready_own_task_func(), None,
                                      [gitarchivesdonehashingtaskname, self._github_cache.ready_task_name()])
         parallel.replace_task_placeholder(readyowntask)
+
+    def _ready_owntask_datadeps(self) -> tasks.TaskDataDependencies:
+        return tasks.TaskDataDependencies(
+            ['sanguine.foldercache.github._files_by_path'],
+            [],
+            ['sanguine.available.ready()'])
 
     def _ready_own_task_func(self) -> None:
         assert self._github_cache_by_hash is None
@@ -217,7 +247,7 @@ if __name__ == '__main__':
                                         normalize_dir_path('../../../sanguine-skyrim-root\\'),
                                         [normalize_dir_path('../../../../MO2/downloads')],
                                         [GithubFolder('KTAGirl', 'KTA',
-                                                      normalize_dir_path('../../../KTA\\'))])
+                                                      normalize_dir_path('../../../KTA\\'))], {})
             with tasks.Parallel(None, dbg_serialize=False,
                                 taskstatsofinterest=tavailable.stats_of_interest()) as tparallel:
                 tavailable.start_tasks(tparallel)

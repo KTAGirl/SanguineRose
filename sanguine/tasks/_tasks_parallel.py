@@ -370,9 +370,13 @@ class Parallel:
                 guaranteedtags[gt] = 1
         if task.data_dependencies is not None:
             for d in task.data_dependencies.required_tags:
-                assert d in guaranteedtags
+                if d not in guaranteedtags:
+                    critical('Parallel: need datadep={} for task {}'.format(d, task.name))
+                    assert False
             for nd in task.data_dependencies.required_not_tags:
-                assert nd not in guaranteedtags
+                if nd in guaranteedtags:
+                    critical('Parallel: prohibited datadep={} for task {}'.format(nd, task.name))
+                    assert False
             for pd in task.data_dependencies.provided_tags:
                 guaranteedtags[pd] = 1
 

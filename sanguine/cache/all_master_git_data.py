@@ -199,7 +199,7 @@ class AllMasterGitData:
     _dirty_ar: bool
     _dirty_fo: bool
     _ar_is_ready: int  # 0 - not ready, 1 - partially ready, 2 - fully ready
-    _fo_is_ready: bool
+    _fo_is_ready: int
 
     _LOADAROWNTASKNAME = 'sanguine.mastergit.ownloadar'
     _LOADFOOWNTASKNAME = 'sanguine.mastergit.ownloadfo'
@@ -219,7 +219,15 @@ class AllMasterGitData:
         self._dirty_ar = False
         self._dirty_fo = False
         self._ar_is_ready = 0
-        self._fo_is_ready = False
+        self._fo_is_ready = 0
+
+    def _loadar_owntask_datadeps(self) -> tasks.TaskDataDependencies:
+        return tasks.TaskDataDependencies(
+            [],
+            ['sanguine.mastergit.done_hashing()'],
+            ['sanguine.mastergit._archives_by_hash',
+             'sanguine.mastergit._archived_files_by_hash',
+             'sanguine.mastergit._archived_files_by_name'])
 
     def _load_archives_own_task_func(self, out: tuple[dict, dict, dict, dict[str, any]]) -> None:
         (archives_by_hash, archived_files_by_hash, archived_files_by_name, cacheoverrides) = out
@@ -232,13 +240,32 @@ class AllMasterGitData:
         assert self._ar_is_ready == 0
         self._ar_is_ready = 1
 
+    def _arhashing_owntask_datadeps(self) -> tasks.TaskDataDependencies:
+        return tasks.TaskDataDependencies(
+            ['sanguine.mastergit._archives_by_hash',
+             'sanguine.mastergit._archived_files_by_hash',
+             'sanguine.mastergit._archived_files_by_name'],
+            ['sanguine.mastergit.done_hashing()'],
+            [])
+
     def _archive_hashing_own_task_func(self, out: tuple[list[Archive]]):
+        assert self._ar_is_ready == 1
         (archives,) = out
         for ar in archives:
             _append_archive(self._archives_by_hash, self._archived_files_by_hash, self._archived_files_by_name, ar)
         self._dirty_ar = True
 
+    def _done_hashing_owntask_datadeps(self) -> tasks.TaskDataDependencies:
+        return tasks.TaskDataDependencies(
+            ['sanguine.mastergit._archives_by_hash',
+             'sanguine.mastergit._archived_files_by_hash',
+             'sanguine.mastergit._archived_files_by_name'],
+            [],
+            ['sanguine.mastergit.done_hashing()'])
+
     def _done_hashing_own_task_func(self, parallel: tasks.Parallel) -> None:
+        assert self._ar_is_ready == 1
+        self._ar_is_ready = 2
         if self._dirty_ar:
             savetaskname = 'sanguine.mastergit.savear'
             savetask = tasks.Task(savetaskname, _save_archives_task_func,
@@ -246,7 +273,15 @@ class AllMasterGitData:
             parallel.add_task(savetask)
         self._ar_is_ready = 2
 
+    def _loadfo_owntask_datadeps(self) -> tasks.TaskDataDependencies:
+        return tasks.TaskDataDependencies(
+            [],
+            [],
+            ['sanguine.mastergit._file_origins_by_hash'])
+
     def _load_file_origins_own_task_func(self, out: tuple[dict[bytes, list[FileOrigin]], dict[str, any]]) -> None:
+        assert self._fo_is_ready == 0
+        self._fo_is_ready = 1
         (forigins, cacheoverrides) = out
         assert self._file_origins_by_hash is None
         self._file_origins_by_hash = forigins
@@ -260,7 +295,8 @@ class AllMasterGitData:
         loadowntaskname = AllMasterGitData._LOADAROWNTASKNAME
         loadowntask = tasks.OwnTask(loadowntaskname,
                                     lambda _, out: self._load_archives_own_task_func(out), None,
-                                    [loadtaskname])
+                                    [loadtaskname],
+                                    datadeps=self._loadar_owntask_datadeps())
         parallel.add_task(loadowntask)
 
         load2taskname = 'sanguine.mastergit.loadfo'
@@ -270,7 +306,8 @@ class AllMasterGitData:
         load2owntaskname = AllMasterGitData._LOADFOOWNTASKNAME
         load2owntask = tasks.OwnTask(load2owntaskname,
                                      lambda _, out: self._load_file_origins_own_task_func(out), None,
-                                     [load2taskname])
+                                     [load2taskname],
+                                     datadeps=self._loadfo_owntask_datadeps())
         parallel.add_task(load2owntask)
 
     @staticmethod
@@ -282,6 +319,7 @@ class AllMasterGitData:
         return AllMasterGitData._LOADFOOWNTASKNAME
 
     def start_hashing_archive(self, parallel: tasks.Parallel, arpath: str, arhash: bytes, arsize: int) -> None:
+        assert self._ar_is_ready == 1
         hashingtaskname = 'sanguine.mastergit.hash.' + arpath
         self._nhashes_requested += 1
         tmp_dir = TmpPath.tmp_in_tmp(self._tmp_dir, 'ah.', self._nhashes_requested)
@@ -291,10 +329,12 @@ class AllMasterGitData:
         hashingowntaskname = 'sanguine.mastergit.ownhash.' + arpath
         hashingowntask = tasks.OwnTask(hashingowntaskname,
                                        lambda _, out: self._archive_hashing_own_task_func(out), None,
-                                       [hashingtaskname])
+                                       [hashingtaskname],
+                                       datadeps=self._arhashing_owntask_datadeps())
         parallel.add_task(hashingowntask)
 
     def add_file_origin(self, h: bytes, fo: FileOrigin) -> None:
+        assert self._fo_is_ready == 1
         if h in self._file_origins_by_hash:
             for oldfo in self._file_origins_by_hash[h]:
                 if fo.eq(oldfo):
@@ -308,23 +348,26 @@ class AllMasterGitData:
 
     def start_done_hashing_task(self,  # should be called only after all start_hashing_archive() calls are done
                                 parallel: tasks.Parallel) -> str:
+        assert self._ar_is_ready == 1
+        self._ar_is_ready = 2
         donehashingowntaskname = 'sanguine.mastergit.donehashing'
         donehashingowntask = tasks.OwnTask(donehashingowntaskname,
                                            lambda _, _1: self._done_hashing_own_task_func(parallel), None,
-                                           [AllMasterGitData._LOADAROWNTASKNAME, 'sanguine.mastergit.hashown.*'])
+                                           [AllMasterGitData._LOADAROWNTASKNAME, 'sanguine.mastergit.hashown.*'],
+                                           datadeps=self._done_hashing_owntask_datadeps())
         parallel.add_task(donehashingowntask)
 
         return donehashingowntaskname
 
     def start_done_adding_file_origins_task(self,  # should be called only after all add_file_origin() calls are done
                                             parallel: tasks.Parallel) -> None:
+        assert self._fo_is_ready == 1
+        self._fo_is_ready = 2
         if self._dirty_fo:
             save2taskname = 'sanguine.mastergit.savefo'
             save2task = tasks.Task(save2taskname, _save_file_origins_task_func,
                                    (self._master_git_dir, self._file_origins_by_hash), [])
             parallel.add_task(save2task)
-
-        self._fo_is_ready = True
 
     def archived_file_by_hash(self, h: bytes) -> list[tuple[Archive, FileInArchive]] | None:
         assert self._ar_is_ready == 2
