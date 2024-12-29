@@ -49,8 +49,7 @@ class EndOfRegularLog:
 ### Implementation
 
 _CONSOLE_LOG_QUEUE_THRESHOLD: int = 10
-# _FILE_LOG_QUEUE_THRESHOLD: int = 50
-_FILE_LOG_SKIPPING_UP_TO_LEVEL: int = logging.INFO
+_CONSOLE_LOG_SKIPPING_UP_TO_LEVEL: int = logging.INFO
 
 
 class _LoggingThreadState:
@@ -170,11 +169,14 @@ def _logging_thread_func(logq: SimpleQueue, outlogq: SimpleQueue) -> None:
                 continue
             (procnum, t, rec) = record
             levelno = rec.levelno
-            if levelno in skipped:
-                skipped[levelno] += 1
+            if levelno <= _CONSOLE_LOG_SKIPPING_UP_TO_LEVEL:
+                if levelno in skipped:
+                    skipped[levelno] += 1
+                else:
+                    skipped[levelno] = 1
+                log_record_skip_console(rec)
             else:
-                skipped[levelno] = 1
-            log_record_skip_console(rec)
+                log_record(rec)
 
         _log_skipped(skipped)
 
