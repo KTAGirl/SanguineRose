@@ -182,9 +182,10 @@ class AvailableFiles:
         parallel.add_task(originstask)
         startoriginsowntaskname = 'sanguine.available.ownfileorigins'
         originsowntask = tasks.OwnTask(startoriginsowntaskname,
-                                       lambda _, out, _1: self._file_origins_own_task_func(parallel, out), None,
+                                       lambda _, out, _1, _2: self._file_origins_own_task_func(parallel, out), None,
                                        [originstaskname,
-                                        AllMasterGitData.ready_to_start_adding_file_origins_task_name()],
+                                        AllMasterGitData.ready_to_start_adding_file_origins_task_name(),
+                                        AllMasterGitData.archives_ready_task_name()],
                                        datadeps=self._fileorigins_owntask_datadeps())
         parallel.add_task(originsowntask)
 

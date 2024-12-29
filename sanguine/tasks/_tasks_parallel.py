@@ -254,6 +254,7 @@ class Parallel:
     task_stats_unaccounted: tuple[int, float, float]
     own_task_stats_unaccounted: tuple[int, float, float]
     data_dependencies: dict[str, int]
+    current_task_node: _TaskGraphNode | None
 
     def __init__(self, jsonfname: str | None, nproc: int = 0, dbg_serialize: bool = False,
                  taskstatsofinterest: TaskStatsOfInterest = None) -> None:
@@ -303,6 +304,7 @@ class Parallel:
         self.own_task_stats_unaccounted = (0, 0., 0.)
         self.old_logging_hook = False
         self.data_dependencies = {}
+        self.current_task_node = None
 
     def __enter__(self) -> "Parallel":
         self.old_logging_hook = set_logging_hook(lambda rec: self.logq.put((-1, time.perf_counter(), rec)))
@@ -365,6 +367,9 @@ class Parallel:
         # by this point, we're sure that we'll add this particular task
         # checking data tags
         guaranteedtags = {}
+        if self.current_task_node is not None:
+            for gt in self.current_task_node.guaranteed_tags:
+                guaranteedtags[gt] = 1
         for n in taskparents:
             for gt in n.guaranteed_tags:
                 guaranteedtags[gt] = 1
@@ -741,6 +746,7 @@ class Parallel:
             Parallel._update_task_stats_internal(self.task_stats_data, srch, cpu, elapsed)
 
     def _run_own_task(self) -> float:
+        assert self.current_task_node is None
         assert len(self.ready_own_task_nodes) > 0
         towntask = 0.
         ot = heapq.heappop(self.ready_own_task_nodes_heap)
@@ -774,7 +780,10 @@ class Parallel:
 
         # nall = len(self.all_task_nodes)
         # ATTENTION: ot.task.f(...) may call add_task() or add_task(s) within
+        assert self.current_task_node is None
+        self.current_task_node = ot
         (ex, out) = _run_task(ot.task, params)
+        self.current_task_node = None
         if ex is not None:
             raise Exception('Parallel: Exception in user OwnTask.run(), quitting')
         # newnall = len(self.all_task_nodes)

@@ -271,7 +271,6 @@ class AllMasterGitData:
             savetask = tasks.Task(savetaskname, _save_archives_task_func,
                                   (self._master_git_dir, list(self._archives_by_hash.values())), [])
             parallel.add_task(savetask)
-        self._ar_is_ready = 2
 
     def _loadfo_owntask_datadeps(self) -> tasks.TaskDataDependencies:
         return tasks.TaskDataDependencies(
@@ -315,6 +314,10 @@ class AllMasterGitData:
         return AllMasterGitData._LOADAROWNTASKNAME
 
     @staticmethod
+    def archives_ready_task_name() -> str:
+        return AllMasterGitData._LOADAROWNTASKNAME
+
+    @staticmethod
     def ready_to_start_adding_file_origins_task_name() -> str:
         return AllMasterGitData._LOADFOOWNTASKNAME
 
@@ -349,7 +352,6 @@ class AllMasterGitData:
     def start_done_hashing_task(self,  # should be called only after all start_hashing_archive() calls are done
                                 parallel: tasks.Parallel) -> str:
         assert self._ar_is_ready == 1
-        self._ar_is_ready = 2
         donehashingowntaskname = 'sanguine.mastergit.donehashing'
         donehashingowntask = tasks.OwnTask(donehashingowntaskname,
                                            lambda _, _1: self._done_hashing_own_task_func(parallel), None,
