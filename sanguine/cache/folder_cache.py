@@ -84,15 +84,18 @@ def _read_all_scan_stats(dirpath: str, name: str) -> dict[str, dict[str, int]]:
 
 def _write_all_scan_stats(dirpath: str, name: str, all_scan_stats: dict[str, dict[str, int]]) -> None:
     assert is_normalized_dir_path(dirpath)
+    all_scan_stats_for_save = dict(sorted(all_scan_stats.items()))
+    for k, v in all_scan_stats_for_save.items():
+        all_scan_stats_for_save[k] = dict(sorted(v.items()))
     fpath = dirpath + 'foldercache.' + name + '.scan-stats.pickle'
     with open(fpath, 'wb') as wf:
         # noinspection PyTypeChecker
-        pickle.dump(all_scan_stats, wf)
+        pickle.dump(all_scan_stats_for_save, wf)
 
     fpath2 = dirpath + 'foldercache.' + name + '.scan-stats.json'
     with open_3rdparty_txt_file_w(fpath2) as wf2:
         # noinspection PyTypeChecker
-        json.dump(all_scan_stats, wf2, indent=2)
+        json.dump(all_scan_stats_for_save, wf2, indent=2)
 
 
 class _FolderScanStats:
@@ -601,7 +604,6 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             self._new_all_scan_stats[sdout.root] |= sdout.scan_stats
         else:
             self._new_all_scan_stats[sdout.root] = sdout.scan_stats
-        # self._all_scan_stats[sdout.root] = sdout.scan_stats  # always overwriting scan_stats
 
         for f in sdout.requested_files:
             (fpath, tstamp, fsize) = f
