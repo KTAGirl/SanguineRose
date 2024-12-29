@@ -25,19 +25,33 @@ class LambdaReplacement:
         return self.f(self.capture, param)
 
 
+class TaskDataDependencies:
+    required_tags: list[str]
+    required_not_tags: list[str]
+    provided_tags: list[str]
+
+    def __init__(self, reqtags: list[str], reqnottags: list[str], provtags: list[str]) -> None:
+        self.required_tags = reqtags
+        self.required_not_tags = reqnottags
+        self.provided_tags = provtags
+
+
 class Task:
     name: str
     f: Callable[[any, ...], any] | None  # variable # of params depending on len(dependencies)
     param: any
     dependencies: list[str]
     w: float | None
+    data_dependencies: TaskDataDependencies
 
-    def __init__(self, name: str, f: Callable, param: any, dependencies: list[str], w: float | None = None) -> None:
+    def __init__(self, name: str, f: Callable, param: any, dependencies: list[str], w: float | None = None,
+                 datadeps: TaskDataDependencies = None) -> None:
         self.name = name
         self.f = f
         self.param = param
         self.dependencies = dependencies
         self.w: float = w
+        self.data_dependencies = datadeps
 
 
 class OwnTask(Task):
@@ -55,7 +69,3 @@ type TaskStatsOfInterest = list[str]
 class ProcessStarted:
     def __init__(self, proc_num: int) -> None:
         self.proc_num = proc_num
-
-# class _Finished:
-#    def __init__(self, proc_num: int) -> None:
-#        self.proc_num = proc_num

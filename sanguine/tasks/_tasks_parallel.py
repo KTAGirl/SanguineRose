@@ -117,8 +117,10 @@ class _TaskGraphNode:
     explicit_weight: bool
     state: _TaskGraphNodeState
     waiting_for_n_deps: int
+    guaranteed_tags: list[str]
 
-    def __init__(self, task: Task, parents: list["_TaskGraphNode"], weight: float, explicit_weight: bool) -> None:
+    def __init__(self, task: Task, parents: list["_TaskGraphNode"], weight: float, explicit_weight: bool,
+                 guaranteedtags: list[str]) -> None:
         self.task = task
         self.children = []
         self.parents = parents
@@ -127,6 +129,7 @@ class _TaskGraphNode:
         self.explicit_weight = explicit_weight
         self.state = _TaskGraphNodeState.Pending
         self.waiting_for_n_deps = 0
+        self.guaranteed_tags = guaranteedtags
 
     def mark_as_done_and_handle_children(self) -> list["_TaskGraphNode"]:
         assert self.state == _TaskGraphNodeState.Ready or self.state == _TaskGraphNodeState.Running
@@ -250,6 +253,7 @@ class Parallel:
     own_task_stats_data: dict[str, tuple[int, float, float]]
     task_stats_unaccounted: tuple[int, float, float]
     own_task_stats_unaccounted: tuple[int, float, float]
+    data_dependencies: dict[str, int]
 
     def __init__(self, jsonfname: str | None, nproc: int = 0, dbg_serialize: bool = False,
                  taskstatsofinterest: TaskStatsOfInterest = None) -> None:
@@ -298,6 +302,7 @@ class Parallel:
         self.task_stats_unaccounted = (0, 0., 0.)
         self.own_task_stats_unaccounted = (0, 0., 0.)
         self.old_logging_hook = False
+        self.data_dependencies = {}
 
     def __enter__(self) -> "Parallel":
         self.old_logging_hook = set_logging_hook(lambda rec: self.logq.put((-1, time.perf_counter(), rec)))
@@ -340,12 +345,12 @@ class Parallel:
         return taskparents, patterns
 
     def _internal_add_task_if(self, task: Task) -> bool:
+        assert isinstance(task, OwnTask) or task.data_dependencies is None
+
         assert current_proc_num() == -1
 
         assert task.name not in self.all_task_nodes
         islambda = callable(task.f) and task.f.__name__ == '<lambda>'
-        # if islambda:
-        #    print('lambda in task ' + task.name)
         assert isinstance(task, OwnTask) or isinstance(task, TaskPlaceholder) or not islambda
 
         taskparents, patterns = self._dependencies_to_parents(task.dependencies)
@@ -357,6 +362,21 @@ class Parallel:
             for p in taskparents:
                 assert isinstance(p, _TaskGraphNode)
 
+        # by this point, we're sure that we'll add this particular task
+        # checking data tags
+        guaranteedtags = {}
+        for n in taskparents:
+            for gt in n.guaranteed_tags:
+                guaranteedtags[gt] = 1
+        if task.data_dependencies is not None:
+            for d in task.data_dependencies.required_tags:
+                assert d in guaranteedtags
+            for nd in task.data_dependencies.required_not_tags:
+                assert nd not in guaranteedtags
+            for pd in task.data_dependencies.provided_tags:
+                guaranteedtags[pd] = 1
+
+        # adding task
         w = task.w
         explicitw = True
         if w is None:
@@ -364,7 +384,7 @@ class Parallel:
             w = 0.1 if isinstance(task,
                                   OwnTask) else 1.0  # 1 sec for non-owning tasks, and assuming that own tasks are shorter by default (they should be)
             w = self.estimated_time(task.name, w)
-        node = _TaskGraphNode(task, taskparents, w, explicitw)
+        node = _TaskGraphNode(task, taskparents, w, explicitw, list(guaranteedtags.keys()))
         assert task.name not in self.all_task_nodes
         self.all_task_nodes[task.name] = node
 
@@ -723,6 +743,15 @@ class Parallel:
 
         assert isinstance(ot.task, OwnTask)
         # debug('own task: '+ot.task.name)
+        if __debug__ and ot.task.data_dependencies is not None:
+            dd = ot.task.data_dependencies
+            for req in dd.required_tags:
+                assert req in self.data_dependencies
+            for reqnot in dd.required_not_tags:
+                assert reqnot not in self.data_dependencies
+            for prov in dd.provided_tags:
+                self.data_dependencies[prov] = 1
+
         params = []
         assert len(ot.parents) == len(ot.task.dependencies)
         for p in ot.parents:

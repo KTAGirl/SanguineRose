@@ -37,8 +37,10 @@ def log_waited() -> float:
     global _log_waited
     return _log_waited
 
+
 class StopSkipping:
     pass
+
 
 class EndOfRegularLog:
     pass

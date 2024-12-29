@@ -146,8 +146,8 @@ def _hashing_file_time_estimate(fsize: int) -> float:
 
 ### Tasks
 
-def _load_files_task_func(param: tuple[str, str,FolderListToCache]) -> tuple[dict[str, FileOnDisk],list[FileOnDisk]]:
-    (cachedir, name,folder_list) = param
+def _load_files_task_func(param: tuple[str, str, FolderListToCache]) -> tuple[dict[str, FileOnDisk], list[FileOnDisk]]:
+    (cachedir, name, folder_list) = param
     # filesbypath = {}
     filesbypath = _read_dict_of_files(cachedir, name)
     files_by_path = {}
@@ -163,7 +163,7 @@ def _load_files_task_func(param: tuple[str, str,FolderListToCache]) -> tuple[dic
         else:
             filtered_files.append(f)
 
-    return files_by_path,filtered_files
+    return files_by_path, filtered_files
 
 
 def _scan_folder_task_func(
@@ -380,13 +380,13 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         stats = _FolderScanStats()
 
         loadtaskname = 'sanguine.foldercache.' + self.name + '.load'
-        loadtask = tasks.Task(loadtaskname, _load_files_task_func, (self._cache_dir, self.name,self._folder_list), [])
+        loadtask = tasks.Task(loadtaskname, _load_files_task_func, (self._cache_dir, self.name, self._folder_list), [])
         parallel.add_task(loadtask)
 
         loadowntaskname = self._load_own_task_name()
         loadowntask = tasks.OwnTask(loadowntaskname, lambda _, out: self._load_files_own_task_func(out, parallel),
-                                    None,
-                                    [loadtaskname])
+                                    None, [loadtaskname],
+                                    datadeps=self._loadowntask_datadeps())
         parallel.add_task(loadowntask)
 
         for tt in allscantasks:
@@ -406,8 +406,9 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         scanningdeps = self._scanned_own_wildcard_task_name()
         hashingdeps = self._hashing_own_wildcard_task_name()
         reconciletask = tasks.OwnTask(self._reconcile_own_task_name(),
-                                      lambda _: self._own_reconcile_task_func(parallel, scannedfiles),
-                                      None, [scanningdeps] + [hashingdeps])
+                                      lambda _, _1: self._own_reconcile_task_func(parallel, scannedfiles),
+                                      None, [loadowntaskname] + [scanningdeps] + [hashingdeps],
+                                      datadeps=self._ownreconciletask_datadeps())
         parallel.add_task(reconciletask)
 
     @staticmethod
@@ -504,12 +505,21 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
     ### Own Task Funcs
 
-    def _load_files_own_task_func(self, out: tuple[dict[str, FileOnDisk],list[FileOnDisk]], parallel: tasks.Parallel) -> \
+    def _loadowntask_datadeps(self) -> tasks.TaskDataDependencies:
+        return tasks.TaskDataDependencies(
+            [],
+            ['sanguine.foldercache.' + self.name + '.reconciled()'],
+            ['sanguine.foldercache.' + self.name + '._files_by_path',
+             'sanguine.foldercache.' + self.name + '._filtered_files',
+             'sanguine.foldercache.' + self.name + '.pub_files_by_path'])
+
+    def _load_files_own_task_func(self, out: tuple[dict[str, FileOnDisk], list[FileOnDisk]],
+                                  parallel: tasks.Parallel) -> \
             tuple[tasks.SharedPubParam]:
         assert (self._state & 0x1) == 0
         self._state |= 0x1
         debug('FolderCache.{}: started processing loading files'.format(self.name))
-        (filesbypath,filteredfiles) = out
+        (filesbypath, filteredfiles) = out
         assert self._files_by_path is None
         assert self._filtered_files == []
         self._files_by_path = filesbypath
@@ -521,11 +531,23 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         debug('FolderCache.{}: done processing loading files'.format(self.name))
         return (pubparam,)
 
+    def _owncalchashtask_datadeps(self) -> tasks.TaskDataDependencies:
+        return tasks.TaskDataDependencies(
+            ['sanguine.foldercache.' + self.name + '._files_by_path'],
+            ['sanguine.foldercache.' + self.name + '.reconciled()'],
+            [])
+
     def _own_calc_hash_task_func(self, out: tuple[FileOnDisk], scannedfiles: dict[str, FileOnDisk]) -> None:
         assert (self._state & 0x3) == 0x1
         (f,) = out
         scannedfiles[f.file_path] = f
         self._files_by_path[f.file_path] = f
+
+    def _ownreconciletask_datadeps(self) -> tasks.TaskDataDependencies:
+        return tasks.TaskDataDependencies(
+            ['sanguine.foldercache.' + self.name + '._files_by_path'],
+            [],
+            ['sanguine.foldercache.' + self.name + '.reconciled()'])
 
     def _own_reconcile_task_func(self, parallel: tasks.Parallel,
                                  scannedfiles: dict[str, FileOnDisk]) -> None:
@@ -555,6 +577,12 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         parallel.add_task(
             savetask)  # we won't explicitly wait for savetask, it will be waited for in Parallel.__exit__
 
+    def _ownscantask_datadeps(self) -> tasks.TaskDataDependencies:
+        return tasks.TaskDataDependencies(
+            [],
+            ['sanguine.foldercache.' + self.name + '.reconciled()'],
+            [])
+
     def _scan_folder_own_task_func(self, out: tuple[list[str], _FolderScanStats, _FolderScanDirOut],
                                    parallel: tasks.Parallel, scannedfiles: dict[str, FileOnDisk],
                                    stats: _FolderScanStats) -> None:
@@ -580,7 +608,8 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             howntaskname = self._hashing_own_task_name(fpath)
             howntask = tasks.OwnTask(howntaskname,
                                      lambda _, o: self._own_calc_hash_task_func(o, scannedfiles),
-                                     None, [htaskname], 0.001)  # expected to take negligible time
+                                     None, [htaskname], 0.001,
+                                     datadeps=self._owncalchashtask_datadeps())  # expected to take negligible time
             parallel.add_tasks([htask, howntask])
 
         # new tasks
