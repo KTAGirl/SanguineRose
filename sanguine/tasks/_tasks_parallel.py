@@ -469,15 +469,13 @@ class Parallel:
                          + taskstr + '\n')
                 abort_if_not(False)
 
-    def _run_all_own_tasks(self) -> tuple[bool, float]:
-        town = 0.
+    def _run_all_own_tasks(self, mltimer: _MainLoopTimer) -> bool:
         ran = False
         assert len(self._ready_own_task_nodes) == len(self._ready_own_task_nodes_heap)
         while len(self._ready_own_task_nodes) > 0:
-            towntasks = self._run_own_task()  # ATTENTION: own tasks may call add_task() or add_tasks() within
-            town += towntasks
+            self._run_own_task(mltimer)  # ATTENTION: own tasks may call add_task() or add_tasks() within
             ran = True
-        return ran, town
+        return ran
 
     @staticmethod
     def _log_stats_data(items, unaccounted: tuple[int, float, float]) -> None:
@@ -493,14 +491,13 @@ class Parallel:
 
         # graph ok, running the initial tasks
         assert len(self._pending_task_nodes)
-        mltimer = _MainLoopTimer('other')
-        maintown = 0.
+        mltimer = _MainLoopTimer('overhead')
         maintexttasks = 0.
 
         # we need to try running own tasks before main loop - otherwise we can get stuck in an endless loop of self._schedule_best_tasks()
-        mltimer.stage('own-tasks')
-        _, dtown = self._run_all_own_tasks()
-        maintown += dtown
+        mltimer.stage('own-tasks.overhead')
+        self._run_all_own_tasks(mltimer)
+        mltimer.stage('overhead')
 
         # main loop
         while True:
@@ -512,9 +509,8 @@ class Parallel:
                 if not ok:
                     break
 
-            mltimer.stage('own-tasks')
-            ran, dtown = self._run_all_own_tasks()
-            maintown += dtown
+            mltimer.stage('own-tasks.overhead')
+            ran = self._run_all_own_tasks(mltimer)
 
             if ran:
                 mltimer.stage('scheduler')
@@ -524,10 +520,10 @@ class Parallel:
                     if not ok:
                         break
 
-            mltimer.stage('printing-stats')
+            mltimer.stage('logging-stats')
             self._log_stats()
 
-            mltimer.stage('other')
+            mltimer.stage('scheduler')
             done = self.is_all_done()
             if done:
                 break
@@ -535,7 +531,7 @@ class Parallel:
             # waiting for other processes to report
             mltimer.stage('waiting')
             got = self._outq.get()
-            dwait = mltimer.stage('other')
+            dwait = mltimer.stage('overhead')
             if __debug__:  # pickle.dumps is expensive by itself
                 debug('Parallel: response size: {}'.format(len(pickle.dumps(got))))
             # warn(str(self.logq.qsize()))
@@ -574,10 +570,10 @@ class Parallel:
 
             maintexttasks += self._process_out_tasks(procnum, tasks)
 
-            mltimer.stage('printing-stats')
+            mltimer.stage('logging-stats')
             self._log_stats()
 
-            mltimer.stage('other')
+            mltimer.stage('scheduler')
             done = self.is_all_done()
             if done:
                 break
@@ -597,11 +593,6 @@ class Parallel:
         mainpct = (elapsed - waiting) / elapsed * 100.
         info_or_perf_warn(mainpct > 50., 'Parallel: main process load {:.1f}%'.format(mainpct))
 
-        owntasks = mltimer.stats['own-tasks']
-        if owntasks - maintown > 0.01:
-            pct = (owntasks - maintown) / owntasks * 100.
-            info_or_perf_warn(pct > 1.,
-                              'Parallel: own tasks overhead {:.2f}s ({:.1f}%)'.format(owntasks - maintown, pct))
         info('Parallel: breakdown per own task type of interest:')
         Parallel._log_stats_data(self._own_task_stats_data.items(), self._own_task_stats_unaccounted)
 
@@ -743,11 +734,13 @@ class Parallel:
                 return
             Parallel._update_task_stats_internal(self._task_stats_data, srch, cpu, elapsed)
 
-    def _run_own_task(self) -> float:
+    def _run_own_task(self, mltimer: _MainLoopTimer) -> None:
         assert self._current_task_node is None
         assert len(self._ready_own_task_nodes) > 0
         towntask = 0.
+        mltimer.stage('scheduler')
         ot = heapq.heappop(self._ready_own_task_nodes_heap)
+        mltimer.stage('own-tasks.overhead')
 
         assert isinstance(ot.task, OwnTask)
         # debug('own task: '+ot.task.name)
@@ -772,10 +765,12 @@ class Parallel:
         assert len(params) <= len(ot.task.dependencies)
         assert len(params) <= 3
 
+        mltimer.stage('own-tasks.logging')
         info('Parallel: running own task {}'.format(ot.task.name))
         t0 = time.perf_counter()
         tp0 = time.process_time()
 
+        mltimer.stage('own-tasks')
         # nall = len(self.all_task_nodes)
         # ATTENTION: ot.task.f(...) may call add_task() or add_task(s) within
         assert self._current_task_node is None
@@ -790,10 +785,12 @@ class Parallel:
 
         elapsed = time.perf_counter() - t0
         cpu = time.process_time() - tp0
+        mltimer.stage('own-tasks.logging')
         info('Parallel: done own task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
             ot.task.name, cpu, elapsed))
         towntask += elapsed
 
+        mltimer.stage('scheduler')
         self._update_task_stats(True, ot.task.name, cpu, elapsed)
         self._update_weight(ot.task.name, elapsed)
 
@@ -805,8 +802,7 @@ class Parallel:
             self._node_is_ready(ch)
         ot.state = _TaskGraphNodeState.Done
         self._done_task_nodes[ot.task.name] = (ot, out)
-
-        return towntask
+        mltimer.stage('own-tasks.overhead')
 
     def is_all_done(self) -> bool:
         return len(self._done_task_nodes) == len(self._all_task_nodes)
