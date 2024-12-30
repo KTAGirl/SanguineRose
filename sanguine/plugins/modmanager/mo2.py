@@ -25,7 +25,8 @@ class Mo2ProjectConfig(ModManagerConfig):
         self.generated_profiles = None
         self.master_modlist = None
 
-    def parse_config_section(self, section: dict[str, any], configdir: str, fullconfig: dict[str, any]) -> None:
+    def parse_config_section(self, section: dict[str, any], configdir: str, fullconfig: dict[str, any],
+                             download_dirs: list[str]) -> None:
         abort_if_not('mo2dir' in section, "'mo2dir' must be present in config.mo2 for modmanager=mo2")
         mo2dir = config_dir_path(section['mo2dir'], configdir, fullconfig)
         abort_if_not(isinstance(mo2dir, str), 'config.mo2.mo2dir must be a string')
@@ -47,7 +48,7 @@ class Mo2ProjectConfig(ModManagerConfig):
                 ignore_dirs.append(normalize_vfs_dir_path(ignore, mo2dir))
 
         assert self.mo2dir is None
-        self.mo2dir = FolderToCache(mo2dir, ignore_dirs)
+        self.mo2dir = FolderToCache(mo2dir, ignore_dirs + [mo2dir + 'mods\\'] + download_dirs)
 
         assert self.master_profile is None
         assert self.generated_profiles is None
@@ -67,7 +68,7 @@ class Mo2ProjectConfig(ModManagerConfig):
             normalize_dir_path(self.mo2dir.folder + 'profiles\\' + self.master_profile + '\\'))
 
     def active_vfs_folders(self) -> FolderListToCache:
-        out: FolderListToCache = FolderListToCache([FolderToCache(self.mo2dir.folder, [self.mo2dir.folder + 'mods\\'])])
+        out: FolderListToCache = FolderListToCache([self.mo2dir])
         for mod in self.master_modlist.all_enabled():
             folder = normalize_dir_path(self.mo2dir.folder + 'mods\\' + mod + '\\')
             if FolderToCache.ok_to_construct(folder, self.mo2dir.exdirs):

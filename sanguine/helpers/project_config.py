@@ -66,7 +66,8 @@ class ModManagerConfig:
         self.mod_manager_name = modmanagername
 
     @abstractmethod
-    def parse_config_section(self, section: dict[str, any], configdir: str, fullconfig: dict[str, any]) -> None:
+    def parse_config_section(self, section: dict[str, any], configdir: str, fullconfig: dict[str, any],
+                             download_dirs: list[str]) -> None:
         pass
 
     @abstractmethod
@@ -171,7 +172,6 @@ class ProjectConfig:
                          lambda: "config.{} must be a dictionary, got {}".format(
                              self.mod_manager_config.mod_manager_name,
                              repr(mmc_config)))
-            self.mod_manager_config.parse_config_section(mmc_config, self.config_dir, jsonconfig)
 
             if 'downloads' not in jsonconfig:
                 dls = self.mod_manager_config.default_download_dirs()
@@ -182,6 +182,8 @@ class ProjectConfig:
             abort_if_not(isinstance(dls, list),
                          lambda: "'downloads' in config must be a string or a list, got " + repr(dls))
             self.download_dirs = [config_dir_path(dl, self.config_dir, jsonconfig) for dl in dls]
+
+            self.mod_manager_config.parse_config_section(mmc_config, self.config_dir, jsonconfig, self.download_dirs)
 
             self.cache_dir = config_dir_path(jsonconfig.get('cache', self.config_dir + '..\\sanguine.cache\\'),
                                              self.config_dir,
