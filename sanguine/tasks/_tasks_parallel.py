@@ -223,7 +223,7 @@ class Parallel:
     _logq: SimpleQueue
     _out_logq: SimpleQueue
     _processes: list[Process]
-    _unbusyprocesses: list[int]  # procidx of non-busy processes
+    _process_requests: list[list[float]]
     _inqueues: list[PQueue]
     _procrunningconfirmed: list[bool]  # otherwise join() on a not running yet process may hang
     _logthread: Thread
@@ -311,7 +311,7 @@ class Parallel:
     def __enter__(self) -> "Parallel":
         self._old_logging_hook = set_logging_hook(lambda rec: self._logq.put((-1, time.perf_counter(), rec)))
         self._processes = []
-        self._unbusyprocesses = []  # we'll aim to have it at 1; improvements to keep pressure are possible,
+        self._process_requests = []
         # but not as keeping simplistic processesload[i] == 2 (it disbalances end of processing way too much)
         self._inqueues = []
         self._procrunningconfirmed = []  # otherwise join() on a not running yet process may hang
@@ -326,11 +326,11 @@ class Parallel:
             p = Process(target=_proc_func, args=(i, inq, self._outq, self._logq))
             self._processes.append(p)
             p.start()
-            self._unbusyprocesses.insert(0, i)
+            self._process_requests.append([])
             self._procrunningconfirmed.append(False)
         self._shutting_down = False
         self._has_joined = False
-        assert len(self._unbusyprocesses) == len(self._processes)
+        assert len(self._process_requests) == len(self._processes)
         assert len(self._inqueues) == len(self._processes)
         return self
 
@@ -565,8 +565,8 @@ class Parallel:
                               'Parallel: after waiting for {}, received results of {} task(s) from process #{}'.format(
                                   strwait, len(tasks), procnum + 1))
 
-            assert procnum not in self._unbusyprocesses
-            self._unbusyprocesses.append(procnum)
+            assert len(self._process_requests[procnum]) > 0
+            self._process_requests[procnum] = self._process_requests[procnum][1:]
 
             maintexttasks += self._process_out_tasks(procnum, tasks)
 
@@ -686,6 +686,8 @@ class Parallel:
             tout += self._process_out_tasks(pidx, out)
             return True, tout
 
+        self._process_requests[pidx].append(total_time)
+
         msg = (taskpluses, None)
         mltimer.stage('scheduler.queue-put')
         self._inqueues[pidx].put(msg)
@@ -766,7 +768,7 @@ class Parallel:
         assert len(params) <= 3
 
         mltimer.stage('own-tasks.logging')
-        info('Parallel: running own task {}'.format(ot.task.name))
+        debug('Parallel: running own task {}'.format(ot.task.name))
         t0 = time.perf_counter()
         tp0 = time.process_time()
 
@@ -829,9 +831,20 @@ class Parallel:
         debug('Parallel: replaced task placeholder {}, inherited {} children'.format(task.name, len(children)))
 
     def _find_best_process(self) -> int:
-        if len(self._unbusyprocesses) == 0:
-            return -1
-        return self._unbusyprocesses.pop()
+        best = -1
+        bestf = None
+        for i in range(len(self._process_requests)):
+            if len(self._process_requests[i]) == 0:
+                return i
+            elif len(self._process_requests[i]) == 1:
+                if bestf is None:
+                    best = i
+                    bestf = self._process_requests[i][0]
+                elif self._process_requests[i][0] < bestf:
+                    best = i
+                    bestf = self._process_requests[i][0]
+
+        return best
 
     def received_shared_return(self, sharedparam: SharedReturnParam) -> any:
         (name, sender) = sharedparam
