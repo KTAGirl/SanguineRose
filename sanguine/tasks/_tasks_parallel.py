@@ -562,10 +562,15 @@ class Parallel:
                 msgwarn = True
 
             (procnum, tasks) = got
+
+            info_or_perf_warn(msgwarn,
+                              'Parallel: after waiting for {}, received results of {} tasks from process #{}'.format(
+                                  strwait, procnum + 1, dt))
+
             assert procnum not in self.unbusyprocesses
             self.unbusyprocesses.append(procnum)
 
-            maintexttasks += self._process_out_tasks(procnum, tasks, strwait, msgwarn)
+            maintexttasks += self._process_out_tasks(procnum, tasks)
 
             mltimer.stage('printing-stats')
             self._stats()
@@ -613,8 +618,7 @@ class Parallel:
             self.ready_task_nodes[ch.task.name] = ch
             heapq.heappush(self.ready_task_nodes_heap, ch)
 
-    def _process_out_tasks(self, procnum: int, tasks: list[tuple[str, tuple, any]], strwait: str | None,
-                           msgwarn: bool) -> float:
+    def _process_out_tasks(self, procnum: int, tasks: list[tuple[str, tuple, any]]) -> float:
         outt = 0.
         for taskname, times, out in tasks:
             assert taskname in self.running_task_nodes
@@ -623,19 +627,11 @@ class Parallel:
             (cput, taskt) = times
             assert procnum == expectedprocnum
             dt = time.perf_counter() - started
-            if strwait is not None:
-                info_or_perf_warn(msgwarn,
-                                  'Parallel: after waiting for {}, received results of task {} from process #{}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
-                                      strwait, taskname, procnum + 1, dt, taskt, cput))
-            else:
-                info(
-                    'Parallel: received results of task {} from process #{}, elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
-                        taskname, procnum + 1, dt, taskt, cput))
+            debug('Parallel: task {} from process #{} took elapsed/task/cpu={:.2f}/{:.2f}/{:.2f}s'.format(
+                taskname, procnum + 1, dt, taskt, cput))
             self._update_task_stats(False, taskname, cpu=cput, elapsed=taskt)
             outt += taskt
 
-            strwait = None
-            msgwarn = False
             self._update_weight(taskname, taskt)
             del self.running_task_nodes[taskname]
             assert taskname not in self.done_task_nodes
@@ -694,7 +690,7 @@ class Parallel:
             ex, out = _process_nonown_tasks(taskpluses, None)
             if ex is not None:
                 raise ex
-            tout += self._process_out_tasks(pidx, out, None, False)
+            tout += self._process_out_tasks(pidx, out)
             return True, tout
 
         msg = (taskpluses, None)
