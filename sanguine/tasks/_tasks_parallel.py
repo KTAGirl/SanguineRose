@@ -44,10 +44,10 @@ def _process_nonown_tasks(tasks: list[list], dwait: float | None) -> tuple[Excep
         t0 = time.perf_counter()
         tp0 = time.process_time()
         if dwait is not None:
-            info('after waiting for {:.2f}s, starting task {}'.format(dwait, task.name))
+            debug('after waiting for {:.2f}s, starting task {}'.format(dwait, task.name))
             dwait = None
         else:
-            info('starting task {}'.format(task.name))
+            debug('starting task {}'.format(task.name))
         (ex, out) = _run_task(task, tplus[1:])
         if ex is not None:
             return ex, None  # for tplus

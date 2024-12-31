@@ -69,11 +69,12 @@ def _write_dict_of_files(dirpath: str, name: str, filesbypath: dict[str, FileOnD
         # noinspection PyTypeChecker
         pickle.dump(outfiles, wf)
 
-    fpath2 = dirpath + 'foldercache.' + name + '.njson'
-    with open_3rdparty_txt_file_w(fpath2) as wf2:
-        srt: list[tuple[str, FileOnDisk]] = sorted(outfiles.items())
-        for item in srt:
-            wf2.write(as_json(item[1]) + '\n')
+    if __debug__:
+        fpath2 = dirpath + 'foldercache.' + name + '.njson'
+        with open_3rdparty_txt_file_w(fpath2) as wf2:
+            srt: list[tuple[str, FileOnDisk]] = sorted(outfiles.items())
+            for item in srt:
+                wf2.write(as_json(item[1]) + '\n')
 
 
 def _read_all_scan_stats(dirpath: str, name: str) -> dict[str, dict[str, int]]:
@@ -92,10 +93,11 @@ def _write_all_scan_stats(dirpath: str, name: str, all_scan_stats: dict[str, dic
         # noinspection PyTypeChecker
         pickle.dump(all_scan_stats_for_save, wf)
 
-    fpath2 = dirpath + 'foldercache.' + name + '.scan-stats.json'
-    with open_3rdparty_txt_file_w(fpath2) as wf2:
-        # noinspection PyTypeChecker
-        json.dump(all_scan_stats_for_save, wf2, indent=2)
+    if __debug__:
+        fpath2 = dirpath + 'foldercache.' + name + '.scan-stats.json'
+        with open_3rdparty_txt_file_w(fpath2) as wf2:
+            # noinspection PyTypeChecker
+            json.dump(all_scan_stats_for_save, wf2, indent=2)
 
 
 class _FolderScanStats:
