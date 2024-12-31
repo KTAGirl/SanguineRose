@@ -5,7 +5,7 @@ from enum import IntEnum
 from multiprocessing import Queue as PQueue, SimpleQueue, Process, shared_memory
 from threading import Thread  # only for logging!
 
-from sanguine.install.install_logging import (add_logging_handler, set_logging_hook)
+from sanguine.install.install_logging import add_logging_handler, set_logging_hook
 from sanguine.tasks._tasks_common import *
 from sanguine.tasks._tasks_logging import (_ChildProcessLogHandler, create_logging_thread,
                                            log_waited, log_elapsed, EndOfRegularLog, StopSkipping)
@@ -520,8 +520,9 @@ class Parallel:
                     if not ok:
                         break
 
-            mltimer.stage('logging-stats')
-            self._log_stats()
+            if __debug__:
+                mltimer.stage('logging-stats')
+                self._log_stats(dbglevel=logging.DEBUG)
 
             mltimer.stage('scheduler')
             done = self.is_all_done()
@@ -571,7 +572,7 @@ class Parallel:
             maintexttasks += self._process_out_tasks(procnum, tasks)
 
             mltimer.stage('logging-stats')
-            self._log_stats()
+            self._log_stats(dbglevel=logging.INFO)
 
             mltimer.stage('scheduler')
             done = self.is_all_done()
@@ -788,7 +789,7 @@ class Parallel:
         elapsed = time.perf_counter() - t0
         cpu = time.process_time() - tp0
         mltimer.stage('own-tasks.logging')
-        info('Parallel: done own task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
+        debug('Parallel: done own task {}, cpu/elapsed={:.2f}/{:.2f}s'.format(
             ot.task.name, cpu, elapsed))
         towntask += elapsed
 
@@ -965,13 +966,13 @@ class Parallel:
         pub.close()
         del self.publications[name]
 
-    def _log_stats(self) -> None:
+    def _log_stats(self, dbglevel: int) -> None:
         assert len(self._ready_task_nodes) == len(self._ready_task_nodes_heap)
         statsstr = 'Parallel: {} tasks, including {} pending, {}/{} ready, {} running, {} done'.format(
             len(self._all_task_nodes), len(self._pending_task_nodes), len(self._ready_task_nodes),
             len(self._ready_own_task_nodes), len(self._running_task_nodes), len(self._done_task_nodes))
         if statsstr != self._last_log_stats_str:
-            info(statsstr)
+            log_with_level(dbglevel, statsstr)
             self._last_log_stats_str = statsstr
 
         if __debug__:

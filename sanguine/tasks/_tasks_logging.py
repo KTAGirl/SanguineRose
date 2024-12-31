@@ -3,7 +3,7 @@ import time
 from multiprocessing import SimpleQueue
 from threading import Thread
 
-from sanguine.install.install_logging import (log_record, log_record_skip_console, make_log_record, log_level_name)
+from sanguine.install.install_logging import (log_record, log_record_skip_console, make_log_record)
 from sanguine.tasks._tasks_common import current_proc_num
 
 
@@ -120,7 +120,7 @@ def _log_skipped(skipped: dict[int, int]) -> None:
     for levelno in skipped:
         rec = make_log_record(levelno,
                               'tasks.log: logging thread overloaded, skipped {} [{}] entries in console, see log file for full details'.format(
-                                  skipped[levelno], log_level_name(levelno)))
+                                  skipped[levelno], logging.getLevelName(levelno)))
         log_record(rec)
 
 

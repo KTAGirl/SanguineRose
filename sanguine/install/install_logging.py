@@ -14,7 +14,7 @@ def _sanguine_patch_record(record: logging.LogRecord) -> None:
 
 _PERFWARN_LEVEL_NUM = 25
 
-
+'''
 def log_level_name(levelno: int) -> str:
     match levelno:
         case logging.DEBUG:
@@ -31,7 +31,7 @@ def log_level_name(levelno: int) -> str:
             return 'CRITICAL'
         case _:
             return 'LEVEL={}'.format(levelno)
-
+'''
 
 _FORMAT: str = '[%(levelname)s@%(sanguine_from_start).2f]:%(sanguine_prefix)s %(message)s (%(filename)s:%(lineno)d)'
 
@@ -155,18 +155,35 @@ def log_record_skip_console(record: logging.LogRecord) -> None:
 def _make_log_record(level, msg: str) -> logging.LogRecord:
     global _logger
     fn, lno, func, sinfo = _logger.findCaller(False, stacklevel=3)
-    return _logger.makeRecord(_logger.name, level, fn, lno, msg, (), None, func, None, sinfo)
+    rec = _logger.makeRecord(_logger.name, level, fn, lno, msg, (), None, func, None, sinfo)
+    rec.sanguine_when = time.perf_counter()
+    rec.sanguine_prefix = ''
+    return rec
 
 
 def make_log_record(level, msg: str) -> logging.LogRecord:  # different stacklevel than _make_log_record
     global _logger
     fn, lno, func, sinfo = _logger.findCaller(False, stacklevel=2)
-    return _logger.makeRecord(_logger.name, level, fn, lno, msg, (), None, func, None, sinfo)
+    rec = _logger.makeRecord(_logger.name, level, fn, lno, msg, (), None, func, None, sinfo)
+    rec.sanguine_when = time.perf_counter()
+    rec.sanguine_prefix = ''
+    return rec
 
 
 def logging_started() -> float:
     global _started
     return _started
+
+
+def log_with_level(level: int, msg: str) -> None:
+    if not __debug__ and level <= logging.DEBUG:
+        return
+    global _logging_hook
+    if _logging_hook is not None:
+        _logging_hook(_make_log_record(level, msg))
+        return
+    global _logger
+    _logger.log(level, msg, stacklevel=2)
 
 
 def debug(msg: str) -> None:
