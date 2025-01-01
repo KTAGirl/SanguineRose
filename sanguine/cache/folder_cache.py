@@ -395,6 +395,13 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             for r in remainder:
                 allscantasks.append((r, 10000))
 
+        if __debug__:
+            for t in allscantasks:
+                for tt in allscantasks:
+                    if t != tt:
+                        assert not FolderCache._two_folders_overlap(t[0].folder, t[0].exdirs, tt[0].folder,
+                                                                    tt[0].exdirs)
+
         # ready to start tasks
         scannedfiles = {}
         stats = _FolderScanStats()
@@ -444,17 +451,17 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         if a.folder.startswith(b.folder):
             if a.folder == b.folder:
                 return FolderCache._ex_subtract(b.exdirs, a)
-            else: # b shorter than a
+            else:  # b shorter than a
                 # a.folder gets fully excluded
-                #newex = a.exdirs + [b.folder]
+                # newex = a.exdirs + [b.folder]
                 assert not FolderToCache.ok_to_construct(a.folder, [b.folder])
                 #    return [FolderToCache(a.folder, newex)] + FolderCache._ex_subtract(b.exdirs, a)
                 return FolderCache._ex_subtract(b.exdirs, a)
-        elif b.folder.startswith(a.folder): # a shorter than b
+        elif b.folder.startswith(a.folder):  # a shorter than b
             # b gets excluded
             newex = a.exdirs + [b.folder]
             assert FolderToCache.ok_to_construct(a.folder, newex)
-            return [FolderToCache(a.folder,newex)] + FolderCache._ex_subtract(b.exdirs, a)
+            return [FolderToCache(a.folder, newex)] + FolderCache._ex_subtract(b.exdirs, a)
         else:  # a and b are unrelated
             return [a]
 

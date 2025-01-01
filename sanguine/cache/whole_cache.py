@@ -75,6 +75,7 @@ class WholeCache:
 
 if __name__ == '__main__':
     import sys
+    import time
 
     if len(sys.argv) > 1 and sys.argv[1] == 'test':
         ttmppath = normalize_dir_path('../../../sanguine.tmp\\')
@@ -86,7 +87,10 @@ if __name__ == '__main__':
 
         wcache = WholeCache('KTAGirl', cfg)
         with tasks.Parallel(None, taskstatsofinterest=wcache.stats_of_interest(), dbg_serialize=False) as tparallel:
+            t0 = time.perf_counter()
             wcache.start_tasks(tparallel)
+            dt = time.perf_counter() - t0
+            info('Whole Cache: starting tasks took {:.2f}s'.format(dt))
             tparallel.run([])
         wcache.done()
 
