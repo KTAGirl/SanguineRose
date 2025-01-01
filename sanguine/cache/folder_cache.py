@@ -440,24 +440,23 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
     @staticmethod
     def _ex_subtract(bex: list[str], a: FolderToCache) -> list[FolderToCache]:
-        out = []
         for bx in bex:
-            if bx.startswith(a.folder):
-                out += FolderCache._subtract_folder_from_folder(FolderToCache(bx, []), a)
-        return out
+            if a.folder.startswith(bx): # bx contains a.folder
+                return [a]
+        return []
 
     @staticmethod
     def _subtract_folder_from_folder(a: FolderToCache, b: FolderToCache) -> list[FolderToCache]:
         if a.folder.startswith(b.folder):
             if a.folder == b.folder:
                 return FolderCache._ex_subtract(b.exdirs, a)
-            else:  # b shorter than a
+            else:  # b contains a
                 # a.folder gets fully excluded
                 # newex = a.exdirs + [b.folder]
                 assert not FolderToCache.ok_to_construct(a.folder, [b.folder])
                 #    return [FolderToCache(a.folder, newex)] + FolderCache._ex_subtract(b.exdirs, a)
                 return FolderCache._ex_subtract(b.exdirs, a)
-        elif b.folder.startswith(a.folder):  # a shorter than b
+        elif b.folder.startswith(a.folder):  # a contains b
             # b gets excluded
             newex = a.exdirs + [b.folder]
             assert FolderToCache.ok_to_construct(a.folder, newex)

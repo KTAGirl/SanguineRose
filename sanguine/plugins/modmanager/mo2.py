@@ -14,6 +14,7 @@ class Mo2Plugin(ModManagerPluginBase):
 
 class Mo2ProjectConfig(ModManagerConfig):
     mo2dir: FolderToCache | None
+    ignore_dirs: list[str]
     master_profile: str | None
     generated_profiles: dict[str, str] | None
     master_modlist: ModList | None
@@ -33,10 +34,10 @@ class Mo2ProjectConfig(ModManagerConfig):
 
         ignores = section.get('ignores', ['{DEFAULT-MO2-IGNORES}'])
         abort_if_not(isinstance(ignores, list), lambda: "config.mo2.ignores must be a list, got " + repr(ignores))
-        ignore_dirs = []
+        self.ignore_dirs = []
         for ignore in ignores:
             if ignore == '{DEFAULT-MO2-IGNORES}':
-                ignore_dirs += [normalize_dir_path(mo2dir + defignore) for defignore in [
+                self.ignore_dirs += [normalize_dir_path(mo2dir + defignore) for defignore in [
                     'plugins\\data\\RootBuilder',
                     'crashDumps',
                     'logs',
@@ -45,10 +46,10 @@ class Mo2ProjectConfig(ModManagerConfig):
                     'overwrite\\ShaderCache'
                 ]]
             else:
-                ignore_dirs.append(normalize_vfs_dir_path(ignore, mo2dir))
+                self.ignore_dirs.append(normalize_vfs_dir_path(ignore, mo2dir))
 
         assert self.mo2dir is None
-        self.mo2dir = FolderToCache(mo2dir, ignore_dirs + [mo2dir + 'mods\\'] + download_dirs)
+        self.mo2dir = FolderToCache(mo2dir, self.ignore_dirs + [mo2dir + 'mods\\'] + download_dirs)
 
         assert self.master_profile is None
         assert self.generated_profiles is None
@@ -67,6 +68,12 @@ class Mo2ProjectConfig(ModManagerConfig):
         self.master_modlist = ModList(
             normalize_dir_path(self.mo2dir.folder + 'profiles\\' + self.master_profile + '\\'))
 
+    def is_path_ignored(self,path:str) -> bool:
+        for ig in self.ignore_dirs:
+            if path.startswith(ig):
+                return True
+        return False
+
     def active_vfs_folders(self) -> FolderListToCache:
         out: FolderListToCache = FolderListToCache([self.mo2dir])
         modsdir = self.mo2dir.folder + 'mods\\'
@@ -75,9 +82,8 @@ class Mo2ProjectConfig(ModManagerConfig):
 
         for mod in self.master_modlist.all_enabled():
             folder = normalize_dir_path(self.mo2dir.folder + 'mods\\' + mod + '\\')
-            if FolderToCache.ok_to_construct(folder, exdirs):
-                out.append(
-                    FolderToCache(folder, exdirs))
+            if FolderToCache.ok_to_construct(folder, exdirs) and not self.is_path_ignored(folder):
+                out.append(FolderToCache(folder, exdirs))
         return out
 
     def default_download_dirs(self) -> list[str]:
