@@ -172,21 +172,21 @@ def _load_files_task_func(param: tuple[str, str, FolderListToCache]) -> tuple[di
 
 
 def _scan_folder_task_func(
-        param: tuple[str, str, list[str], str],
-        fromownload: tuple[tasks.SharedPubParam]) -> tuple[
-    list[str], _FolderScanStats, _FolderScanDirOut]:
-    (rootpath, taskroot, exdirs, name) = param
+        param: tuple[FolderToCache, str],
+        fromownload: tuple[tasks.SharedPubParam]
+) -> tuple[FolderToCache, _FolderScanStats, _FolderScanDirOut]:
+    (tocache, name) = param
     (pubfilesbypath,) = fromownload
-    sdout = _FolderScanDirOut(rootpath)
+    sdout = _FolderScanDirOut(tocache.folder)
     stats = _FolderScanStats()
     filesbypath = tasks.from_publication(pubfilesbypath)
     started = time.perf_counter()
     lfilesbypath = len(filesbypath)
-    FolderCache.scan_dir(started, sdout, stats, rootpath, taskroot, filesbypath, pubfilesbypath, exdirs, name)
+    FolderCache.scan_dir(started, sdout, stats, tocache, tocache.folder, filesbypath, pubfilesbypath, name)
     debug('FolderCache._scan_folder_task_func(): requested_files/requested_dirs/scanned_files={}/{}/{}'.format(
         len(sdout.requested_files), len(sdout.requested_dirs), len(sdout.scanned_files)))
     assert len(filesbypath) == lfilesbypath
-    return exdirs, stats, sdout
+    return tocache, stats, sdout
 
 
 def _calc_hash_task_func(param: tuple[str, float, int]) -> tuple[FileOnDisk]:
@@ -244,11 +244,11 @@ class _ScanStatsNode:
         return rootstatnode
 
     @staticmethod
-    def _append_task(alltasks: list[tuple[str, str, int, list[str]]], root: str, path: str, nf: int, exdirs: list[str],
+    def _append_task(alltasks: list[tuple[FolderToCache, int]], path: str, nf: int, exdirs: list[str],
                      extexdirs: list[str]) -> None:
         assert len(FolderToCache.filter_ex_dirs(exdirs, path)) == len(exdirs)
         mergedexdirs = exdirs + FolderToCache.filter_ex_dirs(extexdirs, path)
-        alltasks.append((root, path, nf, mergedexdirs))
+        alltasks.append((FolderToCache(path, mergedexdirs), nf))
 
     def _is_filtered_out(self, exdirs: list[str]) -> bool:
         for exdir in exdirs:
@@ -256,21 +256,16 @@ class _ScanStatsNode:
                 return True
         return False
 
-    def _filter_tree(self, exdirs: list[str]) -> None:  # recursive
-        assert not self._is_filtered_out(exdirs)
-        self.children = [ch for ch in self.children if not ch._is_filtered_out(exdirs)]
-
     @staticmethod
-    def make_tree(scan_stats: dict[str, int] | None, rootfolder: str, exdirs: list[str]):
+    def make_tree(scan_stats: dict[str, int] | None, rootfolder: str):
         if scan_stats is None:
             rootstatnode = _ScanStatsNode(None, rootfolder, 10000)  # a LOT
         else:
             rootstatnode = _ScanStatsNode._read_tree_from_stats(scan_stats)
-            assert rootstatnode.path.startswith(rootfolder)
-            rootstatnode._filter_tree(exdirs)
+            assert rootstatnode.path == rootfolder
         return rootstatnode
 
-    def fill_tasks(self, alltasks: list[tuple[str, str, int, list[str]]], root: str,
+    def fill_tasks(self, alltasks: list[tuple[FolderToCache, int]], root: str,
                    extexdirs: list[str]) -> tuple[int, list[str]] | None:  # recursive
         nf = self.own_nf
         chex = []
@@ -283,7 +278,7 @@ class _ScanStatsNode:
             chex.append(exdirs)
             chexmerged += exdirs
         if self.parent is None:
-            _ScanStatsNode._append_task(alltasks, root, self.path, nf, chexmerged, extexdirs)
+            _ScanStatsNode._append_task(alltasks, self.path, nf, chexmerged, extexdirs)
             return None
         if nf < _scan_task_nf_threshold_heuristics():
             return nf, chexmerged
@@ -293,7 +288,7 @@ class _ScanStatsNode:
             outexdirs = []
             for i in range(len(self.children)):
                 ch = self.children[i]
-                _ScanStatsNode._append_task(alltasks, root, ch.path, chnfs[i], chex[i], extexdirs)
+                _ScanStatsNode._append_task(alltasks, ch.path, chnfs[i], chex[i], extexdirs)
                 outexdirs.append(ch.path)
             return self.own_nf, outexdirs
 
@@ -374,12 +369,31 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
     def _start_tasks(self, parallel: tasks.Parallel) -> None:
         # building tree of known scans
-        allscantasks: list[tuple[str, str, int, list[str]]] = []  # [(root,path,nf,exdirs)]
+        allscantasks: list[tuple[FolderToCache, int]] = []  # [(tocache,nf)]
 
         for folderplus in self._folder_list:
             scan_stats = self._all_scan_stats.get(folderplus.folder)
-            rootstatnode = _ScanStatsNode.make_tree(scan_stats, folderplus.folder, folderplus.exdirs)
-            rootstatnode.fill_tasks(allscantasks, folderplus.folder, folderplus.exdirs)
+            rootstatnode = _ScanStatsNode.make_tree(scan_stats, folderplus.folder)
+            tmptasks: list[tuple[FolderToCache, int]] = []
+            rootstatnode.fill_tasks(tmptasks, folderplus.folder, folderplus.exdirs)
+            # filtering
+            newtmptasks: list[tuple[FolderToCache, int]] = []
+            for t in tmptasks:
+                (fp, nf) = t
+                filtered = FolderCache._intersect_folder_with_folder(fp, folderplus)
+                newnf = nf / len(filtered)  # ugly guess
+                newtmptasks += [(f, newnf) for f in filtered]
+            allscantasks += newtmptasks
+
+        # finding missing tasks
+        for folderplus in self._folder_list:
+            remainder = [folderplus]
+
+            for t in allscantasks:
+                remainder = FolderCache._subtract_folder_from_list(remainder, t[0])
+
+            for r in remainder:
+                allscantasks.append((r, 10000))
 
         # ready to start tasks
         scannedfiles = {}
@@ -396,13 +410,13 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         parallel.add_task(loadowntask)
 
         for tt in allscantasks:
-            (root, path, nf, exdirs) = tt
-            assert is_normalized_dir_path(path)
-            taskname = self._scanned_task_name(path)
+            (tocache, nf) = tt
+            assert is_normalized_dir_path(tocache.folder)
+            taskname = self._scanned_task_name(tocache.folder)
             task = tasks.Task(taskname, _scan_folder_task_func,
-                              (root, path, exdirs, self.name),
+                              (tocache, self.name),
                               [loadowntaskname], _scan_task_time_estimate(nf))
-            owntaskname = self._scanned_own_task_name(path)
+            owntaskname = self._scanned_own_task_name(tocache.folder)
             owntask = tasks.OwnTask(owntaskname,
                                     lambda _, out: self._scan_folder_own_task_func(out, parallel, scannedfiles, stats),
                                     None, [taskname])
@@ -418,9 +432,57 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
         parallel.add_task(reconciletask)
 
     @staticmethod
-    def scan_dir(started: float, sdout: _FolderScanDirOut, stats: _FolderScanStats, root: str, dirpath: str,
+    def _ex_subtract(bex: list[str], a: FolderToCache) -> list[FolderToCache]:
+        out = []
+        for bx in bex:
+            if bx.startswith(a.folder):
+                out += FolderCache._subtract_folder_from_folder(FolderToCache(bx, []), a)
+        return out
+
+    @staticmethod
+    def _subtract_folder_from_folder(a: FolderToCache, b: FolderToCache) -> list[FolderToCache]:
+        if a.folder.startswith(b.folder):
+            if a.folder == b.folder:
+                return FolderCache._ex_subtract(b.exdirs, a)
+            else: # b shorter than a
+                # a.folder gets fully excluded
+                #newex = a.exdirs + [b.folder]
+                assert not FolderToCache.ok_to_construct(a.folder, [b.folder])
+                #    return [FolderToCache(a.folder, newex)] + FolderCache._ex_subtract(b.exdirs, a)
+                return FolderCache._ex_subtract(b.exdirs, a)
+        elif b.folder.startswith(a.folder): # a shorter than b
+            # b gets excluded
+            newex = a.exdirs + [b.folder]
+            assert FolderToCache.ok_to_construct(a.folder, newex)
+            return [FolderToCache(a.folder,newex)] + FolderCache._ex_subtract(b.exdirs, a)
+        else:  # a and b are unrelated
+            return [a]
+
+    @staticmethod
+    def _subtract_folder_from_list(remainder: list[FolderToCache], f: FolderToCache) -> list[FolderToCache]:
+        out = []
+        for ff in remainder:
+            diff = FolderCache._subtract_folder_from_folder(ff, f)
+            out += diff
+        return out
+
+    @staticmethod
+    def _intersect_folder_with_folder(a: FolderToCache, b: FolderToCache) -> list[FolderToCache]:
+        if a.folder.startswith(b.folder):
+            if a.folder == b.folder:
+                return [FolderToCache(a.folder, list(set(a.exdirs + b.exdirs)))]
+            else:
+                return [FolderToCache(a.folder, FolderToCache.filter_ex_dirs(list(set(a.exdirs + b.exdirs)), a.folder))]
+        elif b.folder.startswith(a.folder):
+            return [FolderToCache(b.folder, FolderToCache.filter_ex_dirs(list(set(a.exdirs + b.exdirs)), b.folder))]
+        else:  # a and b are unrelated
+            return []
+
+    @staticmethod
+    def scan_dir(started: float, sdout: _FolderScanDirOut, stats: _FolderScanStats,
+                 const_tocache: FolderToCache, dirpath: str,
                  const_filesbypath: dict[str, FileOnDisk], pubfilesbypath: tasks.SharedPubParam,
-                 const_exdirs: list[str], name: str) -> None:  # recursive over dir
+                 name: str) -> None:  # recursive over dir
         assert is_normalized_dir_path(dirpath)
         # recursive implementation: able to skip subtrees, but more calls (lots of os.listdir() instead of single os.walk())
         # still, after recent performance fix seems to win like 1.5x over os.walk-based one
@@ -433,7 +495,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
                 assert not stat.S_ISLNK(fmode)
                 assert is_normalized_file_path(fpath)
 
-                assert FolderToCache.static_is_file_path_included(fpath, root, const_exdirs)
+                assert const_tocache.is_file_path_included(fpath)
 
                 stats.nscanned += 1
                 nf += 1
@@ -461,14 +523,16 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             elif stat.S_ISDIR(fmode):
                 newdir = fpath + '\\'
                 assert is_normalized_dir_path(newdir)
-                if newdir in const_exdirs:
+                if newdir in const_tocache.exdirs:
                     continue
                 elapsed = time.perf_counter() - started
                 if _time_to_split_task(elapsed):  # an ad-hoc split
                     sdout.requested_dirs.append(newdir)
                 else:
-                    FolderCache.scan_dir(started, sdout, stats, root, newdir, const_filesbypath, pubfilesbypath,
-                                         FolderToCache.filter_ex_dirs(const_exdirs, newdir), name)
+                    newtocache = FolderToCache(const_tocache.folder,
+                                               FolderToCache.filter_ex_dirs(const_tocache.exdirs, newdir))
+                    FolderCache.scan_dir(started, sdout, stats, newtocache, newdir, const_filesbypath, pubfilesbypath,
+                                         name)
             else:
                 critical('FolderCache: {} is neither dir or file, aborting'.format(fpath))
                 abort_if_not(False)
@@ -593,11 +657,11 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             ['sanguine.foldercache.' + self.name + '.reconciled()'],
             [])
 
-    def _scan_folder_own_task_func(self, out: tuple[list[str], _FolderScanStats, _FolderScanDirOut],
+    def _scan_folder_own_task_func(self, out: tuple[FolderToCache, _FolderScanStats, _FolderScanDirOut],
                                    parallel: tasks.Parallel, scannedfiles: dict[str, FileOnDisk],
                                    stats: _FolderScanStats) -> None:
         assert (self._state & 0x3) == 0x1
-        (exdirs, gotstats, sdout) = out
+        (tocache, gotstats, sdout) = out
         stats.add(gotstats)
         assert len(scannedfiles.keys() & sdout.scanned_files.keys()) == 0
         scannedfiles |= sdout.scanned_files
@@ -622,14 +686,14 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             parallel.add_tasks([htask, howntask])
 
         # new tasks
-        for fpath in sdout.requested_dirs:
-            assert is_normalized_dir_path(fpath)
-            taskname = self._scanned_task_name(fpath)
+        for dpath in sdout.requested_dirs:
+            assert is_normalized_dir_path(dpath)
+            taskname = self._scanned_task_name(dpath)
             task = tasks.Task(taskname, _scan_folder_task_func,
-                              (sdout.root, fpath, FolderToCache.filter_ex_dirs(exdirs, fpath), self.name),
+                              (FolderToCache(dpath, FolderToCache.filter_ex_dirs(tocache.exdirs, dpath)), self.name),
                               [self._load_own_task_name()],
                               1.0)  # this is an ad-hoc split, we don't want tasks to cache w, and we have no idea
-            owntaskname = self._scanned_own_task_name(fpath)
+            owntaskname = self._scanned_own_task_name(dpath)
             owntask = tasks.OwnTask(owntaskname,
                                     lambda _, o: self._scan_folder_own_task_func(o, parallel, scannedfiles, stats),
                                     None, [taskname], 0.01)  # should not take too long
