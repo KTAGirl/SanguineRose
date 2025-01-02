@@ -27,13 +27,12 @@ class _FastSearchOverFolderListToCache:
 
 
 class FileOnDisk:
-    file_hash: bytes | None
+    file_hash: bytes
     file_path: str
     file_modified: float
-    file_size: int | None
+    file_size: int
 
-    def __init__(self, file_hash: bytes | None, file_modified: float | None, file_path: str,
-                 file_size: int | None):
+    def __init__(self, file_hash: bytes, file_modified: float, file_path: str, file_size: int):
         assert file_path is not None
         self.file_hash = file_hash
         self.file_modified = file_modified
@@ -633,18 +632,23 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
 
         info('FolderCache({}):{} files scanned'.format(self.name, len(scannedfiles)))
         ndel = 0
+        newfbypath = {}
         for file in self._files_by_path.values():
             fpath = file.file_path
             assert is_normalized_file_path(fpath)
             if scannedfiles.get(fpath) is None:
-                inhere = self._files_by_path.get(fpath)
-                if inhere is not None and inhere.file_hash is None:  # special record is already present
-                    continue
+                #inhere = self._files_by_path.get(fpath)
+                #if inhere is not None and inhere.file_hash is None:  # special record is already present
+                #    continue
                 info('FolderCache: {} was deleted'.format(fpath))
-                # dbgWait()
-                self._files_by_path[fpath] = FileOnDisk(None, None, fpath, None)
+                # self._files_by_path[fpath] = FileOnDisk(None, None, fpath, None)
+                # not adding to newfbypath
                 ndel += 1
+            else:
+                newfbypath[fpath] = file
         info('FolderCache reconcile: {} files were deleted'.format(ndel))
+        assert len(newfbypath)+ndel == len(self._files_by_path)
+        self._files_by_path = newfbypath
 
         self._all_scan_stats = self._new_all_scan_stats
         self._new_all_scan_stats = None
