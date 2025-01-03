@@ -78,18 +78,25 @@ class FileOriginPluginBase(ABC):
         pass
 
     ### reading and writing is split into two parts, to facilitate multiprocessing
-    # reading, part 1
+    # reading, part 1 (to be run in a separate process)
     @abstractmethod
-    def read_plugin_json5_file_func(self) -> Callable[any, [typing.TextIO]]:  # cannot be a lambda
+    def load_json5_file_func(self) -> Callable[
+        any, [typing.TextIO]]:  # function returning function; returned function cannot be a lambda
         pass
 
-    # reading, part 2
+    # reading, part 2 (to be run locally)
     @abstractmethod
-    def got_read_data(self, data: any) -> None:
+    def got_loaded_data(self, data: any) -> None:
         pass
 
+    # writing, part 1 (to be run locally)
     @abstractmethod
-    def write_plugin_json5_file(self, wfile: typing.TextIO) -> None:
+    def data_for_saving(self) -> any:
+        pass
+
+    # writing, part 2 (to be run in a separate process)
+    @abstractmethod
+    def save_json5_file_func(self) -> Callable[None, [typing.TextIO, any]]:
         pass
 
     @abstractmethod
