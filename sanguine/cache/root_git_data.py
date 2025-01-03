@@ -2,8 +2,8 @@ import sanguine.gitdata.git_data_file as gitdatafile
 import sanguine.tasks as tasks
 from sanguine.cache.pickled_cache import pickled_cache
 from sanguine.common import *
-from sanguine.gitdata.file_origin import FileOrigin, GitTentativeArchiveNames, file_origin_plugins, \
-    file_origin_plugin_by_name
+from sanguine.gitdata.file_origin import (FileOrigin, GitTentativeArchiveNames,
+                                          file_origin_plugins, file_origin_plugin_by_name)
 from sanguine.gitdata.root_git_archives import GitArchivesJson
 from sanguine.helpers.archives import Archive, FileInArchive
 from sanguine.helpers.archives import ArchivePluginBase, all_archive_plugins_extensions, archive_plugin_for

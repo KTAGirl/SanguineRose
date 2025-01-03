@@ -7,43 +7,12 @@ from sanguine.helpers.plugin_handler import load_plugins
 
 
 class FileOrigin(ABC):
-    tentative_name: str
-
-    def __init__(self, name: str) -> None:
-        self.tentative_name = name
+    def __init__(self) -> None:
+        pass
 
     @abstractmethod
     def eq(self, b: "FileOrigin") -> bool:
         pass
-
-    def parent_eq(self, b: "FileOrigin") -> bool:
-        return self.tentative_name == b.tentative_name
-
-
-### known-tentative-archive-names.json5
-
-# as there are no specific handlers, we don't need to have _GitTentativeArchiveNamesHandler,
-#          and can use generic GitWriteHandler for writing
-
-class _GitTentativeArchiveNamesReadHandler(GitDataReadHandler):
-    COMMON_FIELDS: list[GitDataParam] = [
-        GitDataParam('n', GitDataType.Str, False),
-        GitDataParam('h', GitDataType.Hash),
-        # duplicate h can occur if the same file is available from multiple origins
-    ]
-    tentative_file_names_by_hash: dict[bytes, list[str]]
-
-    def __init__(self, tentative_file_names_by_hash: dict[bytes, list[str]]) -> None:
-        super().__init__()
-        self.tentative_file_names_by_hash = tentative_file_names_by_hash
-
-    def decompress(self, common_param: tuple[str, bytes], specific_param: tuple) -> None:
-        assert len(specific_param) == 0
-        (n, h) = common_param
-        if h in self.tentative_file_names_by_hash:
-            self.tentative_file_names_by_hash[h].append(n)
-        else:
-            self.tentative_file_names_by_hash[h] = [n]
 
 
 ### MetaFileParser
@@ -143,7 +112,30 @@ def file_origin_plugin_by_name(name: str) -> FileOriginPluginBase:
     return _file_origin_plugins[name]
 
 
-### GitTentativeArchiveNames
+### known-tentative-archive-names.json5, GitTentativeArchiveNames
+# as there are no specific handlers, we don't need to have _GitTentativeArchiveNamesHandler,
+#          and can use generic GitWriteHandler for writing
+
+class _GitTentativeArchiveNamesReadHandler(GitDataReadHandler):
+    COMMON_FIELDS: list[GitDataParam] = [
+        GitDataParam('n', GitDataType.Str, False),
+        GitDataParam('h', GitDataType.Hash),
+        # duplicate h can occur if the same file is known under different names
+    ]
+    tentative_file_names_by_hash: dict[bytes, list[str]]
+
+    def __init__(self, tentative_file_names_by_hash: dict[bytes, list[str]]) -> None:
+        super().__init__()
+        self.tentative_file_names_by_hash = tentative_file_names_by_hash
+
+    def decompress(self, common_param: tuple[str, bytes], specific_param: tuple) -> None:
+        assert len(specific_param) == 0
+        (n, h) = common_param
+        if h in self.tentative_file_names_by_hash:
+            self.tentative_file_names_by_hash[h].append(n)
+        else:
+            self.tentative_file_names_by_hash[h] = [n]
+
 
 class GitTentativeArchiveNames:
     def __init__(self) -> None:
