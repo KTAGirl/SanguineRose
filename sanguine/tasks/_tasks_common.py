@@ -13,6 +13,10 @@ def set_current_proc_num(proc_num: int) -> None:
     _proc_num = proc_num
 
 
+def is_lambda(func: Callable) -> bool:
+    return callable(func) and func.__name__ == '<lambda>'
+
+
 class LambdaReplacement:
     f: Callable[[any, any], any]
     capture: any

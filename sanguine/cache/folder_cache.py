@@ -440,7 +440,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
     @staticmethod
     def _ex_subtract(bex: list[str], a: FolderToCache) -> list[FolderToCache]:
         for bx in bex:
-            if a.folder.startswith(bx): # bx contains a.folder
+            if a.folder.startswith(bx):  # bx contains a.folder
                 return [a]
         return []
 
@@ -637,8 +637,8 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             fpath = file.file_path
             assert is_normalized_file_path(fpath)
             if scannedfiles.get(fpath) is None:
-                #inhere = self._files_by_path.get(fpath)
-                #if inhere is not None and inhere.file_hash is None:  # special record is already present
+                # inhere = self._files_by_path.get(fpath)
+                # if inhere is not None and inhere.file_hash is None:  # special record is already present
                 #    continue
                 info('FolderCache: {} was deleted'.format(fpath))
                 # self._files_by_path[fpath] = FileOnDisk(None, None, fpath, None)
@@ -647,7 +647,7 @@ class FolderCache:  # folder cache; can handle multiple folders, each folder wit
             else:
                 newfbypath[fpath] = file
         info('FolderCache reconcile: {} files were deleted'.format(ndel))
-        assert len(newfbypath)+ndel == len(self._files_by_path)
+        assert len(newfbypath) + ndel == len(self._files_by_path)
         self._files_by_path = newfbypath
 
         self._all_scan_stats = self._new_all_scan_stats

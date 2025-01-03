@@ -354,8 +354,7 @@ class Parallel:
         assert current_proc_num() == -1
 
         assert task.name not in self._all_task_nodes
-        islambda = callable(task.f) and task.f.__name__ == '<lambda>'
-        assert isinstance(task, OwnTask) or isinstance(task, TaskPlaceholder) or not islambda
+        assert isinstance(task, OwnTask) or isinstance(task, TaskPlaceholder) or not is_lambda(task.f)
 
         taskparents, patterns = self._dependencies_to_parents(task.dependencies)
         if taskparents is None:

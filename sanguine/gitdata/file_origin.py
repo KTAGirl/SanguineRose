@@ -20,53 +20,33 @@ class FileOrigin(ABC):
         return self.tentative_name == b.tentative_name
 
 
-class GitFileOriginsWriteHandler(GitDataWriteHandler):
-    @abstractmethod
-    def legend(self) -> str:
-        pass
+### known-tentative-archive-names.json5
 
-    @abstractmethod
-    def is_my_fo(self, fo: FileOrigin) -> bool:
-        pass
+# as there are no specific handlers, we don't need to have _GitTentativeArchiveNamesHandler,
+#          and can use generic GitWriteHandler for writing
 
-    @abstractmethod
-    def write_line(self, writer: gitdatafile.GitDataListWriter, h: bytes, fo: FileOrigin) -> None:
-        pass
-
-    @staticmethod
-    def common_values(h: bytes, fo: FileOrigin) -> tuple[str, bytes]:
-        return fo.tentative_name, h
-
-
-class GitFileOriginsReadHandler(GitDataReadHandler):
-    file_origins: dict[bytes, list[FileOrigin]]
+class _GitTentativeArchiveNamesReadHandler(GitDataReadHandler):
     COMMON_FIELDS: list[GitDataParam] = [
         GitDataParam('n', GitDataType.Str, False),
         GitDataParam('h', GitDataType.Hash),
         # duplicate h can occur if the same file is available from multiple origins
     ]
+    tentative_file_names_by_hash: dict[bytes, list[str]]
 
-    def __init__(self, specific_fields: list[GitDataParam], file_origins: dict[bytes, list[FileOrigin]]) -> None:
-        super().__init__(specific_fields)
-        self.file_origins = file_origins
+    def __init__(self, tentative_file_names_by_hash: dict[bytes, list[str]]) -> None:
+        super().__init__()
+        self.tentative_file_names_by_hash = tentative_file_names_by_hash
 
-    @abstractmethod
-    def decompress(self, common_param: tuple, specific_param: tuple) -> None:
-        pass
+    def decompress(self, common_param: tuple[str, bytes], specific_param: tuple) -> None:
+        assert len(specific_param) == 0
+        (n, h) = common_param
+        if h in self.tentative_file_names_by_hash:
+            self.tentative_file_names_by_hash[h].append(n)
+        else:
+            self.tentative_file_names_by_hash[h] = [n]
 
-    @staticmethod
-    def init_base_file_origin(fo: FileOrigin, common_param: tuple[str, bytes]) -> None:
-        # breakpoint()
-        # assert type(fo) is FileOrigin  # should be exactly FileOrigin, not a subclass
-        (n, _) = common_param
-        fo.__init__(n)
-        # warn('init_base_file_origin')
 
-    @staticmethod
-    def hash_from_common_param(common_param: tuple[str, bytes]) -> bytes:
-        (_, h) = common_param
-        return h
-
+### MetaFileParser
 
 class MetaFileParser(ABC):
     meta_file_path: str
@@ -90,25 +70,40 @@ class FileOriginPluginBase(ABC):
         pass
 
     @abstractmethod
-    def write_handler(self) -> GitFileOriginsWriteHandler:
+    def name(self) -> str:
         pass
 
     @abstractmethod
     def meta_file_parser(self, metafilepath: str) -> MetaFileParser:
         pass
 
+    ### reading and writing is split into two parts, to facilitate multiprocessing
+    # reading, part 1
     @abstractmethod
-    def read_handler(self, file_origins: dict[bytes, list[FileOrigin]]) -> GitFileOriginsReadHandler:
+    def read_plugin_json5_file_func(self) -> Callable[any, [typing.TextIO]]:  # cannot be a lambda
+        pass
+
+    # reading, part 2
+    @abstractmethod
+    def got_read_data(self, data: any) -> None:
+        pass
+
+    @abstractmethod
+    def write_plugin_json5_file(self, wfile: typing.TextIO) -> None:
+        pass
+
+    @abstractmethod
+    def add_file_origin(self, h: bytes, fo: FileOrigin) -> None:
         pass
 
 
-_file_origin_plugins: list[FileOriginPluginBase] = []
+_file_origin_plugins: dict[str, FileOriginPluginBase] = {}
 
 
 def _found_origin_plugin(plugin: FileOriginPluginBase):
     global _file_origin_plugins
-    assert plugin not in _file_origin_plugins
-    _file_origin_plugins.append(plugin)
+    assert plugin.name() not in _file_origin_plugins
+    _file_origin_plugins[plugin.name()] = plugin
 
 
 load_plugins('plugins/fileorigin/', FileOriginPluginBase, lambda plugin: _found_origin_plugin(plugin))
@@ -121,7 +116,7 @@ def file_origins_for_file(fpath: str) -> list[FileOrigin] | None:
     metafpath = fpath + '.meta'
     if os.path.isfile(metafpath):
         with open_3rdparty_txt_file(metafpath) as rf:
-            metafileparsers = [plugin.meta_file_parser(metafpath) for plugin in _file_origin_plugins]
+            metafileparsers = [plugin.meta_file_parser(metafpath) for plugin in _file_origin_plugins.values()]
             for ln in rf:
                 for mfp in metafileparsers:
                     mfp.take_ln(ln)
@@ -131,47 +126,42 @@ def file_origins_for_file(fpath: str) -> list[FileOrigin] | None:
             return origins if len(origins) > 0 else None
 
 
-### GitFileOriginsJson
+def file_origin_plugins() -> Iterable[FileOriginPluginBase]:
+    global _file_origin_plugins
+    return _file_origin_plugins.values()
 
-class GitFileOriginsJson:
+
+def file_origin_plugin_by_name(name: str) -> FileOriginPluginBase:
+    global _file_origin_plugins
+    return _file_origin_plugins[name]
+
+
+### GitTentativeArchiveNames
+
+class GitTentativeArchiveNames:
     def __init__(self) -> None:
         pass
 
-    def write(self, wfile: typing.TextIO, forigins: dict[bytes, list[FileOrigin]]) -> None:
-        folist: list[tuple[bytes, list[FileOrigin]]] = sorted(forigins.items())
+    def write(self, wfile: typing.TextIO, tentativearchivenames: dict[bytes, list[str]]) -> None:
+        folist: list[tuple[bytes, list[str]]] = sorted(tentativearchivenames.items())
         for fox in folist:
             fox[1].sort(key=lambda fo2: fo2.tentative_name)
         gitdatafile.write_git_file_header(wfile)
         wfile.write(
             '  file_origins: // Legend: n=tentative_name,  h=hash\n')
 
-        global _file_origin_plugins
-        handlers = [plugin.write_handler() for plugin in _file_origin_plugins]
-        for wh in handlers:
-            wfile.write(
-                '                //         ' + wh.legend() + '\n')
-
-        da = gitdatafile.GitDataWriteList(GitFileOriginsReadHandler.COMMON_FIELDS, handlers)
+        tahandler = GitDataWriteHandler()
+        da = gitdatafile.GitDataWriteList(_GitTentativeArchiveNamesReadHandler.COMMON_FIELDS, [tahandler])
         writer = gitdatafile.GitDataListWriter(da, wfile)
         writer.write_begin()
         for fox in folist:
-            (h, fos) = fox
-            for fo in fos:
-                handler = None
-                for wh in handlers:
-                    if wh.is_my_fo(fo):
-                        assert handler is None
-                        handler = wh
-                        if not __debug__:
-                            break
-                assert handler is not None
-                handler.write_line(writer, h, fo)
-
+            for tname in fox[1]:
+                writer.write_line(tahandler, (tname, fox[0]))
         writer.write_end()
         gitdatafile.write_git_file_footer(wfile)
 
-    def read_from_file(self, rfile: typing.TextIO) -> dict[bytes, list[FileOrigin]]:
-        file_origins: dict[bytes, list[FileOrigin]] = {}
+    def read_from_file(self, rfile: typing.TextIO) -> dict[bytes, list[str]]:
+        tentativearchivenames: dict[bytes, list[str]] = {}
 
         # skipping header
         ln, lineno = gitdatafile.skip_git_file_header(rfile)
@@ -179,12 +169,12 @@ class GitFileOriginsJson:
         # reading file_origins:  ...
         assert re.search(r'^\s*file_origins\s*:\s*//', ln)
 
-        handlers = [plugin.read_handler(file_origins) for plugin in _file_origin_plugins]
-        da = gitdatafile.GitDataReadList(GitFileOriginsReadHandler.COMMON_FIELDS, handlers)
+        da = gitdatafile.GitDataReadList(_GitTentativeArchiveNamesReadHandler.COMMON_FIELDS,
+                                         [_GitTentativeArchiveNamesReadHandler(tentativearchivenames)])
         lineno = gitdatafile.read_git_file_list(da, rfile, lineno)
 
         # skipping footer
         gitdatafile.skip_git_file_footer(rfile, lineno)
 
         # warn(str(len(archives)))
-        return file_origins
+        return tentativearchivenames
