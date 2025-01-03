@@ -222,6 +222,8 @@ class _JsonEncoder(json.JSONEncoder):
     def default(self, o: any) -> any:
         if isinstance(o, bytes):
             return base64.b64encode(o).decode('ascii')
+        elif isinstance(o, Callable):
+            return o.__name__
         elif isinstance(o, dict):
             return self._adjust_dict(o)
         elif o is None or isinstance(o, str) or isinstance(o, tuple) or isinstance(o, list):

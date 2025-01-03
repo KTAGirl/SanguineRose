@@ -1,8 +1,8 @@
 import os.path
 
 import sanguine.tasks as tasks
-from sanguine.cache.all_master_git_data import AllMasterGitData
 from sanguine.cache.folder_cache import FolderCache, FileOnDisk
+from sanguine.cache.root_git_data import RootGitData
 from sanguine.common import *
 from sanguine.gitdata.file_origin import file_origins_for_file, FileOrigin
 from sanguine.helpers.archives import all_archive_plugins_extensions
@@ -28,12 +28,12 @@ class AvailableFiles:
     _github_cache: FolderCache
     _github_cache_by_hash: dict[bytes, list[FileOnDisk]] | None
     _downloads_cache: FolderCache
-    _master_data: AllMasterGitData
+    _root_data: RootGitData
     _github_folders: list[GithubFolder]
     _READYOWNTASKNAME = 'sanguine.available.ownready'
     _is_ready: bool
 
-    def __init__(self, by: str, cachedir: str, tmpdir: str, mastergitdir: str, downloads: list[str],
+    def __init__(self, by: str, cachedir: str, tmpdir: str, rootgitdir: str, downloads: list[str],
                  github_folders: list[GithubFolder], cache_data: dict[str, any]) -> None:
         self._downloads_cache = FolderCache(cachedir, 'downloads',
                                             FolderListToCache([FolderToCache(d, []) for d in downloads]))
@@ -41,7 +41,7 @@ class AvailableFiles:
                                          FolderListToCache([FolderToCache(g.local_folder, []) for g in github_folders]))
         self._github_cache_by_hash = None
         self._github_folders = github_folders
-        self._master_data = AllMasterGitData(by, mastergitdir, cachedir, tmpdir, cache_data)
+        self._root_data = RootGitData(by, rootgitdir, cachedir, tmpdir, cache_data)
         self._is_ready = False
 
     # public interface
@@ -49,13 +49,13 @@ class AvailableFiles:
     def start_tasks(self, parallel: tasks.Parallel):
         self._downloads_cache.start_tasks(parallel)
         self._github_cache.start_tasks(parallel)
-        self._master_data.start_tasks(parallel)
+        self._root_data.start_tasks(parallel)
 
         starthashingowntaskname = 'sanguine.available.ownstarthashing'
         starthashingowntask = tasks.OwnTask(starthashingowntaskname,
                                             lambda _, _1, _2: self._start_hashing_own_task_func(parallel), None,
                                             [self._downloads_cache.ready_task_name(),
-                                             AllMasterGitData.ready_to_start_hashing_task_name()],
+                                             RootGitData.ready_to_start_hashing_task_name()],
                                             datadeps=self._starthashing_owntask_datadeps())
         parallel.add_task(starthashingowntask)
 
@@ -84,7 +84,7 @@ class AvailableFiles:
 
     ### lists of file retrievers
     def _single_archive_retrievers(self, h: bytes) -> list[ArchiveFileRetrieverHelper]:
-        found = self._master_data.archived_file_by_hash(h)
+        found = self._root_data.archived_file_by_hash(h)
         if found is None:
             return []
         assert len(found) > 0
@@ -145,7 +145,7 @@ class AvailableFiles:
     def _starthashing_owntask_datadeps(self) -> tasks.TaskDataDependencies:
         return tasks.TaskDataDependencies(
             ['sanguine.foldercache.downloads._files_by_path',
-             'sanguine.mastergit._archives_by_hash'],
+             'sanguine.rootgit._archives_by_hash'],
             [],
             ['sanguine.available.start_hashing()'])
 
@@ -155,9 +155,9 @@ class AvailableFiles:
             if ext == '.meta':
                 continue
 
-            if not self._master_data.archive_by_hash(ar.file_hash, partialok=True):
+            if not self._root_data.archive_by_hash(ar.file_hash, partialok=True):
                 if ext in all_archive_plugins_extensions():
-                    self._master_data.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
+                    self._root_data.start_hashing_archive(parallel, ar.file_path, ar.file_hash, ar.file_size)
                 else:
                     warn('Available: file with unknown extension {}, ignored'.format(ar.file_path))
 
@@ -184,15 +184,15 @@ class AvailableFiles:
         originsowntask = tasks.OwnTask(startoriginsowntaskname,
                                        lambda _, out, _1, _2: self._file_origins_own_task_func(parallel, out), None,
                                        [originstaskname,
-                                        AllMasterGitData.ready_to_start_adding_file_origins_task_name(),
-                                        AllMasterGitData.archives_ready_task_name()],
+                                        RootGitData.ready_to_start_adding_file_origins_task_name(),
+                                        RootGitData.archives_ready_task_name()],
                                        datadeps=self._fileorigins_owntask_datadeps())
         parallel.add_task(originsowntask)
 
     def _fileorigins_owntask_datadeps(self) -> tasks.TaskDataDependencies:
         return tasks.TaskDataDependencies(
-            ['sanguine.mastergit._file_origins_by_hash',
-             'sanguine.mastergit._archives_by_hash',
+            ['sanguine.rootgit._file_origins_by_hash',
+             'sanguine.rootgit._archives_by_hash',
              'sanguine.available.start_origins()'],
             [],
             ['sanguine.available.file_origins()'])
@@ -202,10 +202,10 @@ class AvailableFiles:
         (origins,) = out
         for fox in origins:
             for fo in fox[1]:
-                self._master_data.add_file_origin(fox[0], fo)
-        self._master_data.start_done_adding_file_origins_task(parallel)  # no need to wait for it
+                self._root_data.add_file_origin(fox[0], fo)
+        self._root_data.start_done_adding_file_origins_task(parallel)  # no need to wait for it
 
-        gitarchivesdonehashingtaskname: str = self._master_data.start_done_hashing_task(parallel)
+        gitarchivesdonehashingtaskname: str = self._root_data.start_done_hashing_task(parallel)
         readyowntaskname = AvailableFiles._READYOWNTASKNAME
         readyowntask = tasks.OwnTask(readyowntaskname,
                                      lambda _, _1, _2: self._ready_own_task_func(), None,
@@ -227,7 +227,7 @@ class AvailableFiles:
 
     def stats_of_interest(self) -> list[str]:
         return (self._downloads_cache.stats_of_interest() + self._github_cache.stats_of_interest()
-                + self._master_data.stats_of_interest()
+                + self._root_data.stats_of_interest()
                 + ['sanguine.available.own', 'sanguine.available.fileorigins', 'sanguine.available.'])
 
 
