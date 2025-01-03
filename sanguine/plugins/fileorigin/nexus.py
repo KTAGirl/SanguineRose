@@ -127,7 +127,11 @@ class GitNexusData:
         lineno = gitdatafile.read_git_file_list(dhm, rfile, lineno)
 
         # reading file_origins:  ...
-        assert re.search(r'^\s*file_origins\s*:\s*//', ln)
+        ln = rfile.readline()
+        lineno += 1
+        if not re.search(r'^\s*file_origins\s*:\s*//', ln):
+            alert('GitNexusData.read_from_file(): Unexpected line #{}: {}'.format(lineno, ln))
+            abort_if_not(False)
 
         dfo = gitdatafile.GitDataReadList(_GitNexusFileOriginsReadHandler.COMMON_FIELDS,
                                           [_GitNexusFileOriginsReadHandler(nexus_file_origins)])
@@ -248,8 +252,7 @@ class NexusFileOriginPlugin(FileOriginPluginBase):
 
     ### reading and writing is split into two parts, to facilitate multiprocessing
     # reading, part 1 (to be run in a separate process)
-    def load_json5_file_func(self) -> Callable[
-        any, [typing.TextIO]]:  # function returning function; returned function cannot be a lambda
+    def load_json5_file_func(self) -> Callable[[typing.TextIO], any]:  # function returning function
         return _load_nexus_json5
 
     # reading, part 2 (to be run locally)
@@ -262,7 +265,7 @@ class NexusFileOriginPlugin(FileOriginPluginBase):
         return self.nexus_hash_mapping, self.nexus_file_origins
 
     # writing, part 2 (to be run in a separate process)
-    def save_json5_file_func(self) -> Callable[None, [typing.TextIO, any]]:
+    def save_json5_file_func(self) -> Callable[[typing.TextIO, any], None]:
         return _save_nexus_json5
 
     def add_file_origin(self, h: bytes, fo: FileOrigin) -> None:

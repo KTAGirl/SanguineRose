@@ -50,7 +50,7 @@ class FileOriginPluginBase(ABC):
     # reading, part 1 (to be run in a separate process)
     @abstractmethod
     def load_json5_file_func(self) -> Callable[
-        any, [typing.TextIO]]:  # function returning function; returned function cannot be a lambda
+        [typing.TextIO], any]:  # function returning function; returned function cannot be a lambda
         pass
 
     # reading, part 2 (to be run locally)
@@ -65,7 +65,7 @@ class FileOriginPluginBase(ABC):
 
     # writing, part 2 (to be run in a separate process)
     @abstractmethod
-    def save_json5_file_func(self) -> Callable[None, [typing.TextIO, any]]:
+    def save_json5_file_func(self) -> Callable[[typing.TextIO, any], None]:
         pass
 
     @abstractmethod
@@ -147,7 +147,7 @@ class GitTentativeArchiveNames:
             fox[1].sort(key=lambda fo2: fo2.tentative_name)
         gitdatafile.write_git_file_header(wfile)
         wfile.write(
-            '  file_origins: // Legend: n=tentative_name,  h=hash\n')
+            '  tentative_names: // Legend: n=tentative_name,  h=hash\n')
 
         tahandler = GitDataWriteHandler()
         da = gitdatafile.GitDataWriteList(_GitTentativeArchiveNamesReadHandler.COMMON_FIELDS, [tahandler])
@@ -166,7 +166,7 @@ class GitTentativeArchiveNames:
         ln, lineno = gitdatafile.skip_git_file_header(rfile)
 
         # reading file_origins:  ...
-        assert re.search(r'^\s*file_origins\s*:\s*//', ln)
+        assert re.search(r'^\s*tentative_names\s*:\s*//', ln)
 
         da = gitdatafile.GitDataReadList(_GitTentativeArchiveNamesReadHandler.COMMON_FIELDS,
                                          [_GitTentativeArchiveNamesReadHandler(tentativearchivenames)])

@@ -719,10 +719,12 @@ def read_git_file_list(dlist: GitDataReadList, rfile: typing.TextIO, lineno: int
     rda = _GitDataListContentsReader(dlist)
 
     ln = rfile.readline()
+    lineno += 1
     # info(ln)
 
     while rda.comment_only_line.match(ln):
         ln = rfile.readline()
+        lineno += 1
     assert re.search(r'^\s*\[\s*$', ln)
 
     while True:
@@ -733,7 +735,9 @@ def read_git_file_list(dlist: GitDataReadList, rfile: typing.TextIO, lineno: int
         processed = rda.parse_line(ln)
         if not processed:
             # warn(ln)
-            assert re.search(r'^\s*]\s*$', ln)
+            if not re.search(r'^\s*][\s,]*$', ln):
+                alert('read_git_file_list(): Unexpected line #{}: {}'.format(lineno, ln))
+                abort_if_not(False)
             return lineno
 
 

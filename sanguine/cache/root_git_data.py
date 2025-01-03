@@ -100,14 +100,14 @@ def _write_git_tentative_names(rootgitdir: str, tanames: dict[bytes, list[str]])
         GitTentativeArchiveNames().write(wf, tanames)
 
 
-def _read_fo_plugin_data(params: tuple[str, str, Callable[any, [typing.TextIO]]]) -> any:
+def _read_fo_plugin_data(params: tuple[str, str, Callable[[typing.TextIO], any]]) -> any:
     (name, rootgitfile, rdfunc) = params
     assert is_normalized_file_path(rootgitfile)
     with gitdatafile.open_git_data_file_for_reading(rootgitfile) as rf:
         return name, rdfunc(rf)
 
 
-def _read_cached_fo_plugin_data(rootgitdir: str, name: str, rdfunc: Callable[any, [typing.TextIO]],
+def _read_cached_fo_plugin_data(rootgitdir: str, name: str, rdfunc: Callable[[typing.TextIO], any],
                                 cachedir: str, cachedata: dict[str, any]) -> tuple[any, dict[str, any]]:
     assert is_normalized_dir_path(rootgitdir)
     rootgitfile = rootgitdir + _known_plugin_fname(name)
@@ -115,7 +115,7 @@ def _read_cached_fo_plugin_data(rootgitdir: str, name: str, rdfunc: Callable[any
                          _read_fo_plugin_data, (name, rootgitfile, rdfunc))
 
 
-def _write_fo_plugin_data(rootgitdir: str, name: str, wrfunc: Callable[None, [typing.TextIO, any]],
+def _write_fo_plugin_data(rootgitdir: str, name: str, wrfunc: Callable[[typing.TextIO, any], None],
                           wrdata: any) -> None:
     assert is_normalized_dir_path(rootgitdir)
     fpath = rootgitdir + _known_plugin_fname(name)
@@ -361,7 +361,7 @@ class RootGitData:
 
             loadfoowntaskname = 'sanguine.rootgit.ownloadfo.' + plugin.name()
             loadfoowntask = tasks.OwnTask(loadfoowntaskname,
-                                          lambda out: self._load_own_plugin_data_task_func(out), None,
+                                          lambda _, out: self._load_own_plugin_data_task_func(out), None,
                                           [loadfotaskname])
             parallel.add_task(loadfoowntask)
 
