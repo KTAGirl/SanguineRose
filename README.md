@@ -91,7 +91,7 @@ Note that the list below is for Skyrim. While sanguine-rose as such is game-neut
 - *GitHub Desktop* [Download GitHub Desktop](https://desktop.github.com/download/)
 
 ### Things to disable
-- If you are using *Norton 360 for gamers* while modding - make sure to **disable** their *Game Optimizer*. This 'feature' refuses to work without 'Restrict resouce usage for user processes', which in turn has been observed to slow modding apps down by a factor of 10x *even when there is no game is running*. `<rant>`Norton seems to think that *you don't really want to run any processes besides games themselves on your computer, ever*` 🤕</rant>`
+- If you are using *Norton 360 for gamers* while modding - make sure to **disable** their *Game Optimizer*. This 'feature' refuses to work without 'Restrict resouce usage for user processes', which in turn has been observed to slow modding apps down by a factor of 10x *even when there is no game running*. `<rant>`Norton seems to think that *you don't really want to run any processes besides games themselves on your computer, ever*` 🤕</rant>`
 
 ## Typical folder structure
 + C:\
