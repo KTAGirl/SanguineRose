@@ -84,7 +84,7 @@ class GitNexusData:
         hmap: list[tuple[bytes, bytes]] = sorted(nexus_hash_mapping.items(), key=lambda item: item[0])
         allfos: list[tuple[bytes, NexusFileOrigin]] = []
         for h, fos in sorted(nexus_file_origins.items(), key=lambda item: item[0]):
-            for fo in sorted(fos, key=lambda item: (item[0], item[1].gameid, item[1].modid, item[1].fileid)):
+            for fo in sorted(fos, key=lambda item: (item.gameid, item.modid, item.fileid)):
                 allfos.append((h, fo))
 
         gitdatafile.write_git_file_header(wfile)
@@ -268,9 +268,15 @@ class NexusFileOriginPlugin(FileOriginPluginBase):
     def save_json5_file_func(self) -> Callable[[typing.TextIO, any], None]:
         return _save_nexus_json5
 
-    def add_file_origin(self, h: bytes, fo: FileOrigin) -> None:
+    def add_file_origin(self, h: bytes, fo: FileOrigin) -> bool:
         assert isinstance(fo, NexusFileOrigin)
         if h in self.nexus_file_origins:
+            for fo2 in self.nexus_file_origins[h]:
+                assert isinstance(fo2, NexusFileOrigin)
+                if fo2.eq(fo):
+                    return False
             self.nexus_file_origins[h].append(fo)
+            return True
         else:
             self.nexus_file_origins[h] = [fo]
+            return True

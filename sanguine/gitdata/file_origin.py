@@ -69,7 +69,7 @@ class FileOriginPluginBase(ABC):
         pass
 
     @abstractmethod
-    def add_file_origin(self, h: bytes, fo: FileOrigin) -> None:
+    def add_file_origin(self, h: bytes, fo: FileOrigin) -> bool:
         pass
 
 
