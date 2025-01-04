@@ -191,7 +191,7 @@ class AvailableFiles:
 
     def _fileorigins_owntask_datadeps(self) -> tasks.TaskDataDependencies:
         return tasks.TaskDataDependencies(
-            ['sanguine.rootgit._file_origins_by_hash',
+            ['sanguine.rootgit._tentative_archive_names',
              'sanguine.rootgit._archives_by_hash',
              'sanguine.available.start_origins()'],
             [],

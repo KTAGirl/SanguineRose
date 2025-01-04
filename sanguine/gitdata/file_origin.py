@@ -7,43 +7,12 @@ from sanguine.helpers.plugin_handler import load_plugins
 
 
 class FileOrigin(ABC):
-    tentative_name: str
-
-    def __init__(self, name: str) -> None:
-        self.tentative_name = name
+    def __init__(self) -> None:
+        pass
 
     @abstractmethod
     def eq(self, b: "FileOrigin") -> bool:
         pass
-
-    def parent_eq(self, b: "FileOrigin") -> bool:
-        return self.tentative_name == b.tentative_name
-
-
-### known-tentative-archive-names.json5
-
-# as there are no specific handlers, we don't need to have _GitTentativeArchiveNamesHandler,
-#          and can use generic GitWriteHandler for writing
-
-class _GitTentativeArchiveNamesReadHandler(GitDataReadHandler):
-    COMMON_FIELDS: list[GitDataParam] = [
-        GitDataParam('n', GitDataType.Str, False),
-        GitDataParam('h', GitDataType.Hash),
-        # duplicate h can occur if the same file is available from multiple origins
-    ]
-    tentative_file_names_by_hash: dict[bytes, list[str]]
-
-    def __init__(self, tentative_file_names_by_hash: dict[bytes, list[str]]) -> None:
-        super().__init__()
-        self.tentative_file_names_by_hash = tentative_file_names_by_hash
-
-    def decompress(self, common_param: tuple[str, bytes], specific_param: tuple) -> None:
-        assert len(specific_param) == 0
-        (n, h) = common_param
-        if h in self.tentative_file_names_by_hash:
-            self.tentative_file_names_by_hash[h].append(n)
-        else:
-            self.tentative_file_names_by_hash[h] = [n]
 
 
 ### MetaFileParser
@@ -78,22 +47,29 @@ class FileOriginPluginBase(ABC):
         pass
 
     ### reading and writing is split into two parts, to facilitate multiprocessing
-    # reading, part 1
+    # reading, part 1 (to be run in a separate process)
     @abstractmethod
-    def read_plugin_json5_file_func(self) -> Callable[any, [typing.TextIO]]:  # cannot be a lambda
+    def load_json5_file_func(self) -> Callable[
+        [typing.TextIO], any]:  # function returning function; returned function cannot be a lambda
         pass
 
-    # reading, part 2
+    # reading, part 2 (to be run locally)
     @abstractmethod
-    def got_read_data(self, data: any) -> None:
+    def got_loaded_data(self, data: any) -> None:
+        pass
+
+    # writing, part 1 (to be run locally)
+    @abstractmethod
+    def data_for_saving(self) -> any:
+        pass
+
+    # writing, part 2 (to be run in a separate process)
+    @abstractmethod
+    def save_json5_file_func(self) -> Callable[[typing.TextIO, any], None]:
         pass
 
     @abstractmethod
-    def write_plugin_json5_file(self, wfile: typing.TextIO) -> None:
-        pass
-
-    @abstractmethod
-    def add_file_origin(self, h: bytes, fo: FileOrigin) -> None:
+    def add_file_origin(self, h: bytes, fo: FileOrigin) -> bool:
         pass
 
 
@@ -136,7 +112,30 @@ def file_origin_plugin_by_name(name: str) -> FileOriginPluginBase:
     return _file_origin_plugins[name]
 
 
-### GitTentativeArchiveNames
+### known-tentative-archive-names.json5, GitTentativeArchiveNames
+# as there are no specific handlers, we don't need to have _GitTentativeArchiveNamesHandler,
+#          and can use generic GitWriteHandler for writing
+
+class _GitTentativeArchiveNamesReadHandler(GitDataReadHandler):
+    COMMON_FIELDS: list[GitDataParam] = [
+        GitDataParam('n', GitDataType.Str, False),
+        GitDataParam('h', GitDataType.Hash),
+        # duplicate h can occur if the same file is known under different names
+    ]
+    tentative_file_names_by_hash: dict[bytes, list[str]]
+
+    def __init__(self, tentative_file_names_by_hash: dict[bytes, list[str]]) -> None:
+        super().__init__()
+        self.tentative_file_names_by_hash = tentative_file_names_by_hash
+
+    def decompress(self, common_param: tuple[str, bytes], specific_param: tuple) -> None:
+        assert len(specific_param) == 0
+        (n, h) = common_param
+        if h in self.tentative_file_names_by_hash:
+            self.tentative_file_names_by_hash[h].append(n)
+        else:
+            self.tentative_file_names_by_hash[h] = [n]
+
 
 class GitTentativeArchiveNames:
     def __init__(self) -> None:
@@ -148,7 +147,7 @@ class GitTentativeArchiveNames:
             fox[1].sort(key=lambda fo2: fo2.tentative_name)
         gitdatafile.write_git_file_header(wfile)
         wfile.write(
-            '  file_origins: // Legend: n=tentative_name,  h=hash\n')
+            '  tentative_names: // Legend: n=tentative_name,  h=hash\n')
 
         tahandler = GitDataWriteHandler()
         da = gitdatafile.GitDataWriteList(_GitTentativeArchiveNamesReadHandler.COMMON_FIELDS, [tahandler])
@@ -167,7 +166,7 @@ class GitTentativeArchiveNames:
         ln, lineno = gitdatafile.skip_git_file_header(rfile)
 
         # reading file_origins:  ...
-        assert re.search(r'^\s*file_origins\s*:\s*//', ln)
+        assert re.search(r'^\s*tentative_names\s*:\s*//', ln)
 
         da = gitdatafile.GitDataReadList(_GitTentativeArchiveNamesReadHandler.COMMON_FIELDS,
                                          [_GitTentativeArchiveNamesReadHandler(tentativearchivenames)])

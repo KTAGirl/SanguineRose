@@ -2,8 +2,8 @@ import sanguine.gitdata.git_data_file as gitdatafile
 import sanguine.tasks as tasks
 from sanguine.cache.pickled_cache import pickled_cache
 from sanguine.common import *
-from sanguine.gitdata.file_origin import FileOrigin, GitTentativeArchiveNames, file_origin_plugins, \
-    file_origin_plugin_by_name
+from sanguine.gitdata.file_origin import (FileOrigin, GitTentativeArchiveNames,
+                                          file_origin_plugins, file_origin_plugin_by_name)
 from sanguine.gitdata.root_git_archives import GitArchivesJson
 from sanguine.helpers.archives import Archive, FileInArchive
 from sanguine.helpers.archives import ArchivePluginBase, all_archive_plugins_extensions, archive_plugin_for
@@ -100,14 +100,14 @@ def _write_git_tentative_names(rootgitdir: str, tanames: dict[bytes, list[str]])
         GitTentativeArchiveNames().write(wf, tanames)
 
 
-def _read_fo_plugin_data(params: tuple[str, str, Callable[any, [typing.TextIO]]]) -> any:
+def _read_fo_plugin_data(params: tuple[str, str, Callable[[typing.TextIO], any]]) -> any:
     (name, rootgitfile, rdfunc) = params
     assert is_normalized_file_path(rootgitfile)
     with gitdatafile.open_git_data_file_for_reading(rootgitfile) as rf:
         return name, rdfunc(rf)
 
 
-def _read_cached_fo_plugin_data(rootgitdir: str, name: str, rdfunc: Callable[any, [typing.TextIO]],
+def _read_cached_fo_plugin_data(rootgitdir: str, name: str, rdfunc: Callable[[typing.TextIO], any],
                                 cachedir: str, cachedata: dict[str, any]) -> tuple[any, dict[str, any]]:
     assert is_normalized_dir_path(rootgitdir)
     rootgitfile = rootgitdir + _known_plugin_fname(name)
@@ -115,7 +115,7 @@ def _read_cached_fo_plugin_data(rootgitdir: str, name: str, rdfunc: Callable[any
                          _read_fo_plugin_data, (name, rootgitfile, rdfunc))
 
 
-def _write_fo_plugin_data(rootgitdir: str, name: str, wrfunc: Callable[None, [typing.TextIO, any]],
+def _write_fo_plugin_data(rootgitdir: str, name: str, wrfunc: Callable[[typing.TextIO, any], None],
                           wrdata: any) -> None:
     assert is_normalized_dir_path(rootgitdir)
     fpath = rootgitdir + _known_plugin_fname(name)
@@ -330,7 +330,7 @@ class RootGitData:
         (loadret, cacheoverrides) = out
         (name, plugindata) = loadret
         plugin = file_origin_plugin_by_name(name)
-        plugin.got_read_data(plugindata)
+        plugin.got_loaded_data(plugindata)
 
     def start_tasks(self, parallel: tasks.Parallel) -> None:
         loadtaskname = 'sanguine.rootgit.loadar'
@@ -351,7 +351,7 @@ class RootGitData:
 
         for plugin in file_origin_plugins():
             loadfotaskname = 'sanguine.rootgit.loadfo.' + plugin.name()
-            rdfunc = plugin.read_plugin_json5_file_func()
+            rdfunc = plugin.load_json5_file_func()
             assert callable(rdfunc) and not tasks.is_lambda(rdfunc)
             loadfotask = tasks.Task(loadfotaskname, _load_plugin_data_task_func,
                                     (self._root_git_dir, plugin.name(),
@@ -361,7 +361,7 @@ class RootGitData:
 
             loadfoowntaskname = 'sanguine.rootgit.ownloadfo.' + plugin.name()
             loadfoowntask = tasks.OwnTask(loadfoowntaskname,
-                                          lambda out: self._load_own_plugin_data_task_func(out), None,
+                                          lambda _, out: self._load_own_plugin_data_task_func(out), None,
                                           [loadfotaskname])
             parallel.add_task(loadfoowntask)
 
@@ -426,6 +426,16 @@ class RootGitData:
             save2task = tasks.Task(save2taskname, _save_tentative_names_task_func,
                                    (self._root_git_dir, self._tentative_archive_names), [])
             parallel.add_task(save2task)
+
+            for plugin in file_origin_plugins():
+                savefotaskname = 'sanguine.rootgit.savefo.' + plugin.name()
+                wrfunc = plugin.save_json5_file_func()
+                assert callable(wrfunc) and not tasks.is_lambda(wrfunc)
+                savefotask = tasks.Task(savefotaskname, _save_plugin_data_task_func,
+                                        (self._root_git_dir, plugin.name(),
+                                         wrfunc, plugin.data_for_saving()),
+                                        [])
+                parallel.add_task(savefotask)
 
     def archived_file_by_hash(self, h: bytes) -> list[tuple[Archive, FileInArchive]] | None:
         assert self._ar_is_ready == 2

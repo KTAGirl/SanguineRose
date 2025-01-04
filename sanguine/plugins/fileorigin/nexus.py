@@ -3,8 +3,7 @@ import re
 import sanguine.gitdata.git_data_file as gitdatafile
 from sanguine.common import *
 from sanguine.gitdata.file_origin import FileOrigin, FileOriginPluginBase, MetaFileParser
-from sanguine.gitdata.file_origin import GitFileOriginsReadHandler, GitFileOriginsWriteHandler
-from sanguine.gitdata.git_data_file import GitDataParam, GitDataType
+from sanguine.gitdata.git_data_file import GitDataParam, GitDataType, GitDataReadHandler, GitDataWriteHandler
 
 
 ### FileOrigin
@@ -16,11 +15,8 @@ class NexusFileOrigin(FileOrigin):
 
     # md5: bytes
 
-    def __init__(self, baseinit: Callable[[FileOrigin], None] | str, gameid: int, modid: int, fileid: int):
-        if isinstance(baseinit, str):
-            super().__init__(baseinit)
-        else:
-            baseinit(super())  # calls super().__init__(...) within
+    def __init__(self, gameid: int, modid: int, fileid: int):
+        super().__init__()
         self.gameid = gameid
         self.modid = modid
         self.fileid = fileid
@@ -32,48 +28,123 @@ class NexusFileOrigin(FileOrigin):
         assert False
 
     def eq(self, b: "NexusFileOrigin") -> bool:
-        return self.parent_eq(b) and self.fileid == b.fileid and self.modid == b.modid
+        return self.fileid == b.fileid and self.modid == b.modid and self.gameid == b.gameid
 
 
-### Handler
+### known-nexus-data.json5
 
-class GitNexusFileOriginsReadHandler(GitFileOriginsReadHandler):
-    SPECIFIC_FIELDS: list[GitDataParam] = [
-        GitDataParam('f', GitDataType.Int, False),
+class _GitNexusHashMappingReadHandler(GitDataReadHandler):
+    COMMON_FIELDS: list[GitDataParam] = [
+        GitDataParam('h', GitDataType.Hash, False),
+        GitDataParam('m', GitDataType.Hash),
+    ]
+    nexus_hash_mapping: dict[bytes, bytes]  # our hash -> md5
+
+    def __init__(self, nexus_hash_mapping: dict[bytes, bytes]) -> None:
+        super().__init__()
+        self.nexus_hash_mapping = nexus_hash_mapping
+
+    def decompress(self, common_param: tuple[bytes, bytes], specific_param: tuple) -> None:
+        assert len(specific_param) == 0
+        (h, m) = common_param
+        assert h not in self.nexus_hash_mapping  # if we'll ever run into md5 collision - we'll handle it separately
+        self.nexus_hash_mapping[h] = m
+
+
+class _GitNexusFileOriginsReadHandler(GitDataReadHandler):
+    COMMON_FIELDS: list[GitDataParam] = [
+        GitDataParam('h', GitDataType.Hash, False),
+        GitDataParam('f', GitDataType.Int),
         GitDataParam('m', GitDataType.Int),
         GitDataParam('g', GitDataType.Int),
     ]
+    nexus_file_origins: dict[bytes, list[NexusFileOrigin]]
 
-    def __init__(self, file_origins: dict[bytes, list[FileOrigin]]) -> None:
-        super().__init__(GitNexusFileOriginsReadHandler.SPECIFIC_FIELDS, file_origins)
+    def __init__(self, file_origins: dict[bytes, list[NexusFileOrigin]]) -> None:
+        super().__init__()
+        self.nexus_file_origins = file_origins
 
-    def decompress(self, common_param: tuple[str, bytes], specific_param: tuple[int, int, int]) -> None:
-        (f, m, g) = specific_param
+    def decompress(self, common_param: tuple[bytes, int, int, int], specific_param: tuple) -> None:
+        assert len(specific_param) == 0
+        (h, f, m, g) = common_param
 
-        fo = NexusFileOrigin(lambda fo2: GitFileOriginsReadHandler.init_base_file_origin(fo2, common_param),
-                             g, m, f)
-        h = GitFileOriginsReadHandler.hash_from_common_param(common_param)
-        if h not in self.file_origins:
-            self.file_origins[h] = [fo]
+        fo = NexusFileOrigin(g, m, f)
+        if h not in self.nexus_file_origins:
+            self.nexus_file_origins[h] = [fo]
         else:
-            self.file_origins[h].append(fo)
+            self.nexus_file_origins[h].append(fo)
 
 
-class GitNexusFileOriginsWriteHandler(GitFileOriginsWriteHandler):
+class GitNexusData:
     def __init__(self) -> None:
-        super().__init__(GitNexusFileOriginsReadHandler.SPECIFIC_FIELDS)
+        pass
 
-    def is_my_fo(self, fo: FileOrigin) -> bool:
-        return isinstance(fo, NexusFileOrigin)
+    def write(self, wfile: typing.TextIO, nexus_hash_mapping: dict[bytes, bytes],
+              nexus_file_origins: dict[bytes, list[NexusFileOrigin]]) -> None:
+        hmap: list[tuple[bytes, bytes]] = sorted(nexus_hash_mapping.items(), key=lambda item: item[0])
+        allfos: list[tuple[bytes, NexusFileOrigin]] = []
+        for h, fos in sorted(nexus_file_origins.items(), key=lambda item: item[0]):
+            for fo in sorted(fos, key=lambda item: (item.gameid, item.modid, item.fileid)):
+                allfos.append((h, fo))
 
-    def write_line(self, writer: gitdatafile.GitDataListWriter, h: bytes, fo: FileOrigin) -> None:
-        assert isinstance(fo, NexusFileOrigin)
-        writer.write_line(self, GitFileOriginsWriteHandler.common_values(h, fo),
-                          (fo.fileid, fo.modid, fo.gameid))
+        gitdatafile.write_git_file_header(wfile)
+        wfile.write(
+            '  hash_remap: // Legend: h=hash,  m=md5\n')
 
-    def legend(self) -> str:
-        return '[ f:fileid, m:modid, g:gameid if Nexus ]'
+        hrhandler = GitDataWriteHandler()
+        dhr = gitdatafile.GitDataWriteList(_GitNexusHashMappingReadHandler.COMMON_FIELDS, [hrhandler])
+        hwriter = gitdatafile.GitDataListWriter(dhr, wfile)
+        hwriter.write_begin()
+        for hm in hmap:
+            hwriter.write_line(hrhandler, (hm[0], hm[1]))
+        hwriter.write_end()
 
+        wfile.write(
+            '  file_origins: // Legend: h=hash,  f=fileid, m=modid, g=gameid\n')
+
+        fohandler = GitDataWriteHandler()
+        dfo = gitdatafile.GitDataWriteList(_GitNexusFileOriginsReadHandler.COMMON_FIELDS, [fohandler])
+        fwriter = gitdatafile.GitDataListWriter(dfo, wfile)
+        fwriter.write_begin()
+        for fo in allfos:
+            fwriter.write_line(hrhandler, (fo[0], fo[1].fileid, fo[1].modid, fo[1].gameid))
+        fwriter.write_end()
+
+        gitdatafile.write_git_file_footer(wfile)
+
+    def read_from_file(self, rfile: typing.TextIO) -> tuple[dict[bytes, bytes], dict[bytes, list[NexusFileOrigin]]]:
+        nexus_hash_mapping: dict[bytes, bytes] = {}
+        nexus_file_origins: dict[bytes, list[NexusFileOrigin]] = {}
+
+        # skipping header
+        ln, lineno = gitdatafile.skip_git_file_header(rfile)
+
+        # reading hash_remap:  ...
+        assert re.search(r'^\s*hash_remap\s*:\s*//', ln)
+
+        dhm = gitdatafile.GitDataReadList(_GitNexusHashMappingReadHandler.COMMON_FIELDS,
+                                          [_GitNexusHashMappingReadHandler(nexus_hash_mapping)])
+        lineno = gitdatafile.read_git_file_list(dhm, rfile, lineno)
+
+        # reading file_origins:  ...
+        ln = rfile.readline()
+        lineno += 1
+        if not re.search(r'^\s*file_origins\s*:\s*//', ln):
+            alert('GitNexusData.read_from_file(): Unexpected line #{}: {}'.format(lineno, ln))
+            abort_if_not(False)
+
+        dfo = gitdatafile.GitDataReadList(_GitNexusFileOriginsReadHandler.COMMON_FIELDS,
+                                          [_GitNexusFileOriginsReadHandler(nexus_file_origins)])
+        lineno = gitdatafile.read_git_file_list(dfo, rfile, lineno)
+
+        # skipping footer
+        gitdatafile.skip_git_file_footer(rfile, lineno)
+
+        # warn(str(len(archives)))
+        return nexus_hash_mapping, nexus_file_origins
+
+
+### MetaFileParser
 
 class NexusMetaFileParser(MetaFileParser):
     MOD_ID_PATTERN = re.compile(r'^modID\s*=\s*([0-9]+)\s*$', re.IGNORECASE)
@@ -143,25 +214,69 @@ class NexusMetaFileParser(MetaFileParser):
         # warn(str(fileid))
         # warn(url)
         if self.game_id is not None and self.mod_id is not None and self.file_id is not None and self.url is not None:
-            return NexusFileOrigin(self.file_name, self.game_id, self.mod_id, self.file_id)
+            return NexusFileOrigin(self.game_id, self.mod_id, self.file_id)
         elif self.game_id is None and self.mod_id is None and self.file_id is None and self.url is None:
             return None
         elif self.game_id is not None and self.mod_id is not None and self.file_id is not None and self.url is None:
             warn('meta/nexus: missing url in {}, will do without'.format(self.meta_file_path))
-            return NexusFileOrigin(self.file_name, self.game_id, self.mod_id, self.file_id)
+            return NexusFileOrigin(self.game_id, self.mod_id, self.file_id)
         else:
             warn('meta/nexus: incomplete modid+fileid+url in {}'.format(self.meta_file_path))
             return None
 
 
+def _load_nexus_json5(rf: typing.TextIO):
+    return GitNexusData().read_from_file(rf)
+
+
+def _save_nexus_json5(wf: typing.TextIO, data: tuple[dict[bytes, bytes], dict[bytes, list[NexusFileOrigin]]]):
+    return GitNexusData().write(wf, data[0], data[1])
+
+
 ### Plugin
 
 class NexusFileOriginPlugin(FileOriginPluginBase):
-    def write_handler(self) -> GitFileOriginsWriteHandler:
-        return GitNexusFileOriginsWriteHandler()
+    nexus_hash_mapping: dict[bytes, bytes]
+    nexus_file_origins: dict[bytes, list[NexusFileOrigin]]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.nexus_hash_mapping = {}
+        self.nexus_file_origins = {}
+
+    def name(self) -> str:
+        return 'nexus'
 
     def meta_file_parser(self, metafilepath: str) -> MetaFileParser:
         return NexusMetaFileParser(metafilepath)
 
-    def read_handler(self, file_origins: dict[bytes, list[FileOrigin]]) -> GitFileOriginsReadHandler:
-        return GitNexusFileOriginsReadHandler(file_origins)
+    ### reading and writing is split into two parts, to facilitate multiprocessing
+    # reading, part 1 (to be run in a separate process)
+    def load_json5_file_func(self) -> Callable[[typing.TextIO], any]:  # function returning function
+        return _load_nexus_json5
+
+    # reading, part 2 (to be run locally)
+    def got_loaded_data(self, data: any) -> None:
+        self.nexus_hash_mapping = data[0]
+        self.nexus_file_origins = data[1]
+
+    # writing, part 1 (to be run locally)
+    def data_for_saving(self) -> any:
+        return self.nexus_hash_mapping, self.nexus_file_origins
+
+    # writing, part 2 (to be run in a separate process)
+    def save_json5_file_func(self) -> Callable[[typing.TextIO, any], None]:
+        return _save_nexus_json5
+
+    def add_file_origin(self, h: bytes, fo: FileOrigin) -> bool:
+        assert isinstance(fo, NexusFileOrigin)
+        if h in self.nexus_file_origins:
+            for fo2 in self.nexus_file_origins[h]:
+                assert isinstance(fo2, NexusFileOrigin)
+                if fo2.eq(fo):
+                    return False
+            self.nexus_file_origins[h].append(fo)
+            return True
+        else:
+            self.nexus_file_origins[h] = [fo]
+            return True
